@@ -310,13 +310,103 @@ export function validateCampaignData(data: any): ValidationResult {
   };
 }
 
-// Rate limiting helper
+// AI prompt validation
+export function validateAIPrompt(data: any): ValidationResult {
+  const errors: string[] = [];
+  
+  if (!data || typeof data !== 'object') {
+    return { isValid: false, errors: ['Invalid AI prompt data'] };
+  }
+
+  // Content validation
+  if (!data.prompt || typeof data.prompt !== 'string' || data.prompt.trim().length === 0) {
+    errors.push('AI prompt is required and must be a non-empty string');
+  }
+
+  if (data.prompt && data.prompt.length > 5000) {
+    errors.push('AI prompt must be 5000 characters or less');
+  }
+
+  // Context validation
+  if (data.context && typeof data.context !== 'object') {
+    errors.push('AI context must be an object');
+  }
+
+  // Character validation
+  if (data.character && typeof data.character !== 'object') {
+    errors.push('Character data must be an object');
+  }
+
+  // World state validation
+  if (data.worldState && typeof data.worldState !== 'object') {
+    errors.push('World state must be an object');
+  }
+
+  // Content filtering - basic check for inappropriate content
+  if (data.prompt) {
+    const lowerPrompt = data.prompt.toLowerCase();
+    const inappropriateTerms = ['hack', 'exploit', 'bypass', 'admin', 'root', 'system'];
+    const hasInappropriateContent = inappropriateTerms.some(term => lowerPrompt.includes(term));
+    
+    if (hasInappropriateContent) {
+      errors.push('AI prompt contains potentially inappropriate content');
+    }
+  }
+
+  // Sanitize data
+  const sanitizedData = {
+    ...data,
+    prompt: data.prompt ? sanitizeString(data.prompt) : '',
+    context: data.context && typeof data.context === 'object' ? data.context : {},
+    character: data.character && typeof data.character === 'object' ? data.character : {},
+    worldState: data.worldState && typeof data.worldState === 'object' ? data.worldState : {},
+    timestamp: typeof data.timestamp === 'number' ? data.timestamp : Date.now()
+  };
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    sanitizedData
+  };
+}
+
+// Rate limiting helper with in-memory tracking
+const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+
 export function checkRateLimit(userId: string, action: string, limit: number, windowMs: number): boolean {
-  // This is a simple in-memory rate limiter
-  // In production, you'd want to use Redis or a similar persistent store
-  // TODO: Implement proper rate limiting with persistent storage
+  const now = Date.now();
+  const key = `${userId}:${action}`;
+  const record = rateLimitStore.get(key);
+
+  if (!record || now > record.resetTime) {
+    // First request or window expired, start new window
+    rateLimitStore.set(key, {
+      count: 1,
+      resetTime: now + windowMs
+    });
+    return true;
+  }
+
+  if (record.count >= limit) {
+    // Rate limit exceeded
+    return false;
+  }
+
+  // Increment count
+  record.count++;
+  rateLimitStore.set(key, record);
   return true;
 }
+
+// Clean up old rate limit records periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, record] of rateLimitStore.entries()) {
+    if (now > record.resetTime) {
+      rateLimitStore.delete(key);
+    }
+  }
+}, 60000); // Clean up every minute
 
 // Input sanitization helper
 export function sanitizeString(input: any): string {

@@ -1,9 +1,9 @@
 import * as functions from 'firebase-functions';
-import * as admin from 'firebase-admin';
+import admin from './init';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import fetch from 'node-fetch';
+import { validateAIPrompt, checkRateLimit } from './validation';
 
-admin.initializeApp();
 const db = admin.firestore();
 const secretClient = new SecretManagerServiceClient();
 
@@ -39,14 +39,39 @@ async function callVertexAI(prompt: string, context: string, apiKey: string): Pr
 
 // Main function
 export const aiDungeonMaster = functions.https.onCall(async (data, context) => {
-  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
-  const { campaignId, prompt, playerName } = data;
-  if (!campaignId || !prompt) throw new functions.https.HttpsError('invalid-argument', 'Missing campaignId or prompt');
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  // Rate limiting - 10 AI requests per minute per user
+  if (!checkRateLimit(context.auth.uid, 'aiDungeonMaster', 10, 60000)) {
+    throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please wait before making another AI request.');
+  }
+
+  // Validate input data
+  const validation = validateAIPrompt(data);
+  if (!validation.isValid) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid AI prompt data: ${validation.errors.join(', ')}`);
+  }
+
+  const { campaignId, prompt, playerName } = validation.sanitizedData;
+  
+  if (!campaignId || !prompt) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing campaignId or prompt');
+  }
 
   // Get campaign doc
   const campaignRef = db.collection('campaigns').doc(campaignId);
   const campaignSnap = await campaignRef.get();
-  if (!campaignSnap.exists) throw new functions.https.HttpsError('not-found', 'Campaign not found');
+  if (!campaignSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Campaign not found');
+  }
+
+  // Verify user is a participant in the campaign
+  const campaignData = campaignSnap.data();
+  if (!campaignData?.participants?.[context.auth.uid]) {
+    throw new functions.https.HttpsError('permission-denied', 'You are not a participant in this campaign');
+  }
 
   // Get rules and history
   const rulesSnap = await campaignRef.collection('rules').doc('main').get();
@@ -57,15 +82,20 @@ export const aiDungeonMaster = functions.https.onCall(async (data, context) => {
   // Compose context for AI
   const contextText = `CAMPAIGN RULES:\n${rules}\n\nHISTORY SO FAR:\n${history}`;
 
-  // Get Vertex AI API key from Secret Manager
-  const apiKey = await getSecret('vertex-ai-api-key');
+  try {
+    // Get Vertex AI API key from Secret Manager
+    const apiKey = await getSecret('vertex-ai-api-key');
 
-  // Call Vertex AI
-  const aiResponse = await callVertexAI(prompt, contextText, apiKey);
+    // Call Vertex AI
+    const aiResponse = await callVertexAI(prompt, contextText, apiKey);
 
-  // Append to history
-  const newHistory = history + `\n${playerName}: ${prompt}\nDM: ${aiResponse}`;
-  await campaignRef.collection('history').doc('main').set({ content: newHistory }, { merge: true });
+    // Append to history
+    const newHistory = history + `\n${playerName}: ${prompt}\nDM: ${aiResponse}`;
+    await campaignRef.collection('history').doc('main').set({ content: newHistory }, { merge: true });
 
-  return { response: aiResponse };
+    return { response: aiResponse };
+  } catch (error) {
+    console.error('AI Dungeon Master error:', error);
+    throw new functions.https.HttpsError('internal', 'AI service temporarily unavailable. Please try again later.');
+  }
 }); 

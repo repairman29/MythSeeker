@@ -6,14 +6,13 @@ import { firebaseService, UserProfile as FirebaseUserProfile, Character as Fireb
 import { aiService } from './services/aiService';
 import UserProfile from './UserProfile';
 import ResumeGame from './ResumeGame';
-import { NavBar, TopBar, RightDrawer, MainTabs, CharacterSheet, Inventory, WorldMap, CampaignLog, CombatSystem } from './components';
-import FloatingActionButton from './components/FloatingActionButton';
+import NavBar from './components/NavBar';
+import TopBar from './components/TopBar';
+import RightDrawer from './components/RightDrawer';
+import MainTabs from './components/MainTabs';
 import GameInterface from './components/GameInterface';
-import CombatService, { CombatState } from './services/combatService';
-import { Combatant, CombatAction } from './components/CombatSystem';
-import ToastNotifications, { ToastMessage, generateToastMessage } from './components/ToastNotifications';
-import WelcomeOverlay from './components/WelcomeOverlay';
-import SimpleHelp from './components/SimpleHelp';
+import Tooltip from './components/Tooltip';
+import HelpSystem from './components/HelpSystem';
 
 const AIDungeonMaster = () => {
   // Combat service instance
@@ -34,6 +33,7 @@ const AIDungeonMaster = () => {
   
   // Simple help state
   const [showHelp, setShowHelp] = useState(false);
+  const [helpScreen, setHelpScreen] = useState('welcome');
   
   // Firebase authentication state
   const [currentUser, setCurrentUser] = useState<FirebaseUserProfile | null>(null);
@@ -1683,6 +1683,19 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                 <span>Living World</span>
               </div>
             </div>
+            <Tooltip content="Interactive tutorial and help guide" ariaLabel="Help tutorial">
+              <button
+                onClick={() => {
+                  setShowHelp(true);
+                  setHelpScreen('welcome');
+                }}
+                className="mt-4 px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all flex items-center space-x-2 mx-auto"
+                aria-label="Open interactive tutorial and help guide"
+              >
+                <HelpCircle size={16} />
+                <span>Interactive Tutorial</span>
+              </button>
+            </Tooltip>
           </div>
           
           {isLoading ? (
@@ -1694,30 +1707,41 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
             <div className="space-y-4">
               <div className="text-center mb-4">
                 <p className="text-white">Welcome back, {currentUser?.displayName}!</p>
-                <button
-                  onClick={() => setCurrentScreen('character-select')}
-                  className="w-full px-6 py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all"
-                >
-                  Continue Adventure
-                </button>
+                <Tooltip content="Continue your adventure with existing characters" ariaLabel="Continue adventure">
+                  <button
+                    onClick={() => setCurrentScreen('character-select')}
+                    className="w-full px-6 py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all"
+                    aria-label="Continue your adventure with existing characters"
+                  >
+                    Continue Adventure
+                  </button>
+                </Tooltip>
               </div>
-              <button
-                onClick={signOut}
-                className="w-full px-6 py-3 bg-white/20 text-white rounded-xl hover:bg-white/30 transition-all"
-              >
-                Sign Out
-              </button>
+              <Tooltip content="Sign out of your account" ariaLabel="Sign out">
+                <button
+                  onClick={signOut}
+                  className="w-full px-6 py-3 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
+                  aria-label="Sign out of your account"
+                >
+                  Sign Out
+                </button>
+              </Tooltip>
             </div>
           ) : (
             <div className="space-y-4">
-              <button
-                onClick={signInWithGoogle}
-                disabled={isLoading}
-                className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center space-x-2"
-              >
-                <User size={20} />
-                <span>Sign in with Google</span>
-              </button>
+              <Tooltip content="Sign in with your Google account to save progress" ariaLabel="Sign in with Google">
+                <button
+                  onClick={signInWithGoogle}
+                  disabled={isLoading}
+                  className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center space-x-2"
+                  aria-label="Sign in with your Google account to save progress"
+                  aria-describedby="signin-description"
+                >
+                  <User size={20} />
+                  <span>Sign in with Google</span>
+                </button>
+              </Tooltip>
+              <div id="signin-description" className="sr-only">Sign in to save your progress and access multiplayer features</div>
               
               <div className="text-center">
                 <p className="text-blue-200 text-sm mb-3">Or join an existing campaign:</p>
@@ -1728,18 +1752,28 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                     value={joinCode}
                     onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                     className="flex-1 px-3 py-2 rounded-lg bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 text-center"
+                    aria-label="Enter campaign code to join existing game"
+                    maxLength={6}
                   />
-                  <button
-                    onClick={() => {
-                      if (joinCode.trim()) {
-                        addToast('info', { message: 'Please sign in first to join a campaign' });
-                      }
-                    }}
-                    disabled={!joinCode.trim()}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-all"
-                  >
-                    Join
-                  </button>
+                  <Tooltip content="Join an existing campaign using the 6-character code" ariaLabel="Join campaign">
+                    <button
+                      onClick={() => {
+                        if (playerName.trim() && joinCode.trim()) {
+                          if (!character) {
+                            setCurrentScreen('character');
+                          } else {
+                            // Join campaign logic would go here
+                            alert('Join campaign feature coming soon!');
+                          }
+                        }
+                      }}
+                      disabled={!playerName.trim() || !joinCode.trim()}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-all"
+                      aria-label="Join campaign with entered code"
+                    >
+                      Join
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
             </div>
@@ -1760,58 +1794,65 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                 <h2 className="text-3xl font-bold text-white">Choose Your Character</h2>
                 <p className="text-blue-200">Welcome back, {currentUser?.displayName}!</p>
               </div>
-              <button
-                onClick={signOut}
-                className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
-              >
-                Sign Out
-              </button>
+              <Tooltip content="Sign out of your account">
+                <button
+                  onClick={signOut}
+                  className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
+                >
+                  Sign Out
+                </button>
+              </Tooltip>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
               {userCharacters.map((char) => (
-                <div
-                  key={char.id}
-                  onClick={() => loadCharacter(char.id!)}
-                  className="bg-white/10 rounded-xl p-6 border border-white/20 hover:border-blue-400 hover:bg-white/20 cursor-pointer transition-all"
-                >
-                  <div className="text-center">
-                    <div className="text-4xl mb-3">{char.class === 'Warrior' ? '⚔️' : char.class === 'Rogue' ? '🗡️' : char.class === 'Mage' ? '🔮' : char.class === 'Cleric' ? '⚡' : char.class === 'Ranger' ? '🏹' : '🎵'}</div>
-                    <h3 className="text-xl font-bold text-white mb-2">{char.name}</h3>
-                    <p className="text-blue-200 mb-3">Level {char.level} {char.class}</p>
-                    <div className="grid grid-cols-2 gap-2 text-sm text-blue-200">
-                      <div>HP: {char.health}/{char.maxHealth}</div>
-                      <div>XP: {char.experience}</div>
-                      <div>Gold: {char.gold}</div>
-                      <div>Play Time: {Math.floor(char.totalPlayTime / 60000)}m</div>
-                    </div>
-                    <div className="mt-3 text-xs text-green-400">
-                      Last played: {new Date(char.lastPlayed).toLocaleDateString()}
+                <Tooltip key={char.id} content={`Load ${char.name} - Level ${char.level} ${char.class}`}>
+                  <div
+                    onClick={() => loadCharacter(char.id!)}
+                    className="bg-white/10 rounded-xl p-6 border border-white/20 hover:border-blue-400 hover:bg-white/20 cursor-pointer transition-all"
+                  >
+                    <div className="text-center">
+                      <div className="text-4xl mb-3">{char.class === 'Warrior' ? '⚔️' : char.class === 'Rogue' ? '🗡️' : char.class === 'Mage' ? '🔮' : char.class === 'Cleric' ? '⚡' : char.class === 'Ranger' ? '🏹' : '🎵'}</div>
+                      <h3 className="text-xl font-bold text-white mb-2">{char.name}</h3>
+                      <p className="text-blue-200 mb-3">Level {char.level} {char.class}</p>
+                      <div className="grid grid-cols-2 gap-2 text-sm text-blue-200">
+                        <div>HP: {char.health}/{char.maxHealth}</div>
+                        <div>XP: {char.experience}</div>
+                        <div>Gold: {char.gold}</div>
+                        <div>Play Time: {Math.floor(char.totalPlayTime / 60000)}m</div>
+                      </div>
+                      <div className="mt-3 text-xs text-green-400">
+                        Last played: {new Date(char.lastPlayed).toLocaleDateString()}
+                      </div>
                     </div>
                   </div>
-                </div>
+                </Tooltip>
               ))}
               
               {/* Create New Character Card */}
-              <div
-                onClick={() => setCurrentScreen('character')}
-                className="bg-gradient-to-br from-green-500/20 to-blue-500/20 rounded-xl p-6 border-2 border-dashed border-white/30 hover:border-white/50 hover:from-green-500/30 hover:to-blue-500/30 cursor-pointer transition-all"
-              >
-                <div className="text-center">
-                  <div className="text-4xl mb-3">✨</div>
-                  <h3 className="text-xl font-bold text-white mb-2">Create New Character</h3>
-                  <p className="text-blue-200">Start a new adventure with a fresh hero</p>
+              <Tooltip content="Create a new character and start a fresh adventure">
+                <div
+                  onClick={() => setCurrentScreen('character')}
+                  className="bg-gradient-to-br from-green-500/20 to-blue-500/20 rounded-xl p-6 border-2 border-dashed border-white/30 hover:border-white/50 hover:from-green-500/30 hover:to-blue-500/30 cursor-pointer transition-all"
+                >
+                  <div className="text-center">
+                    <div className="text-4xl mb-3">✨</div>
+                    <h3 className="text-xl font-bold text-white mb-2">Create New Character</h3>
+                    <p className="text-blue-200">Start a new adventure with a fresh hero</p>
+                  </div>
                 </div>
-              </div>
+              </Tooltip>
             </div>
             
             <div className="text-center">
-              <button
-                onClick={() => setCurrentScreen('lobby')}
-                className="px-6 py-3 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
-              >
-                ← Back to Welcome
-              </button>
+              <Tooltip content="Return to the welcome screen">
+                <button
+                  onClick={() => setCurrentScreen('lobby')}
+                  className="px-6 py-3 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
+                >
+                  ← Back to Welcome
+                </button>
+              </Tooltip>
             </div>
           </div>
         </div>
@@ -1927,30 +1968,36 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                     <h2 className="text-3xl font-bold text-white mb-4">Dashboard</h2>
                     <p className="text-blue-200 mb-6">Welcome to MythSeeker RPG!</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl">
-                      <button
-                        onClick={() => handleNavChange('campaigns')}
-                        className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
-                      >
-                        <Book size={32} className="text-blue-400 mx-auto mb-2" />
-                        <h3 className="text-white font-semibold">Campaigns</h3>
-                        <p className="text-blue-200 text-sm">Create or join campaigns</p>
-                      </button>
-                      <button
-                        onClick={() => handleNavChange('characters')}
-                        className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
-                      >
-                        <User size={32} className="text-green-400 mx-auto mb-2" />
-                        <h3 className="text-white font-semibold">Characters</h3>
-                        <p className="text-blue-200 text-sm">Manage your characters</p>
-                      </button>
-                      <button
-                        onClick={() => handleNavChange('party')}
-                        className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
-                      >
-                        <Users size={32} className="text-purple-400 mx-auto mb-2" />
-                        <h3 className="text-white font-semibold">Party</h3>
-                        <p className="text-blue-200 text-sm">View party members</p>
-                      </button>
+                      <Tooltip content="Create new campaigns or join existing ones">
+                        <button
+                          onClick={() => handleNavChange('campaigns')}
+                          className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
+                        >
+                          <Book size={32} className="text-blue-400 mx-auto mb-2" />
+                          <h3 className="text-white font-semibold">Campaigns</h3>
+                          <p className="text-blue-200 text-sm">Create or join campaigns</p>
+                        </button>
+                      </Tooltip>
+                      <Tooltip content="View and manage your characters">
+                        <button
+                          onClick={() => handleNavChange('characters')}
+                          className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
+                        >
+                          <User size={32} className="text-green-400 mx-auto mb-2" />
+                          <h3 className="text-white font-semibold">Characters</h3>
+                          <p className="text-blue-200 text-sm">Manage your characters</p>
+                        </button>
+                      </Tooltip>
+                      <Tooltip content="View your party members and their status">
+                        <button
+                          onClick={() => handleNavChange('party')}
+                          className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
+                        >
+                          <Users size={32} className="text-purple-400 mx-auto mb-2" />
+                          <h3 className="text-white font-semibold">Party</h3>
+                          <p className="text-blue-200 text-sm">View party members</p>
+                        </button>
+                      </Tooltip>
                     </div>
                   </div>
                 </div>
@@ -2138,6 +2185,13 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
       <SimpleHelp 
         isOpen={showHelp} 
         onClose={() => setShowHelp(false)} 
+      />
+      {/* Help System */}
+      <HelpSystem 
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        currentScreen={helpScreen}
+        onAction={handleHelpAction}
       />
     </div>
   );
@@ -2559,18 +2613,22 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
   return (
     <div className="space-y-4 lg:space-y-6 campaign-lobby">
       <div className="flex flex-col sm:flex-row gap-3 lg:gap-4">
-        <button
-          onClick={() => setShowCreateCampaign(true)}
-          className="flex-1 px-6 lg:px-8 py-3 lg:py-4 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all text-base lg:text-lg"
-        >
-          + Create New Campaign
-        </button>
-        <button
-          onClick={() => setShowJoinCampaign(true)}
-          className="flex-1 px-6 lg:px-8 py-3 lg:py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all text-base lg:text-lg"
-        >
-          Join Campaign
-        </button>
+        <Tooltip content="Create a new campaign with custom themes and settings">
+          <button
+            onClick={() => setShowCreateCampaign(true)}
+            className="flex-1 px-6 lg:px-8 py-3 lg:py-4 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all text-base lg:text-lg"
+          >
+            + Create New Campaign
+          </button>
+        </Tooltip>
+        <Tooltip content="Join an existing campaign using a 6-character code">
+          <button
+            onClick={() => setShowJoinCampaign(true)}
+            className="flex-1 px-6 lg:px-8 py-3 lg:py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all text-base lg:text-lg"
+          >
+            Join Campaign
+          </button>
+        </Tooltip>
       </div>
 
       {campaigns.length > 0 && (
@@ -2595,35 +2653,38 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
                   <div className="flex space-x-1">
                     {/* Play/Resume Button */}
                     {(!campaign.started || campaign.status === 'paused') && (
-                      <button
-                        onClick={() => handleResumeCampaign(campaign.id)}
-                        className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-all"
-                        title={!campaign.started ? "Start Campaign" : "Resume Campaign"}
-                      >
-                        ▶
-                      </button>
+                      <Tooltip content={!campaign.started ? "Start Campaign" : "Resume Campaign"}>
+                        <button
+                          onClick={() => handleResumeCampaign(campaign.id)}
+                          className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-all"
+                        >
+                          ▶
+                        </button>
+                      </Tooltip>
                     )}
                     
                     {/* Pause Button */}
                     {campaign.started && campaign.status === 'active' && (
-                      <button
-                        onClick={() => handlePauseCampaign(campaign.id)}
-                        className="px-2 py-1 bg-yellow-600 text-white rounded text-xs hover:bg-yellow-700 transition-all"
-                        title="Pause Campaign"
-                      >
-                        ⏸
-                      </button>
+                      <Tooltip content="Pause Campaign">
+                        <button
+                          onClick={() => handlePauseCampaign(campaign.id)}
+                          className="px-2 py-1 bg-yellow-600 text-white rounded text-xs hover:bg-yellow-700 transition-all"
+                        >
+                          ⏸
+                        </button>
+                      </Tooltip>
                     )}
                     
                     {/* Delete Button */}
                     {onDeleteCampaign && (
-                      <button
-                        onClick={() => handleDeleteCampaign(campaign.id)}
-                        className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition-all"
-                        title="Delete Campaign"
-                      >
-                        ×
-                      </button>
+                      <Tooltip content="Delete Campaign (cannot be undone)">
+                        <button
+                          onClick={() => handleDeleteCampaign(campaign.id)}
+                          className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition-all"
+                        >
+                          ×
+                        </button>
+                      </Tooltip>
                     )}
                   </div>
                 </div>
@@ -2667,8 +2728,12 @@ const WaitingRoom: React.FC<{ campaign: any, onStart: () => void, onBack: () => 
     <h2 className="text-xl lg:text-2xl font-bold mb-3 lg:mb-4">Waiting for Players</h2>
     <p className="text-sm lg:text-base mb-3 lg:mb-4">Campaign Code: <span className="font-mono bg-white/20 px-2 py-1 rounded">{campaign?.code}</span></p>
     <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
-      <button onClick={onStart} className="px-4 py-2 bg-green-600 rounded text-sm lg:text-base hover:bg-green-700 transition-all">Start Game</button>
-      <button onClick={onBack} className="px-4 py-2 bg-gray-600 rounded text-sm lg:text-base hover:bg-gray-700 transition-all">Back</button>
+      <Tooltip content="Start the campaign and begin the adventure">
+        <button onClick={onStart} className="px-4 py-2 bg-green-600 rounded text-sm lg:text-base hover:bg-green-700 transition-all">Start Game</button>
+      </Tooltip>
+      <Tooltip content="Return to campaign lobby">
+        <button onClick={onBack} className="px-4 py-2 bg-gray-600 rounded text-sm lg:text-base hover:bg-gray-700 transition-all">Back</button>
+      </Tooltip>
     </div>
   </div>
 );

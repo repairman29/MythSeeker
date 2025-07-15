@@ -1,5 +1,5 @@
 import * as functions from 'firebase-functions';
-import * as admin from 'firebase-admin';
+import admin from './init';
 import { 
   validateCharacter, 
   validateGameSession, 
@@ -9,8 +9,7 @@ import {
   validateCampaignData,
   checkRateLimit
 } from './validation';
-
-admin.initializeApp();
+import { aiDungeonMaster } from './aiDungeonMaster';
 
 // Types
 // interface UserProfile {
@@ -462,4 +461,7 @@ function generateGameCode(): string {
 
 //   await batch.commit();
 //   console.log(`Cleaned up ${oldGamesSnapshot.docs.length} old games`);
-// }); 
+// });
+
+// Export AI Dungeon Master function
+export { aiDungeonMaster }; 

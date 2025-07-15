@@ -1,10 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUserGameHistory = exports.completeCampaign = exports.saveGameProgress = exports.startGameSession = exports.leaveGameSession = exports.joinGameSession = exports.createGameSession = exports.getUserCharacters = exports.saveCharacter = exports.updateUserLastSeen = void 0;
+exports.aiDungeonMaster = exports.getUserGameHistory = exports.completeCampaign = exports.saveGameProgress = exports.startGameSession = exports.leaveGameSession = exports.joinGameSession = exports.createGameSession = exports.getUserCharacters = exports.saveCharacter = exports.updateUserLastSeen = void 0;
 const functions = require("firebase-functions");
-const admin = require("firebase-admin");
+const init_1 = require("./init");
 const validation_1 = require("./validation");
-admin.initializeApp();
+const aiDungeonMaster_1 = require("./aiDungeonMaster");
+Object.defineProperty(exports, "aiDungeonMaster", { enumerable: true, get: function () { return aiDungeonMaster_1.aiDungeonMaster; } });
 // Create user profile when user signs up
 // export const createUserProfile = functions.auth.user().onCreate(async (user) => {
 //   const userProfile: UserProfile = {
@@ -25,7 +26,7 @@ exports.updateUserLastSeen = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
     }
-    await admin.firestore().collection('users').doc(context.auth.uid).update({
+    await init_1.default.firestore().collection('users').doc(context.auth.uid).update({
         lastSeen: Date.now()
     });
 });
@@ -46,12 +47,12 @@ exports.saveCharacter = functions.https.onCall(async (data, context) => {
     const characterData = Object.assign(Object.assign({}, validation.sanitizedData), { userId: context.auth.uid, lastPlayed: Date.now() });
     if (data.id) {
         // Update existing character
-        await admin.firestore().collection('characters').doc(data.id).update(characterData);
+        await init_1.default.firestore().collection('characters').doc(data.id).update(characterData);
         return { characterId: data.id };
     }
     else {
         // Create new character
-        const docRef = await admin.firestore().collection('characters').add(characterData);
+        const docRef = await init_1.default.firestore().collection('characters').add(characterData);
         return { characterId: docRef.id };
     }
 });
@@ -60,7 +61,7 @@ exports.getUserCharacters = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
     }
-    const snapshot = await admin.firestore()
+    const snapshot = await init_1.default.firestore()
         .collection('characters')
         .where('userId', '==', context.auth.uid)
         .orderBy('lastPlayed', 'desc')
@@ -95,10 +96,10 @@ exports.createGameSession = functions.https.onCall(async (data, context) => {
         createdAt: Date.now(),
         lastActivity: Date.now()
     };
-    const docRef = await admin.firestore().collection('games').add(gameSession);
+    const docRef = await init_1.default.firestore().collection('games').add(gameSession);
     // Update user stats
-    await admin.firestore().collection('users').doc(context.auth.uid).update({
-        campaignsHosted: admin.firestore.FieldValue.increment(1)
+    await init_1.default.firestore().collection('users').doc(context.auth.uid).update({
+        campaignsHosted: init_1.default.firestore.FieldValue.increment(1)
     });
     return { gameId: docRef.id, code: gameSession.code };
 });
@@ -121,7 +122,7 @@ exports.joinGameSession = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', `Invalid character ID: ${characterIdValidation.errors.join(', ')}`);
     }
     // Find game by code
-    const gamesSnapshot = await admin.firestore()
+    const gamesSnapshot = await init_1.default.firestore()
         .collection('games')
         .where('code', '==', codeValidation.sanitizedData)
         .where('started', '==', false)
@@ -141,7 +142,7 @@ exports.joinGameSession = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('already-exists', 'Player already in game');
     }
     // Get character data
-    const characterDoc = await admin.firestore().collection('characters').doc(characterIdValidation.sanitizedData).get();
+    const characterDoc = await init_1.default.firestore().collection('characters').doc(characterIdValidation.sanitizedData).get();
     if (!characterDoc.exists) {
         throw new functions.https.HttpsError('not-found', 'Character not found');
     }
@@ -156,12 +157,12 @@ exports.joinGameSession = functions.https.onCall(async (data, context) => {
         lastSeen: Date.now()
     };
     await gameDoc.ref.update({
-        players: admin.firestore.FieldValue.arrayUnion(newPlayer),
+        players: init_1.default.firestore.FieldValue.arrayUnion(newPlayer),
         lastActivity: Date.now()
     });
     // Update user stats
-    await admin.firestore().collection('users').doc(context.auth.uid).update({
-        campaignsJoined: admin.firestore.FieldValue.increment(1)
+    await init_1.default.firestore().collection('users').doc(context.auth.uid).update({
+        campaignsJoined: init_1.default.firestore.FieldValue.increment(1)
     });
     return { gameId: gameDoc.id, gameData: Object.assign(Object.assign({}, gameData), { players: [...gameData.players, newPlayer] }) };
 });
@@ -175,7 +176,7 @@ exports.leaveGameSession = functions.https.onCall(async (data, context) => {
     if (!gameIdValidation.isValid) {
         throw new functions.https.HttpsError('invalid-argument', `Invalid game ID: ${gameIdValidation.errors.join(', ')}`);
     }
-    const gameDoc = await admin.firestore().collection('games').doc(gameIdValidation.sanitizedData).get();
+    const gameDoc = await init_1.default.firestore().collection('games').doc(gameIdValidation.sanitizedData).get();
     if (!gameDoc.exists) {
         throw new functions.https.HttpsError('not-found', 'Game not found');
     }
@@ -203,7 +204,7 @@ exports.startGameSession = functions.https.onCall(async (data, context) => {
     if (!gameIdValidation.isValid) {
         throw new functions.https.HttpsError('invalid-argument', `Invalid game ID: ${gameIdValidation.errors.join(', ')}`);
     }
-    const gameDoc = await admin.firestore().collection('games').doc(gameIdValidation.sanitizedData).get();
+    const gameDoc = await init_1.default.firestore().collection('games').doc(gameIdValidation.sanitizedData).get();
     if (!gameDoc.exists) {
         throw new functions.https.HttpsError('not-found', 'Game not found');
     }
@@ -240,10 +241,10 @@ exports.saveGameProgress = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', `Invalid progress data: ${progressValidation.errors.join(', ')}`);
     }
     // Update character with new progress
-    await admin.firestore().collection('characters').doc(characterIdValidation.sanitizedData).update(Object.assign(Object.assign({}, progressValidation.sanitizedData), { lastPlayed: Date.now() }));
+    await init_1.default.firestore().collection('characters').doc(characterIdValidation.sanitizedData).update(Object.assign(Object.assign({}, progressValidation.sanitizedData), { lastPlayed: Date.now() }));
     // Update user play time
-    await admin.firestore().collection('users').doc(context.auth.uid).update({
-        totalPlayTime: admin.firestore.FieldValue.increment(data.progress.playTime || 0)
+    await init_1.default.firestore().collection('users').doc(context.auth.uid).update({
+        totalPlayTime: init_1.default.firestore.FieldValue.increment(data.progress.playTime || 0)
     });
 });
 // Complete campaign
@@ -260,13 +261,13 @@ exports.completeCampaign = functions.https.onCall(async (data, context) => {
     if (!campaignDataValidation.isValid) {
         throw new functions.https.HttpsError('invalid-argument', `Invalid campaign data: ${campaignDataValidation.errors.join(', ')}`);
     }
-    const gameDoc = await admin.firestore().collection('games').doc(gameIdValidation.sanitizedData).get();
+    const gameDoc = await init_1.default.firestore().collection('games').doc(gameIdValidation.sanitizedData).get();
     if (!gameDoc.exists) {
         throw new functions.https.HttpsError('not-found', 'Game not found');
     }
     const gameData = gameDoc.data();
     // Save campaign history
-    await admin.firestore().collection('campaigns').add({
+    await init_1.default.firestore().collection('campaigns').add({
         gameId: gameIdValidation.sanitizedData,
         hostId: gameData.hostId,
         participants: gameData.players.map(p => p.id),
@@ -287,7 +288,7 @@ exports.getUserGameHistory = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
     }
-    const campaignsSnapshot = await admin.firestore()
+    const campaignsSnapshot = await init_1.default.firestore()
         .collection('campaigns')
         .where('participants', 'array-contains', context.auth.uid)
         .orderBy('completedAt', 'desc')
@@ -304,19 +305,4 @@ function generateGameCode() {
     }
     return result;
 }
-// Clean up old games (runs daily)
-// export const cleanupOldGames = functions.pubsub.schedule('every 24 hours').onRun(async (context) => {
-//   const cutoffTime = Date.now() - (7 * 24 * 60 * 60 * 1000); // 7 days ago
-//   const oldGamesSnapshot = await admin.firestore()
-//     .collection('games')
-//     .where('lastActivity', '<', cutoffTime)
-//     .where('started', '==', false)
-//     .get();
-//   const batch = admin.firestore().batch();
-//   oldGamesSnapshot.docs.forEach(doc => {
-//     batch.delete(doc.ref);
-//   });
-//   await batch.commit();
-//   console.log(`Cleaned up ${oldGamesSnapshot.docs.length} old games`);
-// }); 
 //# sourceMappingURL=index.js.map
