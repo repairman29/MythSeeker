@@ -1,5 +1,14 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import { 
+  validateCharacter, 
+  validateGameSession, 
+  validateGameCode, 
+  validateCharacterId, 
+  validateGameId, 
+  validateCampaignData,
+  checkRateLimit
+} from './validation';
 
 admin.initializeApp();
 
@@ -103,8 +112,19 @@ export const saveCharacter = functions.https.onCall(async (data: Character, cont
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
 
+  // Rate limiting
+  if (!checkRateLimit(context.auth.uid, 'saveCharacter', 10, 60000)) { // 10 per minute
+    throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please wait before saving again.');
+  }
+
+  // Validate character data
+  const validation = validateCharacter(data);
+  if (!validation.isValid) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid character data: ${validation.errors.join(', ')}`);
+  }
+
   const characterData = {
-    ...data,
+    ...validation.sanitizedData,
     userId: context.auth.uid,
     lastPlayed: Date.now()
   };
@@ -141,17 +161,28 @@ export const createGameSession = functions.https.onCall(async (data: Partial<Gam
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
 
+  // Rate limiting
+  if (!checkRateLimit(context.auth.uid, 'createGameSession', 5, 60000)) { // 5 per minute
+    throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please wait before creating another game.');
+  }
+
+  // Validate game session data
+  const validation = validateGameSession(data);
+  if (!validation.isValid) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid game session data: ${validation.errors.join(', ')}`);
+  }
+
   const gameSession: GameSession = {
     id: '',
-    code: data.code || generateGameCode(),
-    theme: data.theme || 'Classic Fantasy',
-    background: data.background || 'fantasy',
+    code: validation.sanitizedData.code || generateGameCode(),
+    theme: validation.sanitizedData.theme || 'Classic Fantasy',
+    background: validation.sanitizedData.background || 'fantasy',
     hostId: context.auth.uid,
-    players: data.players || [],
-    messages: data.messages || [],
+    players: validation.sanitizedData.players || [],
+    messages: validation.sanitizedData.messages || [],
     started: false,
-    customPrompt: data.customPrompt || '',
-    maxPlayers: data.maxPlayers || 6,
+    customPrompt: validation.sanitizedData.customPrompt || '',
+    maxPlayers: validation.sanitizedData.maxPlayers || 6,
     createdAt: Date.now(),
     lastActivity: Date.now()
   };
@@ -172,10 +203,26 @@ export const joinGameSession = functions.https.onCall(async (data: { code: strin
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
 
+  // Rate limiting
+  if (!checkRateLimit(context.auth.uid, 'joinGameSession', 10, 60000)) { // 10 per minute
+    throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please wait before joining another game.');
+  }
+
+  // Validate input data
+  const codeValidation = validateGameCode(data.code);
+  if (!codeValidation.isValid) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid game code: ${codeValidation.errors.join(', ')}`);
+  }
+
+  const characterIdValidation = validateCharacterId(data.characterId);
+  if (!characterIdValidation.isValid) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid character ID: ${characterIdValidation.errors.join(', ')}`);
+  }
+
   // Find game by code
   const gamesSnapshot = await admin.firestore()
     .collection('games')
-    .where('code', '==', data.code)
+    .where('code', '==', codeValidation.sanitizedData)
     .where('started', '==', false)
     .limit(1)
     .get();
@@ -198,7 +245,7 @@ export const joinGameSession = functions.https.onCall(async (data: { code: strin
   }
 
   // Get character data
-  const characterDoc = await admin.firestore().collection('characters').doc(data.characterId).get();
+  const characterDoc = await admin.firestore().collection('characters').doc(characterIdValidation.sanitizedData).get();
   if (!characterDoc.exists) {
     throw new functions.https.HttpsError('not-found', 'Character not found');
   }
@@ -209,7 +256,7 @@ export const joinGameSession = functions.https.onCall(async (data: { code: strin
   const newPlayer = {
     id: context.auth.uid,
     name: characterData.name,
-    characterId: data.characterId,
+    characterId: characterIdValidation.sanitizedData,
     isHost: false,
     isOnline: true,
     lastSeen: Date.now()
@@ -234,7 +281,13 @@ export const leaveGameSession = functions.https.onCall(async (data: { gameId: st
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
 
-  const gameDoc = await admin.firestore().collection('games').doc(data.gameId).get();
+  // Validate game ID
+  const gameIdValidation = validateGameId(data.gameId);
+  if (!gameIdValidation.isValid) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid game ID: ${gameIdValidation.errors.join(', ')}`);
+  }
+
+  const gameDoc = await admin.firestore().collection('games').doc(gameIdValidation.sanitizedData).get();
   if (!gameDoc.exists) {
     throw new functions.https.HttpsError('not-found', 'Game not found');
   }
@@ -260,7 +313,13 @@ export const startGameSession = functions.https.onCall(async (data: { gameId: st
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
 
-  const gameDoc = await admin.firestore().collection('games').doc(data.gameId).get();
+  // Validate game ID
+  const gameIdValidation = validateGameId(data.gameId);
+  if (!gameIdValidation.isValid) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid game ID: ${gameIdValidation.errors.join(', ')}`);
+  }
+
+  const gameDoc = await admin.firestore().collection('games').doc(gameIdValidation.sanitizedData).get();
   if (!gameDoc.exists) {
     throw new functions.https.HttpsError('not-found', 'Game not found');
   }
@@ -283,9 +342,31 @@ export const saveGameProgress = functions.https.onCall(async (data: { gameId: st
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
 
+  // Rate limiting
+  if (!checkRateLimit(context.auth.uid, 'saveGameProgress', 20, 60000)) { // 20 per minute
+    throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please wait before saving again.');
+  }
+
+  // Validate input data
+  const gameIdValidation = validateGameId(data.gameId);
+  if (!gameIdValidation.isValid) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid game ID: ${gameIdValidation.errors.join(', ')}`);
+  }
+
+  const characterIdValidation = validateCharacterId(data.characterId);
+  if (!characterIdValidation.isValid) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid character ID: ${characterIdValidation.errors.join(', ')}`);
+  }
+
+  // Validate progress data
+  const progressValidation = validateCharacter(data.progress);
+  if (!progressValidation.isValid) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid progress data: ${progressValidation.errors.join(', ')}`);
+  }
+
   // Update character with new progress
-  await admin.firestore().collection('characters').doc(data.characterId).update({
-    ...data.progress,
+  await admin.firestore().collection('characters').doc(characterIdValidation.sanitizedData).update({
+    ...progressValidation.sanitizedData,
     lastPlayed: Date.now()
   });
 
@@ -301,7 +382,18 @@ export const completeCampaign = functions.https.onCall(async (data: { gameId: st
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
 
-  const gameDoc = await admin.firestore().collection('games').doc(data.gameId).get();
+  // Validate input data
+  const gameIdValidation = validateGameId(data.gameId);
+  if (!gameIdValidation.isValid) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid game ID: ${gameIdValidation.errors.join(', ')}`);
+  }
+
+  const campaignDataValidation = validateCampaignData(data.campaignData);
+  if (!campaignDataValidation.isValid) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid campaign data: ${campaignDataValidation.errors.join(', ')}`);
+  }
+
+  const gameDoc = await admin.firestore().collection('games').doc(gameIdValidation.sanitizedData).get();
   if (!gameDoc.exists) {
     throw new functions.https.HttpsError('not-found', 'Game not found');
   }
@@ -310,7 +402,7 @@ export const completeCampaign = functions.https.onCall(async (data: { gameId: st
 
   // Save campaign history
   await admin.firestore().collection('campaigns').add({
-    gameId: data.gameId,
+    gameId: gameIdValidation.sanitizedData,
     hostId: gameData.hostId,
     participants: gameData.players.map(p => p.id),
     theme: gameData.theme,
@@ -318,7 +410,7 @@ export const completeCampaign = functions.https.onCall(async (data: { gameId: st
     completedAt: Date.now(),
     duration: Date.now() - gameData.createdAt,
     messages: gameData.messages,
-    campaignData: data.campaignData
+    campaignData: campaignDataValidation.sanitizedData
   });
 
   // Mark game as completed

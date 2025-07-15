@@ -401,7 +401,7 @@ class AdvancedAIService {
         atmosphere: {
           mood: 'analytical',
           tension: 'medium',
-          environmentalDetails: 'The captain\'s assessment seems to carry the weight of military experience and strategic thinking'
+          environmentalDetails: "The captain's assessment seems to carry the weight of military experience and strategic thinking"
         }
       };
     }

@@ -63,12 +63,23 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
   character,
   onTabChange,
   activeTab = 'gameplay',
-  inputRef
+  inputRef: propInputRef
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [showDiceRoller, setShowDiceRoller] = useState(false);
   const [diceResult, setDiceResult] = useState<number | null>(null);
+
+  // Use provided inputRef or create a local one
+  const localInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = propInputRef || localInputRef;
+
+  // Focus management effect
+  useEffect(() => {
+    if (inputRef.current && !isAIThinking && document.activeElement !== inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [inputMessage, isAIThinking, inputRef]);
 
   const tabs = [
     { 
