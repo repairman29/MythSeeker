@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.aiDungeonMaster = exports.getUserGameHistory = exports.completeCampaign = exports.saveGameProgress = exports.startGameSession = exports.leaveGameSession = exports.joinGameSession = exports.createGameSession = exports.getUserCharacters = exports.saveCharacter = exports.updateUserLastSeen = void 0;
+exports.aiDungeonMaster = exports.cleanupOldGames = exports.getUserGameHistory = exports.completeCampaign = exports.saveGameProgress = exports.startGameSession = exports.leaveGameSession = exports.joinGameSession = exports.createGameSession = exports.getUserCharacters = exports.saveCharacter = exports.updateUserLastSeen = void 0;
 const functions = require("firebase-functions");
 const init_1 = require("./init");
 const validation_1 = require("./validation");
@@ -305,4 +305,42 @@ function generateGameCode() {
     }
     return result;
 }
+// Clean up old games (runs daily)
+exports.cleanupOldGames = functions.pubsub.schedule('every 24 hours').onRun(async (context) => {
+    const cutoffTime = Date.now() - (7 * 24 * 60 * 60 * 1000); // 7 days ago
+    try {
+        // Clean up old unstarted games
+        const oldGamesSnapshot = await init_1.default.firestore()
+            .collection('games')
+            .where('lastActivity', '<', cutoffTime)
+            .where('started', '==', false)
+            .get();
+        const batch = init_1.default.firestore().batch();
+        oldGamesSnapshot.docs.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        await batch.commit();
+        console.log(`Cleaned up ${oldGamesSnapshot.docs.length} old unstarted games`);
+        // Clean up old completed games (older than 30 days)
+        const oldCompletedGamesSnapshot = await init_1.default.firestore()
+            .collection('games')
+            .where('completedAt', '<', Date.now() - (30 * 24 * 60 * 60 * 1000))
+            .get();
+        const completedBatch = init_1.default.firestore().batch();
+        oldCompletedGamesSnapshot.docs.forEach(doc => {
+            completedBatch.delete(doc.ref);
+        });
+        await completedBatch.commit();
+        console.log(`Cleaned up ${oldCompletedGamesSnapshot.docs.length} old completed games`);
+        return {
+            success: true,
+            unstartedGamesCleaned: oldGamesSnapshot.docs.length,
+            completedGamesCleaned: oldCompletedGamesSnapshot.docs.length
+        };
+    }
+    catch (error) {
+        console.error('Error cleaning up old games:', error);
+        throw error;
+    }
+});
 //# sourceMappingURL=index.js.map

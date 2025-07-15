@@ -7,99 +7,151 @@ service cloud.firestore {
     }
     
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return request.auth.uid == userId;
     }
     
-    function isCampaignParticipant(campaignData) {
-      return isAuthenticated() && 
-        request.auth.uid in campaignData.participants;
+    function isValidCharacter() {
+      let character = resource.data;
+      return character.size() > 0 &&
+             character.name is string &&
+             character.name.size() >= 2 &&
+             character.name.size() <= 20 &&
+             character.class is string &&
+             character.level is number &&
+             character.level >= 1 &&
+             character.level <= 20 &&
+             character.experience is number &&
+             character.experience >= 0 &&
+             character.health is number &&
+             character.health >= 1 &&
+             character.maxHealth is number &&
+             character.maxHealth >= character.health;
     }
     
-    function isCampaignHost(campaignData) {
-      return isAuthenticated() && 
-        request.auth.uid == campaignData.hostId;
+    function isValidCampaign() {
+      let campaign = resource.data;
+      return campaign.size() > 0 &&
+             campaign.theme is string &&
+             campaign.theme.size() >= 3 &&
+             campaign.theme.size() <= 50 &&
+             campaign.code is string &&
+             campaign.code.size() == 6 &&
+             campaign.players is list &&
+             campaign.players.size() <= 6 &&
+             campaign.started is bool &&
+             campaign.createdAt is timestamp;
     }
     
-    function isGameParticipant(gameData) {
-      return isAuthenticated() && 
-        request.auth.uid in gameData.participants;
+    function isValidMessage() {
+      let message = resource.data;
+      return message.size() > 0 &&
+             message.content is string &&
+             message.content.size() > 0 &&
+             message.content.size() <= 500 &&
+             message.type in ['player', 'dm', 'system'] &&
+             message.timestamp is timestamp;
     }
-    
-    function isGameHost(gameData) {
-      return isAuthenticated() && 
-        request.auth.uid == gameData.hostId;
-    }
-    
-    // User profiles - users can read/write their own data
+
+    // User profiles - users can only read/write their own profile
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
-      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow read, write: if isAuthenticated() && isOwner(userId);
+      allow create: if isAuthenticated() && isOwner(userId) && 
+        request.resource.data.keys().hasAll(['displayName', 'email', 'createdAt']) &&
+        request.resource.data.displayName is string &&
+        request.resource.data.displayName.size() >= 2 &&
+        request.resource.data.displayName.size() <= 50 &&
+        request.resource.data.email is string &&
+        request.resource.data.createdAt is timestamp;
     }
-    
-    // Player characters - users can read/write their own characters
+
+    // Characters - users can only access their own characters
     match /characters/{characterId} {
       allow read, write: if isAuthenticated() && 
-        resource.data.userId == request.auth.uid;
+        resource.data.playerId == request.auth.uid;
       allow create: if isAuthenticated() && 
-        request.resource.data.userId == request.auth.uid;
+        request.resource.data.playerId == request.auth.uid &&
+        isValidCharacter();
+      allow delete: if isAuthenticated() && 
+        resource.data.playerId == request.auth.uid;
     }
-    
-    // Game sessions - participants can read, host can write
-    match /games/{gameId} {
-      allow read: if isAuthenticated() && 
-        (isGameParticipant(resource.data) || isGameHost(resource.data));
-      allow write: if isAuthenticated() && 
-        (isGameHost(resource.data) || 
-         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'status'])));
-      allow create: if isAuthenticated() && 
-        request.resource.data.hostId == request.auth.uid;
-    }
-    
-    // Campaign data - participants can read, host can write
+
+    // Campaigns - users can read campaigns they're part of, hosts can modify
     match /campaigns/{campaignId} {
       allow read: if isAuthenticated() && 
-        (isCampaignParticipant(resource.data) || isCampaignHost(resource.data));
-      allow write: if isAuthenticated() && 
-        (isCampaignHost(resource.data) || 
-         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'status'])));
+        request.auth.uid in resource.data.players;
       allow create: if isAuthenticated() && 
-        request.resource.data.hostId == request.auth.uid;
-      
-      // Campaign subcollections
-      match /rules/{ruleId} {
-        allow read: if isAuthenticated() && 
-          get(/databases/$(database)/documents/campaigns/$(campaignId)).data.hostId == request.auth.uid;
-        allow write: if isAuthenticated() && 
-          get(/databases/$(database)/documents/campaigns/$(campaignId)).data.hostId == request.auth.uid;
-      }
-      
-      match /history/{historyId} {
-        allow read: if isAuthenticated() && 
-          get(/databases/$(database)/documents/campaigns/$(campaignId)).data.participants[request.auth.uid] != null;
-        allow write: if isAuthenticated() && 
-          get(/databases/$(database)/documents/campaigns/$(campaignId)).data.hostId == request.auth.uid;
-      }
+        request.resource.data.players[0] == request.auth.uid &&
+        isValidCampaign();
+      allow update: if isAuthenticated() && 
+        request.auth.uid in resource.data.players &&
+        (resource.data.players[request.auth.uid].isHost == true || 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastActivity']));
+      allow delete: if isAuthenticated() && 
+        resource.data.players[request.auth.uid].isHost == true;
     }
-    
-    // Player sessions - users can read/write their own sessions
-    match /sessions/{sessionId} {
+
+    // Campaign messages - users can read/write messages in campaigns they're part of
+    match /campaigns/{campaignId}/messages/{messageId} {
       allow read, write: if isAuthenticated() && 
-        resource.data.userId == request.auth.uid;
+        exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players;
       allow create: if isAuthenticated() && 
-        request.resource.data.userId == request.auth.uid;
+        exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players &&
+        isValidMessage() &&
+        (request.resource.data.type == 'player' ? 
+          request.resource.data.playerId == request.auth.uid : true);
     }
-    
-    // Achievement data - users can read/write their own achievements
+
+    // Campaign players - users can read players in campaigns they're part of
+    match /campaigns/{campaignId}/players/{playerId} {
+      allow read: if isAuthenticated() && 
+        exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players;
+      allow write: if isAuthenticated() && 
+        request.auth.uid == playerId &&
+        exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players;
+    }
+
+    // World state - users can read/write world state for campaigns they're part of
+    match /campaigns/{campaignId}/worldState/{stateId} {
+      allow read, write: if isAuthenticated() && 
+        exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players;
+    }
+
+    // Combat state - users can read/write combat state for campaigns they're part of
+    match /campaigns/{campaignId}/combat/{combatId} {
+      allow read, write: if isAuthenticated() && 
+        exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players;
+    }
+
+    // Achievements - users can only access their own achievements
     match /achievements/{achievementId} {
       allow read, write: if isAuthenticated() && 
         resource.data.userId == request.auth.uid;
       allow create: if isAuthenticated() && 
         request.resource.data.userId == request.auth.uid;
     }
-    
-    // Default deny all other access
-    match /{document=**} {
-      allow read, write: if false;
+
+    // Analytics - only system can write, authenticated users can read their own
+    match /analytics/{analyticsId} {
+      allow read: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+      allow write: if false; // Only allow writes from Cloud Functions
+    }
+
+    // System settings - read-only for authenticated users
+    match /system/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only allow writes from Cloud Functions
+    }
+
+    // Rate limiting - users can only access their own rate limit data
+    match /rateLimits/{userId} {
+      allow read, write: if isAuthenticated() && isOwner(userId);
     }
   }
 }

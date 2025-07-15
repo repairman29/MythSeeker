@@ -445,23 +445,49 @@ function generateGameCode(): string {
 }
 
 // Clean up old games (runs daily)
-// export const cleanupOldGames = functions.pubsub.schedule('every 24 hours').onRun(async (context) => {
-//   const cutoffTime = Date.now() - (7 * 24 * 60 * 60 * 1000); // 7 days ago
+export const cleanupOldGames = functions.pubsub.schedule('every 24 hours').onRun(async (context) => {
+  const cutoffTime = Date.now() - (7 * 24 * 60 * 60 * 1000); // 7 days ago
 
-//   const oldGamesSnapshot = await admin.firestore()
-//     .collection('games')
-//     .where('lastActivity', '<', cutoffTime)
-//     .where('started', '==', false)
-//     .get();
+  try {
+    // Clean up old unstarted games
+    const oldGamesSnapshot = await admin.firestore()
+      .collection('games')
+      .where('lastActivity', '<', cutoffTime)
+      .where('started', '==', false)
+      .get();
 
-//   const batch = admin.firestore().batch();
-//   oldGamesSnapshot.docs.forEach(doc => {
-//     batch.delete(doc.ref);
-//   });
+    const batch = admin.firestore().batch();
+    oldGamesSnapshot.docs.forEach(doc => {
+      batch.delete(doc.ref);
+    });
 
-//   await batch.commit();
-//   console.log(`Cleaned up ${oldGamesSnapshot.docs.length} old games`);
-// });
+    await batch.commit();
+    console.log(`Cleaned up ${oldGamesSnapshot.docs.length} old unstarted games`);
+
+    // Clean up old completed games (older than 30 days)
+    const oldCompletedGamesSnapshot = await admin.firestore()
+      .collection('games')
+      .where('completedAt', '<', Date.now() - (30 * 24 * 60 * 60 * 1000))
+      .get();
+
+    const completedBatch = admin.firestore().batch();
+    oldCompletedGamesSnapshot.docs.forEach(doc => {
+      completedBatch.delete(doc.ref);
+    });
+
+    await completedBatch.commit();
+    console.log(`Cleaned up ${oldCompletedGamesSnapshot.docs.length} old completed games`);
+
+    return { 
+      success: true, 
+      unstartedGamesCleaned: oldGamesSnapshot.docs.length,
+      completedGamesCleaned: oldCompletedGamesSnapshot.docs.length
+    };
+  } catch (error) {
+    console.error('Error cleaning up old games:', error);
+    throw error;
+  }
+});
 
 // Export AI Dungeon Master function
 export { aiDungeonMaster }; 

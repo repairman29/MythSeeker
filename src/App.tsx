@@ -1,18 +1,92 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Dice1, Dice6, Sword, Shield, Zap, Heart, User, Users, Plus, Play, Settings, Sparkles, Flame, Copy, Share2, Star, Award, Package, Hammer, TrendingUp, Target, Clock, Swords, MapPin, Eye, Crosshair, Globe, AlertTriangle, Crown, Calendar, History, ChevronDown, ChevronUp, X, Menu, Book, HelpCircle } from 'lucide-react';
-import { multiplayerService, MultiplayerGame, Player, GameMessage } from './services/multiplayerService';
-import { demoMultiplayerService } from './demoMultiplayer';
-import { firebaseService, UserProfile as FirebaseUserProfile, Character as FirebaseCharacter } from './firebaseService';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth, firebaseService, UserProfile, Character } from './firebaseService';
 import { aiService } from './services/aiService';
-import UserProfile from './UserProfile';
-import ResumeGame from './ResumeGame';
-import NavBar from './components/NavBar';
-import TopBar from './components/TopBar';
-import RightDrawer from './components/RightDrawer';
-import MainTabs from './components/MainTabs';
-import GameInterface from './components/GameInterface';
+import { MultiplayerGame, Player } from './services/multiplayerService';
 import Tooltip from './components/Tooltip';
-import HelpSystem from './components/HelpSystem';
+import ErrorBoundary from './components/ErrorBoundary';
+import ToastNotifications from './components/ToastNotifications';
+import { multiplayerService } from './services/multiplayerService';
+import { 
+  validateCharacterName, 
+  validateCampaignName, 
+  validateChatMessage, 
+  sanitizeInput,
+  RateLimiter 
+} from './utils/validation';
+import { 
+  analyticsService,
+  trackPageView,
+  trackUserAction,
+  trackGameEvent,
+  trackPerformance,
+  trackError,
+  trackSessionStart,
+  trackSessionEnd,
+  trackDeviceInfo
+} from './services/analytics';
+import { CombatService } from './services/combatService';
+import { Swords, TrendingUp, Globe, HelpCircle, User, Book, Users, Sword, Plus, Edit, Trash2, Copy } from 'lucide-react';
+
+// Lazy load components
+const NavBar = lazy(() => import('./components/NavBar'));
+const TopBar = lazy(() => import('./components/TopBar'));
+const WelcomeOverlay = lazy(() => import('./components/WelcomeOverlay'));
+const CombatSystem = lazy(() => import('./components/CombatSystem'));
+const RightDrawer = lazy(() => import('./components/RightDrawer'));
+const FloatingActionButton = lazy(() => import('./components/FloatingActionButton'));
+const SimpleHelp = lazy(() => import('./components/SimpleHelp'));
+const HelpSystem = lazy(() => import('./components/HelpSystem'));
+
+// Components will be defined inline in this file
+
+// Loading component for Suspense fallback
+const LoadingSpinner = () => (
+  <div className="min-h-screen bg-gradient-to-br from-blue-950 via-indigo-950 to-purple-950 flex items-center justify-center">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-400 mx-auto mb-4"></div>
+      <p className="text-blue-200 text-lg">Loading MythSeeker...</p>
+    </div>
+  </div>
+);
+
+// Types
+interface ToastMessage {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+  icon?: React.ReactNode;
+}
+
+interface CombatAction {
+  type: string;
+  target?: any;
+  weapon?: any;
+  spell?: any;
+}
+
+// Toast message generator
+const generateToastMessage = (action: string, context?: any): ToastMessage => {
+  const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const messages: Record<string, { message: string; type: ToastMessage['type'] }> = {
+    characterCreated: { message: 'Character created successfully!', type: 'success' },
+    campaignCreated: { message: 'Campaign created successfully!', type: 'success' },
+    campaignPaused: { message: 'Campaign paused', type: 'info' },
+    campaignResumed: { message: 'Campaign resumed', type: 'success' },
+    welcomeBack: { message: 'Welcome back to your adventure!', type: 'success' },
+    ftueSkipped: { message: 'Tutorial skipped', type: 'info' },
+  };
+  
+  const defaultMessage = { message: 'Action completed', type: 'success' as const };
+  const toastData = messages[action] || defaultMessage;
+  
+  return {
+    id,
+    message: toastData.message,
+    type: toastData.type,
+  };
+};
 
 const AIDungeonMaster = () => {
   // Combat service instance
@@ -36,8 +110,8 @@ const AIDungeonMaster = () => {
   const [helpScreen, setHelpScreen] = useState('welcome');
   
   // Firebase authentication state
-  const [currentUser, setCurrentUser] = useState<FirebaseUserProfile | null>(null);
-  const [userCharacters, setUserCharacters] = useState<FirebaseCharacter[]>([]);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [userCharacters, setUserCharacters] = useState<Character[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   
@@ -161,9 +235,49 @@ const AIDungeonMaster = () => {
 
   // Firebase authentication and data loading
   useEffect(() => {
+    // Track session start and device info
+    analyticsService.trackSessionStart();
+    analyticsService.trackDeviceInfo();
+    analyticsService.trackPageView('welcome', 'MythSeeker - Welcome');
+
+    // Track performance metrics
+    const startTime = performance.now();
+    const trackLoadTime = () => {
+      const loadTime = performance.now() - startTime;
+      analyticsService.trackPerformance('app_load_time', loadTime);
+    };
+
+    // Track when app is fully loaded
+    if (document.readyState === 'complete') {
+      trackLoadTime();
+    } else {
+      window.addEventListener('load', trackLoadTime);
+    }
+
+    // Track session end on page unload
+    const handleBeforeUnload = () => {
+      const sessionDuration = Date.now() - startTime;
+      analyticsService.trackSessionEnd(sessionDuration);
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     const unsubscribe = firebaseService.onAuthStateChange(async (firebaseUser) => {
       if (firebaseUser) {
         try {
+          // Track authentication success
+          analyticsService.trackUserAction('user_authenticated', {
+            user_id: firebaseUser.uid,
+            display_name: firebaseUser.displayName
+          });
+
+          // Set analytics user ID and properties
+          analyticsService.setUserId(firebaseUser.uid);
+          analyticsService.setUserProperties({
+            user_type: firebaseUser.displayName ? 'authenticated' : 'anonymous',
+            account_created: firebaseUser.metadata?.creationTime || 'unknown'
+          });
+
           // Get user profile
           const userProfile = await firebaseService.getUserProfile(firebaseUser.uid);
           if (userProfile) {
@@ -175,18 +289,30 @@ const AIDungeonMaster = () => {
             const characters = await firebaseService.getUserCharacters(firebaseUser.uid);
             setUserCharacters(characters);
             
+            // Track user profile loaded
+            analyticsService.trackUserAction('profile_loaded', {
+              characters_count: characters.length,
+              has_characters: characters.length > 0
+            });
+            
             // If user has characters, show character selection or resume game
             if (characters.length > 0) {
               setCurrentScreen('character-select');
+              analyticsService.trackPageView('character-select', 'MythSeeker - Character Selection');
             } else {
               setCurrentScreen('welcome');
+              analyticsService.trackPageView('welcome', 'MythSeeker - Welcome');
             }
           }
         } catch (error) {
           console.error('Error loading user data:', error);
+          analyticsService.trackError(error as Error, { context: 'user_data_loading' });
           setCurrentScreen('welcome');
         }
       } else {
+        // Track user sign out
+        analyticsService.trackUserAction('user_signed_out');
+        
         // User not authenticated
         setCurrentUser(null);
         setUserCharacters([]);
@@ -196,7 +322,11 @@ const AIDungeonMaster = () => {
       setIsLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      window.removeEventListener('load', trackLoadTime);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      unsubscribe();
+    };
   }, []);
 
   // Initialize AI service
@@ -221,7 +351,7 @@ const AIDungeonMaster = () => {
     }
 
     try {
-      const firebaseCharacter: FirebaseCharacter = {
+      const firebaseCharacter: Character = {
         userId: currentUser.uid,
         name: characterData.name,
         class: characterData.class,
@@ -397,6 +527,23 @@ const AIDungeonMaster = () => {
 
   const handleTabChange = (tabKey: string) => {
     setActiveTab(tabKey);
+  };
+
+  const handleHelpAction = (action: string, data?: any) => {
+    switch (action) {
+      case 'close':
+        setShowHelp(false);
+        break;
+      case 'navigate':
+        setHelpScreen(data.screen);
+        break;
+      case 'search':
+        // Handle help search
+        break;
+      default:
+        console.log('Help action:', action, data);
+    }
+    analyticsService.trackUserAction('help_action', { action, data });
   };
 
   const handleNewCampaign = () => {
@@ -938,11 +1085,24 @@ const AIDungeonMaster = () => {
     };
 
     try {
-      // Use the proper multiplayer service
-      const gameId = await multiplayerService.createCampaign(newCampaign as any);
-      const createdCampaign = { ...newCampaign, id: gameId } as any;
+      let createdCampaign;
       
-      // Save the campaign with the proper ID
+      // Only try to create in Firebase if authenticated and multiplayer
+      if (isMultiplayer && isAuthenticated && currentUser) {
+        try {
+          const gameId = await multiplayerService.createCampaign(newCampaign as any);
+          createdCampaign = { ...newCampaign, id: gameId } as any;
+        } catch (firebaseError) {
+          console.warn('Failed to create campaign in Firebase, creating local only:', firebaseError);
+          // Fallback to local campaign creation
+          createdCampaign = { ...newCampaign, id: Date.now().toString() } as any;
+        }
+      } else {
+        // Create local campaign only
+        createdCampaign = { ...newCampaign, id: Date.now().toString() } as any;
+      }
+      
+      // Save the campaign
       await saveCampaign(createdCampaign);
       
       setCampaigns([...campaigns, createdCampaign]);
@@ -1023,7 +1183,9 @@ const AIDungeonMaster = () => {
     const initPrompt = generateAIPrompt('', true);
 
     try {
-      const response = await (window as any).claude.complete(initPrompt);
+      console.log('Calling AI service with prompt:', initPrompt.substring(0, 200) + '...');
+      const response = await aiService.complete(initPrompt, campaign);
+      console.log('AI service response received:', response.substring(0, 200) + '...');
       const dmResponse = JSON.parse(response);
       
       // Update world state based on AI response
@@ -1133,13 +1295,35 @@ const AIDungeonMaster = () => {
     }
   };
 
-  const sendMessage = async () => {
-    if (!inputMessage.trim() || isAIThinking) return;
+  const [chatError, setChatError] = useState<string | null>(null);
+  
+  // Rate limiter for chat messages
+  const chatRateLimiter = React.useMemo(() => new RateLimiter(10, 60000), []); // 10 messages per minute
 
+  const sendMessage = async () => {
+    // Validate message using new validation utility
+    const validation = validateChatMessage(inputMessage);
+    if (!validation.isValid) {
+      setChatError(validation.error || 'Invalid message');
+      return;
+    }
+
+    // Check rate limiting
+    const userKey = playerId || 'anonymous';
+    if (!chatRateLimiter.isAllowed(userKey)) {
+      const remainingTime = chatRateLimiter.getTimeUntilReset(userKey);
+      setChatError(`Please wait ${Math.ceil(remainingTime / 1000)} seconds before sending another message`);
+      return;
+    }
+
+    setChatError(null);
+    if (isAIThinking) return;
+
+    const sanitizedMessage = sanitizeInput(inputMessage);
     const playerMessage = {
       id: Date.now(),
       type: 'player',
-      content: inputMessage,
+      content: sanitizedMessage,
       character: character.name,
       playerId: playerId,
       playerName: playerName,
@@ -1152,17 +1336,11 @@ const AIDungeonMaster = () => {
     setIsAIThinking(true);
 
     // Generate enhanced AI prompt with full context
-    const dmPrompt = generateAIPrompt(inputMessage, false);
+    const dmPrompt = generateAIPrompt(sanitizedMessage, false);
 
     try {
-      // Ensure AI service is available
-      if (!(window as any).claude) {
-        (window as any).claude = {
-          complete: (prompt: string) => aiService.complete(prompt)
-        };
-      }
-
-      const response = await (window as any).claude.complete(dmPrompt);
+      // Call AI service directly
+      const response = await aiService.complete(dmPrompt, currentCampaign);
       const dmResponse = JSON.parse(response);
       
       // Update world state based on AI response
@@ -1629,7 +1807,7 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
             </div>
           )}
         </div>
-      ))}
+        ))}
         
         {isAIThinking && (
           <div className="text-blue-200 text-sm lg:text-base flex items-center space-x-2">
@@ -1647,14 +1825,17 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
             onKeyDown={handleKeyPress}
             placeholder="What do you do? (Be specific and creative!)"
             className="flex-1 px-3 py-2 bg-black/20 rounded text-white text-sm lg:text-base"
+            disabled={isAIThinking}
           />
           <button 
             onClick={sendMessage} 
             className="px-4 py-2 bg-blue-600 rounded text-sm lg:text-base hover:bg-blue-700 transition-all"
+            disabled={isAIThinking}
           >
             Send
           </button>
         </div>
+        {chatError && <div className="text-red-400 text-xs mt-1">{chatError}</div>}
       </div>
       <div ref={messagesEndRef} />
     </div>
@@ -1882,7 +2063,7 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
     return (
       <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} p-4 transition-all duration-1000`}>
         <div className="max-w-6xl mx-auto">
-          <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20">
+          <div className="bg-white/10 backdrop-lg rounded-3xl p-8 border border-white/20">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-3xl font-bold text-white">Create Your Hero</h2>
               <button
@@ -1906,7 +2087,7 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
 
   // Main App Layout (for all other screens)
   return (
-    <div className="h-screen flex bg-gradient-to-br from-blue-950 via-indigo-950 to-purple-950">
+    <div className={`h-screen flex bg-gradient-to-br ${environments[currentEnvironment]} transition-all duration-1000`}>
       {/* Success Feedback */}
       {successFeedback && (
         <SuccessFeedback
@@ -1941,224 +2122,238 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
       )}
 
       {/* Desktop Side NavBar */}
-      <NavBar 
-        active={activeNav} 
-        onNavigate={handleNavChange} 
-        theme={currentEnvironment}
-        isMobile={false}
-      />
+      <Suspense fallback={<LoadingSpinner />}>
+        <NavBar 
+          active={activeNav} 
+          onNavigate={handleNavChange} 
+          theme={currentEnvironment}
+          isMobile={false}
+        />
+      </Suspense>
       {/* Main Content + Drawer Row */}
       <div className="flex-1 flex flex-row h-full">
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col" style={!isMobile ? { marginRight: drawerOpen ? drawerWidth : 0 } : {}}>
           {/* Top Bar */}
-          <TopBar 
-            onNewCampaign={handleNewCampaign}
-            isMobile={isMobile}
-            onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
-            currentScreen={currentScreen}
-            onHelpClick={() => setShowHelp(true)}
-          />
+          <Suspense fallback={<LoadingSpinner />}>
+            <TopBar 
+              onNewCampaign={handleNewCampaign}
+              isMobile={isMobile}
+              onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
+              currentScreen={currentScreen}
+              onHelpClick={() => setShowHelp(true)}
+            />
+          </Suspense>
           {/* Main Content - Only render the active screen */}
-          <div className="flex-1 flex pb-16 lg:pb-0">
-            <div className="flex-1 px-4 lg:px-6">
-              {currentScreen === 'dashboard' && (
-                <div className="h-full flex items-center justify-center">
-                  <div className="text-center">
-                    <h2 className="text-3xl font-bold text-white mb-4">Dashboard</h2>
-                    <p className="text-blue-200 mb-6">Welcome to MythSeeker RPG!</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl">
-                      <Tooltip content="Create new campaigns or join existing ones">
-                        <button
-                          onClick={() => handleNavChange('campaigns')}
-                          className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
-                        >
-                          <Book size={32} className="text-blue-400 mx-auto mb-2" />
-                          <h3 className="text-white font-semibold">Campaigns</h3>
-                          <p className="text-blue-200 text-sm">Create or join campaigns</p>
-                        </button>
-                      </Tooltip>
-                      <Tooltip content="View and manage your characters">
-                        <button
-                          onClick={() => handleNavChange('characters')}
-                          className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
-                        >
-                          <User size={32} className="text-green-400 mx-auto mb-2" />
-                          <h3 className="text-white font-semibold">Characters</h3>
-                          <p className="text-blue-200 text-sm">Manage your characters</p>
-                        </button>
-                      </Tooltip>
-                      <Tooltip content="View your party members and their status">
-                        <button
-                          onClick={() => handleNavChange('party')}
-                          className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
-                        >
-                          <Users size={32} className="text-purple-400 mx-auto mb-2" />
-                          <h3 className="text-white font-semibold">Party</h3>
-                          <p className="text-blue-200 text-sm">View party members</p>
-                        </button>
-                      </Tooltip>
-                    </div>
-                  </div>
-                </div>
-              )}
-              {currentScreen === 'character' && (
-                <CharacterCreation 
-                  playerName={currentUser?.displayName || ''}
-                  classes={classes}
-                  onCreateCharacter={createCharacter}
-                  joinCode={joinCode}
-                />
-              )}
-              {currentScreen === 'lobby' && (
-                <CampaignLobby 
-                  campaigns={campaigns}
-                  campaignThemes={campaignThemes}
-                  onCreateCampaign={createCampaign}
-                  character={character}
-                  onDeleteCampaign={deleteCampaign}
-                  onJoinCampaign={joinCampaign}
-                  onResumeCampaign={resumeCampaign}
-                  onPauseCampaign={pauseCampaign}
-                />
-              )}
-              {currentScreen === 'waiting' && (
-                <WaitingRoom 
-                  campaign={currentCampaign}
-                  onStart={startCampaign}
-                  onBack={() => setCurrentScreen('lobby')}
-                />
-              )}
-              {currentScreen === 'game' && (
-                <Gameplay
-                  campaign={currentCampaign}
-                  messages={messages}
-                  inputMessage={inputMessage}
-                  setInputMessage={setInputMessage}
-                  sendMessage={sendMessage}
-                  handleKeyPress={handleKeyPress}
-                  isAIThinking={isAIThinking}
-                  messagesEndRef={messagesEndRef}
-                  onStartCombat={startCombat}
-                  worldState={worldState}
-                  aiMemory={aiMemory}
-                  inputRef={gameInputRef}
-                />
-              )}
-              {currentScreen === 'party' && (
-                <div className="h-full p-6">
-                  <h2 className="text-2xl font-bold text-white mb-6">Party Management</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {partyState.players.map((player) => (
-                      <div key={player.id} className="bg-white/10 rounded-lg p-4 border border-white/20">
-                        <h3 className="text-white font-semibold">{player.character?.name || player.name}</h3>
-                        <p className="text-blue-200 text-sm">{player.character?.class || 'Unknown Class'}</p>
-                        <p className="text-green-400 text-xs">Level {player.character?.level || 1}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {currentScreen === 'world' && (
-                <div className="h-full p-6">
-                  <h2 className="text-2xl font-bold text-white mb-6">World Map & Exploration</h2>
-                  <div className="bg-white/10 rounded-lg p-6 border border-white/20">
-                    <p className="text-blue-200 mb-4">Interactive world map coming soon!</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-black/20 rounded-lg p-4">
-                        <h3 className="text-white font-semibold mb-2">Current Location</h3>
-                        <p className="text-blue-200">{worldState?.currentLocation || 'Unknown'}</p>
-                      </div>
-                      <div className="bg-black/20 rounded-lg p-4">
-                        <h3 className="text-white font-semibold mb-2">Discovered Areas</h3>
-                        <p className="text-blue-200">0 locations explored</p>
+          <div className="flex-1 flex pb-16 lg:pb-0 overflow-hidden">
+            <div className="flex-1 px-6 lg:px-8 py-6 overflow-auto">
+              {/* Add subtle background pattern for better visual hierarchy */}
+              <div className="relative min-h-full">
+                <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-3xl pointer-events-none"></div>
+                <div className="relative z-10">
+                  {currentScreen === 'dashboard' && (
+                    <div className="h-full flex items-center justify-center">
+                      <div className="text-center">
+                        <h2 className="text-3xl font-bold text-white mb-4">Dashboard</h2>
+                        <p className="text-blue-200 mb-6">Welcome to MythSeeker RPG!</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl">
+                          <Tooltip content="Create new campaigns or join existing ones">
+                            <button
+                              onClick={() => handleNavChange('campaigns')}
+                              className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
+                            >
+                              <Book size={32} className="text-blue-400 mx-auto mb-2" />
+                              <h3 className="text-white font-semibold">Campaigns</h3>
+                              <p className="text-blue-200 text-sm">Create or join campaigns</p>
+                            </button>
+                          </Tooltip>
+                          <Tooltip content="View and manage your characters">
+                            <button
+                              onClick={() => handleNavChange('characters')}
+                              className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
+                            >
+                              <User size={32} className="text-green-400 mx-auto mb-2" />
+                              <h3 className="text-white font-semibold">Characters</h3>
+                              <p className="text-blue-200 text-sm">Manage your characters</p>
+                            </button>
+                          </Tooltip>
+                          <Tooltip content="View your party members and their status">
+                            <button
+                              onClick={() => handleNavChange('party')}
+                              className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
+                            >
+                              <Users size={32} className="text-purple-400 mx-auto mb-2" />
+                              <h3 className="text-white font-semibold">Party</h3>
+                              <p className="text-blue-200 text-sm">View party members</p>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-              )}
-              {currentScreen === 'combat' && combatState && (
-                <CombatSystem
-                  combatants={combatState.combatants}
-                  battleMap={combatState.battleMap}
-                  currentTurn={combatState.currentTurn}
-                  activeCombatantId={combatState.turnOrder[combatState.currentCombatantIndex]}
-                  onAction={handleCombatAction}
-                  onEndCombat={endCombat}
-                  isPlayerTurn={combatService.isPlayerTurn()}
-                />
-              )}
-              {currentScreen === 'magic' && (
-                <div className="h-full p-6">
-                  <h2 className="text-2xl font-bold text-white mb-6">Magic & Spells</h2>
-                  <div className="bg-white/10 rounded-lg p-6 border border-white/20">
-                    <p className="text-blue-200 mb-4">Spell system coming soon!</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-black/20 rounded-lg p-4">
-                        <h3 className="text-white font-semibold mb-2">Known Spells</h3>
-                        <p className="text-blue-200">No spells learned yet</p>
-                      </div>
-                      <div className="bg-black/20 rounded-lg p-4">
-                        <h3 className="text-white font-semibold mb-2">Spell Slots</h3>
-                        <p className="text-blue-200">0 slots available</p>
+                  )}
+                  {currentScreen === 'character' && (
+                    <CharacterCreation 
+                      playerName={currentUser?.displayName || ''}
+                      classes={classes}
+                      onCreateCharacter={createCharacter}
+                      joinCode={joinCode}
+                    />
+                  )}
+                  {currentScreen === 'lobby' && (
+                    <CampaignLobby 
+                      campaigns={campaigns}
+                      campaignThemes={campaignThemes}
+                      onCreateCampaign={createCampaign}
+                      character={character}
+                      onDeleteCampaign={deleteCampaign}
+                      onJoinCampaign={joinCampaign}
+                      onResumeCampaign={resumeCampaign}
+                      onPauseCampaign={pauseCampaign}
+                    />
+                  )}
+                  {currentScreen === 'waiting' && (
+                    <WaitingRoom 
+                      campaign={currentCampaign}
+                      onStart={startCampaign}
+                      onBack={() => setCurrentScreen('lobby')}
+                    />
+                  )}
+                  {currentScreen === 'game' && (
+                    <Gameplay
+                      campaign={currentCampaign}
+                      messages={messages}
+                      inputMessage={inputMessage}
+                      setInputMessage={setInputMessage}
+                      sendMessage={sendMessage}
+                      handleKeyPress={handleKeyPress}
+                      isAIThinking={isAIThinking}
+                      messagesEndRef={messagesEndRef}
+                      onStartCombat={startCombat}
+                      worldState={worldState}
+                      aiMemory={aiMemory}
+                      inputRef={gameInputRef}
+                    />
+                  )}
+                  {currentScreen === 'party' && (
+                    <div className="h-full p-6">
+                      <h2 className="text-2xl font-bold text-white mb-6">Party Management</h2>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {partyState.players.map((player) => (
+                          <div key={player.id} className="bg-white/10 rounded-lg p-4 border border-white/20">
+                            <h3 className="text-white font-semibold">{player.character?.name || player.name}</h3>
+                            <p className="text-blue-200 text-sm">{player.character?.class || 'Unknown Class'}</p>
+                            <p className="text-green-400 text-xs">Level {player.character?.level || 1}</p>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  </div>
+                  )}
+                  {currentScreen === 'world' && (
+                    <div className="h-full p-6">
+                      <h2 className="text-2xl font-bold text-white mb-6">World Map & Exploration</h2>
+                      <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+                        <p className="text-blue-200 mb-4">Interactive world map coming soon!</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="bg-black/20 rounded-lg p-4">
+                            <h3 className="text-white font-semibold mb-2">Current Location</h3>
+                            <p className="text-blue-200">{worldState?.currentLocation || 'Unknown'}</p>
+                          </div>
+                          <div className="bg-black/20 rounded-lg p-4">
+                            <h3 className="text-white font-semibold mb-2">Discovered Areas</h3>
+                            <p className="text-blue-200">0 locations explored</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {currentScreen === 'combat' && combatState && (
+                    <CombatSystem
+                      combatants={combatState.combatants}
+                      battleMap={combatState.battleMap}
+                      currentTurn={combatState.currentTurn}
+                      activeCombatantId={combatState.turnOrder[combatState.currentCombatantIndex]}
+                      onAction={handleCombatAction}
+                      onEndCombat={endCombat}
+                      isPlayerTurn={combatService.isPlayerTurn()}
+                    />
+                  )}
+                  {currentScreen === 'magic' && (
+                    <div className="h-full p-6">
+                      <h2 className="text-2xl font-bold text-white mb-6">Magic & Spells</h2>
+                      <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+                        <p className="text-blue-200 mb-4">Spell system coming soon!</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="bg-black/20 rounded-lg p-4">
+                            <h3 className="text-white font-semibold mb-2">Known Spells</h3>
+                            <p className="text-blue-200">No spells learned yet</p>
+                          </div>
+                          <div className="bg-black/20 rounded-lg p-4">
+                            <h3 className="text-white font-semibold mb-2">Spell Slots</h3>
+                            <p className="text-blue-200">0 slots available</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {/* Default case - show dashboard if no screen matches */}
+                  {!['dashboard', 'character', 'lobby', 'waiting', 'game', 'party', 'world', 'combat', 'magic'].includes(currentScreen) && (
+                    <div className="h-full flex items-center justify-center">
+                      <div className="text-center">
+                        <h2 className="text-3xl font-bold text-white mb-4">Welcome to MythSeeker</h2>
+                        <p className="text-blue-200">Use the navigation to get started!</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-              {/* Default case - show dashboard if no screen matches */}
-              {!['dashboard', 'character', 'lobby', 'waiting', 'game', 'party', 'world', 'combat', 'magic'].includes(currentScreen) && (
-                <div className="h-full flex items-center justify-center">
-                  <div className="text-center">
-                    <h2 className="text-3xl font-bold text-white mb-4">Welcome to MythSeeker</h2>
-                    <p className="text-blue-200">Use the navigation to get started!</p>
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
           </div>
         </div>
         {/* Right Drawer - desktop as flex child, mobile as fixed overlay */}
         {!isMobile && (
-          <RightDrawer
-            isOpen={drawerOpen}
-            onClose={() => setDrawerOpen(false)}
-            activeTab={activeDrawerTab}
-            onTabChange={setActiveDrawerTab}
-            isMobile={isMobile}
-            campaign={currentCampaign}
-            messages={messages}
-            players={partyState.players}
-            worldState={worldState}
-            achievements={achievements}
-            onSendMessage={sendMultiplayerMessage}
-            onUpdateSettings={(settings) => {
-              console.log('Settings updated:', settings);
-            }}
-            drawerWidth={drawerWidth}
-            setDrawerWidth={setDrawerWidth}
-            minWidth={MIN_WIDTH}
-            maxWidth={MAX_WIDTH}
-          />
+          <Suspense fallback={<LoadingSpinner />}>
+            <RightDrawer
+              isOpen={drawerOpen}
+              onClose={() => setDrawerOpen(false)}
+              activeTab={activeDrawerTab}
+              onTabChange={setActiveDrawerTab}
+              isMobile={isMobile}
+              campaign={currentCampaign}
+              messages={messages}
+              players={partyState.players}
+              worldState={worldState}
+              achievements={achievements}
+              onSendMessage={sendMultiplayerMessage}
+              onUpdateSettings={(settings) => {
+                console.log('Settings updated:', settings);
+              }}
+              drawerWidth={drawerWidth}
+              setDrawerWidth={setDrawerWidth}
+              minWidth={MIN_WIDTH}
+              maxWidth={MAX_WIDTH}
+            />
+          </Suspense>
         )}
         {/* Mobile Drawer as overlay */}
         {isMobile && (
-          <RightDrawer
-            isOpen={drawerOpen}
-            onClose={() => setDrawerOpen(false)}
-            activeTab={activeDrawerTab}
-            onTabChange={setActiveDrawerTab}
-            isMobile={isMobile}
-            campaign={currentCampaign}
-            messages={messages}
-            players={partyState.players}
-            worldState={worldState}
-            achievements={achievements}
-            onSendMessage={sendMultiplayerMessage}
-            onUpdateSettings={(settings) => {
-              console.log('Settings updated:', settings);
-            }}
-          />
+          <Suspense fallback={<LoadingSpinner />}>
+            <RightDrawer
+              isOpen={drawerOpen}
+              onClose={() => setDrawerOpen(false)}
+              activeTab={activeDrawerTab}
+              onTabChange={setActiveDrawerTab}
+              isMobile={isMobile}
+              campaign={currentCampaign}
+              messages={messages}
+              players={partyState.players}
+              worldState={worldState}
+              achievements={achievements}
+              onSendMessage={sendMultiplayerMessage}
+              onUpdateSettings={(settings) => {
+                console.log('Settings updated:', settings);
+              }}
+            />
+          </Suspense>
         )}
       </div>
       {/* Floating Action Button - sets drawer tab and opens drawer */}
@@ -2203,13 +2398,43 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }:
   const [characterName, setCharacterName] = useState(playerName);
   const [backstory, setBackstory] = useState('');
   const [hoveredClass, setHoveredClass] = useState<any>(null);
+  const [errors, setErrors] = useState<{ name?: string; class?: string; backstory?: string }>({});
+
+  // Profanity filter (basic)
+  const profanityList = ['fuck', 'shit', 'bitch', 'asshole', 'bastard', 'dick', 'cunt', 'piss', 'cock', 'fag', 'slut', 'whore'];
+  const containsProfanity = (str: string) => {
+    if (!str) return false;
+    const lower = str.toLowerCase();
+    return profanityList.some(word => lower.includes(word));
+  };
+
+  const validate = () => {
+    const newErrors: { name?: string; class?: string; backstory?: string } = {};
+    if (!characterName.trim()) {
+      newErrors.name = 'Character name is required.';
+    } else if (characterName.length > 50) {
+      newErrors.name = 'Character name must be 50 characters or less.';
+    } else if (containsProfanity(characterName)) {
+      newErrors.name = 'Please choose a more appropriate name.';
+    }
+    if (!selectedClass) {
+      newErrors.class = 'Character class is required.';
+    }
+    if (backstory.length > 0 && containsProfanity(backstory)) {
+      newErrors.backstory = 'Please remove inappropriate language from the backstory.';
+    } else if (backstory.length > 500) {
+      newErrors.backstory = 'Backstory must be 500 characters or less.';
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = () => {
-    if (selectedClass && characterName.trim() && backstory.trim()) {
+    if (validate()) {
       onCreateCharacter({
-        name: characterName,
+        name: characterName.trim(),
         class: selectedClass.name,
-        backstory: backstory
+        backstory: backstory.trim()
       });
     }
   };
@@ -2229,6 +2454,7 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }:
             onChange={(e) => setCharacterName(e.target.value)}
             className="w-full px-3 lg:px-4 py-2 lg:py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 text-sm lg:text-base"
           />
+          {errors.name && <div className="text-red-400 text-xs mt-1">{errors.name}</div>}
         </div>
 
         <div>
@@ -2283,6 +2509,7 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }:
               </div>
             ))}
           </div>
+          {errors.class && <div className="text-red-400 text-xs mt-1">{errors.class}</div>}
         </div>
 
         <div>
@@ -2315,6 +2542,7 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }:
             placeholder="Describe your character's background, motivations, and personality... (Click prompts above for inspiration)"
             className="w-full px-3 lg:px-4 py-2 lg:py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 h-24 lg:h-32 resize-none text-sm lg:text-base"
           />
+          {errors.backstory && <div className="text-red-400 text-xs mt-1">{errors.backstory}</div>}
         </div>
 
         <button
@@ -2441,14 +2669,37 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
   onPauseCampaign?: (campaignId: string) => void
 }) => {
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
+  const [showJoinCampaign, setShowJoinCampaign] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<any>(null);
   const [customPrompt, setCustomPrompt] = useState('');
-  const [isMultiplayer, setIsMultiplayer] = useState(true);
   const [joinCode, setJoinCode] = useState('');
-  const [showJoinCampaign, setShowJoinCampaign] = useState(false);
+  const [isMultiplayer, setIsMultiplayer] = useState(true);
+  const [errors, setErrors] = useState<{ theme?: string; customPrompt?: string }>({});
+
+  // Profanity filter (reuse from above)
+  const profanityList = ['fuck', 'shit', 'bitch', 'asshole', 'bastard', 'dick', 'cunt', 'piss', 'cock', 'fag', 'slut', 'whore'];
+  const containsProfanity = (str: string) => {
+    if (!str) return false;
+    const lower = str.toLowerCase();
+    return profanityList.some(word => lower.includes(word));
+  };
+
+  const validate = () => {
+    const newErrors: { theme?: string; customPrompt?: string } = {};
+    if (!selectedTheme) {
+      newErrors.theme = 'Campaign theme is required.';
+    }
+    if (customPrompt.length > 1000) {
+      newErrors.customPrompt = 'Custom prompt must be 1000 characters or less.';
+    } else if (customPrompt.length > 0 && containsProfanity(customPrompt)) {
+      newErrors.customPrompt = 'Please remove inappropriate language from the custom prompt.';
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleCreateCampaign = () => {
-    if (selectedTheme) {
+    if (validate()) {
       onCreateCampaign(selectedTheme, customPrompt, isMultiplayer);
       setShowCreateCampaign(false);
       setSelectedTheme(null);
@@ -2535,39 +2786,37 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
             </div>
           ))}
         </div>
+        {errors.theme && <div className="text-red-400 text-xs mt-1">{errors.theme}</div>}
 
-        {selectedTheme && (
-          <div className="space-y-3 lg:space-y-4">
-            <div className="flex items-center space-x-3 lg:space-x-4">
-              <label className="flex items-center space-x-2 text-white text-sm lg:text-base">
-                <input
-                  type="checkbox"
-                  checked={isMultiplayer}
-                  onChange={(e) => setIsMultiplayer(e.target.checked)}
-                  className="rounded"
-                />
-                <span>Multiplayer Campaign (up to 6 players)</span>
-              </label>
-            </div>
+        <div>
+          <label className="block text-white font-semibold mb-2">Custom Campaign Prompt (Optional)</label>
+          <textarea
+            value={customPrompt}
+            onChange={(e) => setCustomPrompt(e.target.value)}
+            placeholder="Add any specific details, themes, or story elements you want the AI to include..."
+            className="w-full px-4 py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 h-24 resize-none"
+          />
+          {errors.customPrompt && <div className="text-red-400 text-xs mt-1">{errors.customPrompt}</div>}
+        </div>
 
-            <div>
-              <label className="block text-white font-semibold mb-2 text-sm lg:text-base">Custom Campaign Prompt (Optional)</label>
-              <textarea
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                placeholder="Add any specific details, themes, or story elements you want the AI to include..."
-                className="w-full px-3 lg:px-4 py-2 lg:py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 h-20 lg:h-24 resize-none text-sm lg:text-base"
-              />
-            </div>
+        <div className="flex items-center space-x-3 lg:space-x-4">
+          <label className="flex items-center space-x-2 text-white text-sm lg:text-base">
+            <input
+              type="checkbox"
+              checked={isMultiplayer}
+              onChange={(e) => setIsMultiplayer(e.target.checked)}
+              className="rounded"
+            />
+            <span>Multiplayer Campaign (up to 6 players)</span>
+          </label>
+        </div>
 
-            <button
-              onClick={handleCreateCampaign}
-              className="w-full px-4 lg:px-6 py-2 lg:py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all text-sm lg:text-base"
-            >
-              Create {selectedTheme.name} Campaign
-            </button>
-          </div>
-        )}
+        <button
+          onClick={handleCreateCampaign}
+          className="w-full px-4 lg:px-6 py-2 lg:py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all text-sm lg:text-base"
+        >
+          Create {selectedTheme?.name || 'Campaign'}
+        </button>
       </div>
     );
   }
@@ -2611,110 +2860,190 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
   }
 
   return (
-    <div className="space-y-4 lg:space-y-6 campaign-lobby">
-      <div className="flex flex-col sm:flex-row gap-3 lg:gap-4">
+    <div className="space-y-6 campaign-lobby">
+      {/* Header with improved contrast and spacing */}
+      <div className="text-center mb-8">
+        <h2 className="text-3xl font-bold text-white mb-2 drop-shadow-lg">Campaign Lobby</h2>
+        <p className="text-blue-100 text-lg">Welcome, {character.name} the Level {character.level} {character.class}!</p>
+      </div>
+
+      {/* Main action buttons with improved design */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-8">
         <Tooltip content="Create a new campaign with custom themes and settings">
           <button
             onClick={() => setShowCreateCampaign(true)}
-            className="flex-1 px-6 lg:px-8 py-3 lg:py-4 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all text-base lg:text-lg"
+            className="flex-1 px-8 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-semibold hover:from-emerald-700 hover:to-teal-700 transition-all text-lg shadow-lg hover:shadow-xl transform hover:scale-105"
           >
-            + Create New Campaign
+            <div className="flex items-center justify-center space-x-3">
+              <Plus size={24} />
+              <span>Create New Campaign</span>
+            </div>
           </button>
         </Tooltip>
         <Tooltip content="Join an existing campaign using a 6-character code">
           <button
             onClick={() => setShowJoinCampaign(true)}
-            className="flex-1 px-6 lg:px-8 py-3 lg:py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all text-base lg:text-lg"
+            className="flex-1 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all text-lg shadow-lg hover:shadow-xl transform hover:scale-105"
           >
-            Join Campaign
+            <div className="flex items-center justify-center space-x-3">
+              <Users size={24} />
+              <span>Join Campaign</span>
+            </div>
           </button>
         </Tooltip>
       </div>
 
+      {/* Campaigns section with improved design */}
       {campaigns.length > 0 && (
-        <div>
-          <h3 className="text-lg lg:text-xl font-bold text-white mb-3 lg:mb-4">Your Campaigns</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4">
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-2xl font-bold text-white">Your Campaigns</h3>
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                placeholder="Search campaigns..."
+                className="px-4 py-2 bg-white/10 text-white placeholder-gray-300 rounded-lg border border-white/20 focus:outline-none focus:border-blue-400"
+              />
+              <select className="px-4 py-2 bg-white/10 text-white rounded-lg border border-white/20 focus:outline-none focus:border-blue-400">
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="paused">Paused</option>
+                <option value="not-started">Not Started</option>
+              </select>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {campaigns.map((campaign) => (
-              <div key={campaign.id} className="bg-white/10 rounded-xl p-3 lg:p-4 border border-white/20">
-                <div className="flex justify-between items-start mb-2">
+              <div key={campaign.id} className="group relative bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:border-blue-400/50 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
+                {/* Status indicator */}
+                <div className={`absolute top-4 right-4 w-3 h-3 rounded-full ${
+                  !campaign.started ? 'bg-yellow-400' : 
+                  campaign.status === 'active' ? 'bg-green-400' : 
+                  campaign.status === 'paused' ? 'bg-orange-400' : 'bg-gray-400'
+                }`}></div>
+                
+                {/* Campaign header */}
+                <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <span className="text-lg">{getCampaignStatusIcon(campaign)}</span>
-                      <h4 className="text-white font-semibold text-sm lg:text-base">{campaign.theme}</h4>
+                    <div className="flex items-center space-x-3 mb-2">
+                      <span className="text-2xl">{getCampaignStatusIcon(campaign)}</span>
+                      <h4 className="text-xl font-bold text-white">{campaign.theme}</h4>
                     </div>
-                    <p className={`text-xs lg:text-sm ${getCampaignStatusColor(campaign)}`}>
+                    <p className={`text-sm font-medium ${getCampaignStatusColor(campaign)}`}>
                       {getCampaignStatusText(campaign)} • {(campaign.players?.length || 0)} player{(campaign.players?.length || 0) !== 1 ? 's' : ''}
                     </p>
                     {!campaign.started && campaign.isMultiplayer && (
-                      <p className="text-yellow-400 text-xs lg:text-sm">Code: {campaign.code}</p>
-                    )}
-                  </div>
-                  <div className="flex space-x-1">
-                    {/* Play/Resume Button */}
-                    {(!campaign.started || campaign.status === 'paused') && (
-                      <Tooltip content={!campaign.started ? "Start Campaign" : "Resume Campaign"}>
+                      <div className="mt-2 flex items-center space-x-2">
+                        <span className="text-yellow-300 text-sm">Code:</span>
+                        <code className="bg-yellow-900/50 text-yellow-200 px-2 py-1 rounded text-sm font-mono">
+                          {campaign.code}
+                        </code>
                         <button
-                          onClick={() => handleResumeCampaign(campaign.id)}
-                          className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-all"
+                          onClick={() => {
+                            navigator.clipboard.writeText(campaign.code);
+                            // Show toast notification
+                          }}
+                          className="text-yellow-300 hover:text-yellow-100 transition-colors"
+                          title="Copy campaign code"
                         >
-                          ▶
+                          <Copy size={14} />
                         </button>
-                      </Tooltip>
-                    )}
-                    
-                    {/* Pause Button */}
-                    {campaign.started && campaign.status === 'active' && (
-                      <Tooltip content="Pause Campaign">
-                        <button
-                          onClick={() => handlePauseCampaign(campaign.id)}
-                          className="px-2 py-1 bg-yellow-600 text-white rounded text-xs hover:bg-yellow-700 transition-all"
-                        >
-                          ⏸
-                        </button>
-                      </Tooltip>
-                    )}
-                    
-                    {/* Delete Button */}
-                    {onDeleteCampaign && (
-                      <Tooltip content="Delete Campaign (cannot be undone)">
-                        <button
-                          onClick={() => handleDeleteCampaign(campaign.id)}
-                          className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition-all"
-                        >
-                          ×
-                        </button>
-                      </Tooltip>
+                      </div>
                     )}
                   </div>
                 </div>
                 
-                {/* Campaign progress indicator */}
+                {/* Campaign progress */}
                 {campaign.started && (
-                  <div className="mt-2">
-                    <div className="flex justify-between text-xs text-white mb-1">
+                  <div className="mb-4">
+                    <div className="flex justify-between text-sm text-white mb-2">
                       <span>Progress</span>
                       <span>{campaign.messages?.length || 0} messages</span>
                     </div>
-                    <div className="w-full bg-white/20 rounded-full h-1">
+                    <div className="w-full bg-white/20 rounded-full h-2">
                       <div 
-                        className="bg-blue-500 h-1 rounded-full transition-all"
+                        className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500"
                         style={{ width: `${Math.min((campaign.messages?.length || 0) * 2, 100)}%` }}
                       />
                     </div>
                   </div>
                 )}
+                
+                {/* Quick actions */}
+                <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {/* Play/Resume Button */}
+                  {(!campaign.started || campaign.status === 'paused') && (
+                    <Tooltip content={!campaign.started ? "Start Campaign" : "Resume Campaign"}>
+                      <button
+                        onClick={() => handleResumeCampaign(campaign.id)}
+                        className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all text-sm font-medium"
+                      >
+                        {!campaign.started ? '▶ Start' : '▶ Resume'}
+                      </button>
+                    </Tooltip>
+                  )}
+                  
+                  {/* Pause Button */}
+                  {campaign.started && campaign.status === 'active' && (
+                    <Tooltip content="Pause Campaign">
+                      <button
+                        onClick={() => handlePauseCampaign(campaign.id)}
+                        className="flex-1 px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-all text-sm font-medium"
+                      >
+                        ⏸ Pause
+                      </button>
+                    </Tooltip>
+                  )}
+                  
+                  {/* Edit Button */}
+                  <Tooltip content="Edit Campaign">
+                    <button
+                      onClick={() => {/* Edit functionality */}}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all"
+                    >
+                      <Edit size={14} />
+                    </button>
+                  </Tooltip>
+                  
+                  {/* Delete Button */}
+                  {onDeleteCampaign && (
+                    <Tooltip content="Delete Campaign (cannot be undone)">
+                      <button
+                        onClick={() => handleDeleteCampaign(campaign.id)}
+                        className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </Tooltip>
+                  )}
+                </div>
               </div>
             ))}
           </div>
         </div>
       )}
 
+      {/* Improved empty state */}
       {campaigns.length === 0 && (
-        <div className="text-center py-8">
-          <div className="text-6xl mb-4 opacity-50">🏰</div>
-          <p className="text-blue-200 text-lg">No campaigns yet</p>
-          <p className="text-blue-300 text-sm mt-2">Create your first campaign or join an existing one to begin your adventure!</p>
+        <div className="text-center py-12">
+          <div className="text-8xl mb-6 opacity-50">🏰</div>
+          <h3 className="text-2xl font-bold text-white mb-4">No campaigns yet</h3>
+          <p className="text-blue-200 text-lg mb-6">Create your first campaign or join an existing one to begin your adventure!</p>
+          <div className="flex justify-center space-x-4">
+            <button
+              onClick={() => setShowCreateCampaign(true)}
+              className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-700 hover:to-teal-700 transition-all font-semibold"
+            >
+              Create Your First Campaign
+            </button>
+            <button
+              onClick={() => setShowJoinCampaign(true)}
+              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-semibold"
+            >
+              Join Existing Campaign
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -2738,4 +3067,14 @@ const WaitingRoom: React.FC<{ campaign: any, onStart: () => void, onBack: () => 
   </div>
 );
 
-export default AIDungeonMaster;
+export default function AppWrapper() {
+  return (
+    <>
+      {/* Skip to content link for accessibility */}
+      <a href="#main-content" className="sr-only focus:not-sr-only absolute top-2 left-2 bg-blue-700 text-white px-4 py-2 rounded z-50">Skip to main content</a>
+      <ErrorBoundary>
+        <AIDungeonMaster />
+      </ErrorBoundary>
+    </>
+  );
+}

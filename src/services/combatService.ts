@@ -17,6 +17,15 @@ export interface CombatState {
     timestamp: number;
   }>;
   round: number;
+  lineOfSightCache: Record<string, Set<string>>;
+}
+
+export interface EnemyAI {
+  personality: 'aggressive' | 'defensive' | 'tactical' | 'cowardly';
+  preferredRange: 'melee' | 'ranged' | 'mixed';
+  targetPriority: 'weakest' | 'strongest' | 'closest' | 'threat';
+  retreatThreshold: number; // Health percentage to retreat
+  flankingBonus: boolean;
 }
 
 export class CombatService {
@@ -31,7 +40,8 @@ export class CombatService {
       combatants: [],
       battleMap: this.createDefaultBattleMap(),
       combatLog: [],
-      round: 1
+      round: 1,
+      lineOfSightCache: {}
     };
   }
 
@@ -87,7 +97,8 @@ export class CombatService {
       combatants: resetCombatants,
       battleMap: customMap || this.state.battleMap,
       combatLog: [],
-      round: 1
+      round: 1,
+      lineOfSightCache: {}
     };
 
     // Set first combatant as active
@@ -228,6 +239,390 @@ export class CombatService {
     };
   }
 
+  // Advanced Line of Sight Calculation
+  private calculateLineOfSight(from: { x: number; y: number }, to: { x: number; y: number }): boolean {
+    const key = `${from.x},${from.y}-${to.x},${to.y}`;
+    if (this.state.lineOfSightCache[key]) {
+      return this.state.lineOfSightCache[key].has('visible');
+    }
+
+    // Bresenham's line algorithm for line of sight
+    const dx = Math.abs(to.x - from.x);
+    const dy = Math.abs(to.y - from.y);
+    const sx = from.x < to.x ? 1 : -1;
+    const sy = from.y < to.y ? 1 : -1;
+    let err = dx - dy;
+
+    let x = from.x;
+    let y = from.y;
+
+    while (x !== to.x || y !== to.y) {
+      // Check if current tile blocks line of sight
+      if (x >= 0 && x < this.state.battleMap.width && y >= 0 && y < this.state.battleMap.height) {
+        const tile = this.state.battleMap.tiles[y][x];
+        if (tile.type === 'wall' || tile.cover >= 3) {
+          this.state.lineOfSightCache[key] = new Set(['blocked']);
+          return false;
+        }
+      }
+
+      const e2 = 2 * err;
+      if (e2 > -dy) {
+        err -= dy;
+        x += sx;
+      }
+      if (e2 < dx) {
+        err += dx;
+        y += sy;
+      }
+    }
+
+    this.state.lineOfSightCache[key] = new Set(['visible']);
+    return true;
+  }
+
+  // Get visible targets for a combatant
+  private getVisibleTargets(combatant: Combatant): Combatant[] {
+    return this.state.combatants.filter(target => {
+      if (target.id === combatant.id || target.health <= 0) return false;
+      return this.calculateLineOfSight(combatant.position, target.position);
+    });
+  }
+
+  // Calculate flanking bonus
+  private calculateFlankingBonus(attacker: Combatant, target: Combatant): number {
+    const allies = this.state.combatants.filter(c => 
+      c.type === attacker.type && c.id !== attacker.id && c.health > 0
+    );
+
+    for (const ally of allies) {
+      // Check if ally is on opposite side of target
+      const allyToTarget = Math.abs(ally.position.x - target.position.x) + Math.abs(ally.position.y - target.position.y);
+      const attackerToTarget = Math.abs(attacker.position.x - target.position.x) + Math.abs(attacker.position.y - target.position.y);
+      
+      if (allyToTarget <= 1 && attackerToTarget <= 1) {
+        // Check if they're roughly on opposite sides
+        const dx1 = ally.position.x - target.position.x;
+        const dy1 = ally.position.y - target.position.y;
+        const dx2 = attacker.position.x - target.position.x;
+        const dy2 = attacker.position.y - target.position.y;
+        
+        if ((dx1 * dx2 < 0 || dy1 * dy2 < 0) && (dx1 !== 0 || dx2 !== 0) && (dy1 !== 0 || dy2 !== 0)) {
+          return 2; // Flanking bonus
+        }
+      }
+    }
+    return 0;
+  }
+
+  // Advanced Enemy AI Decision Making
+  private getEnemyAIAction(enemy: Combatant): CombatAction | null {
+    const visibleTargets = this.getVisibleTargets(enemy);
+    if (visibleTargets.length === 0) {
+      // No visible targets, try to move towards last known player position
+      return this.getMovementTowardsPlayers(enemy);
+    }
+
+    const ai: EnemyAI = {
+      personality: 'aggressive',
+      preferredRange: 'melee',
+      targetPriority: 'closest',
+      retreatThreshold: 0.3,
+      flankingBonus: true
+    };
+
+    // Check if should retreat
+    if (enemy.health / enemy.maxHealth < ai.retreatThreshold) {
+      return this.getRetreatAction(enemy);
+    }
+
+    // Select target based on priority
+    const target = this.selectTarget(visibleTargets, ai.targetPriority, enemy);
+
+    // Determine action based on personality and situation
+    switch (ai.personality) {
+      case 'aggressive':
+        return this.getAggressiveAction(enemy, target, ai);
+      case 'defensive':
+        return this.getDefensiveAction(enemy, target, ai);
+      case 'tactical':
+        return this.getTacticalAction(enemy, target, ai);
+      case 'cowardly':
+        return this.getCowardlyAction(enemy, target, ai);
+      default:
+        return this.getAggressiveAction(enemy, target, ai);
+    }
+  }
+
+  private selectTarget(targets: Combatant[], priority: string, enemy: Combatant): Combatant {
+    switch (priority) {
+      case 'weakest':
+        return targets.reduce((weakest, current) => 
+          current.health < weakest.health ? current : weakest
+        );
+      case 'strongest':
+        return targets.reduce((strongest, current) => 
+          current.health > strongest.health ? current : strongest
+        );
+      case 'closest':
+        return targets.reduce((closest, current) => {
+          const closestDist = Math.abs(closest.position.x - enemy.position.x) + Math.abs(closest.position.y - enemy.position.y);
+          const currentDist = Math.abs(current.position.x - enemy.position.x) + Math.abs(current.position.y - enemy.position.y);
+          return currentDist < closestDist ? current : closest;
+        });
+      case 'threat':
+        // Calculate threat based on damage potential and health
+        return targets.reduce((highestThreat, current) => {
+          const currentThreat = (current.maxHealth - current.health) * 2 + current.stats.strength;
+          const highestThreatValue = (highestThreat.maxHealth - highestThreat.health) * 2 + highestThreat.stats.strength;
+          return currentThreat > highestThreatValue ? current : highestThreat;
+        });
+      default:
+        return targets[0];
+    }
+  }
+
+  private getAggressiveAction(enemy: Combatant, target: Combatant, ai: EnemyAI): CombatAction {
+    const distance = Math.abs(target.position.x - enemy.position.x) + Math.abs(target.position.y - enemy.position.y);
+    
+    if (distance <= enemy.reach && enemy.currentActionPoints.action > 0) {
+      return {
+        type: 'attack',
+        target: target.position
+      };
+    } else if (enemy.currentActionPoints.move > 0) {
+      // Move towards target
+      const path = this.findPathToTarget(enemy, target);
+      if (path.length > 1) {
+        return {
+          type: 'move',
+          target: path[1],
+          path: path
+        };
+      }
+    }
+    
+    return { type: 'end-turn' };
+  }
+
+  private getDefensiveAction(enemy: Combatant, target: Combatant, ai: EnemyAI): CombatAction {
+    // Defensive AI tries to maintain distance and use cover
+    const distance = Math.abs(target.position.x - enemy.position.x) + Math.abs(target.position.y - enemy.position.y);
+    
+    if (distance <= 1 && enemy.currentActionPoints.move > 0) {
+      // Too close, try to back away
+      const retreatPosition = this.findRetreatPosition(enemy, target);
+      if (retreatPosition) {
+        return {
+          type: 'move',
+          target: retreatPosition
+        };
+      }
+    } else if (distance <= enemy.reach && enemy.currentActionPoints.action > 0) {
+      return {
+        type: 'attack',
+        target: target.position
+      };
+    }
+    
+    return { type: 'end-turn' };
+  }
+
+  private getTacticalAction(enemy: Combatant, target: Combatant, ai: EnemyAI): CombatAction {
+    // Tactical AI considers positioning, flanking, and cover
+    const flankingBonus = this.calculateFlankingBonus(enemy, target);
+    
+    if (flankingBonus > 0 && enemy.currentActionPoints.action > 0) {
+      return {
+        type: 'attack',
+        target: target.position
+      };
+    }
+    
+    // Try to find better positioning
+    const betterPosition = this.findTacticalPosition(enemy, target);
+    if (betterPosition && enemy.currentActionPoints.move > 0) {
+      return {
+        type: 'move',
+        target: betterPosition
+      };
+    }
+    
+    return this.getAggressiveAction(enemy, target, ai);
+  }
+
+  private getCowardlyAction(enemy: Combatant, target: Combatant, ai: EnemyAI): CombatAction {
+    // Cowardly AI tries to avoid direct confrontation
+    const distance = Math.abs(target.position.x - enemy.position.x) + Math.abs(target.position.y - enemy.position.y);
+    
+    if (distance <= 2) {
+      // Too close, retreat
+      const retreatPosition = this.findRetreatPosition(enemy, target);
+      if (retreatPosition && enemy.currentActionPoints.move > 0) {
+        return {
+          type: 'move',
+          target: retreatPosition
+        };
+      }
+    }
+    
+    // Only attack if target is very weak
+    if (target.health / target.maxHealth < 0.3 && enemy.currentActionPoints.action > 0) {
+      return {
+        type: 'attack',
+        target: target.position
+      };
+    }
+    
+    return { type: 'end-turn' };
+  }
+
+  private findPathToTarget(enemy: Combatant, target: Combatant): Array<{ x: number; y: number }> {
+    // Simple A* pathfinding
+    const openSet = [{ x: enemy.position.x, y: enemy.position.y, g: 0, h: 0, f: 0, parent: null }];
+    const closedSet = new Set<string>();
+    const cameFrom = new Map<string, { x: number; y: number }>();
+    const gScore = new Map<string, number>();
+    const fScore = new Map<string, number>();
+    
+    gScore.set(`${enemy.position.x},${enemy.position.y}`, 0);
+    fScore.set(`${enemy.position.x},${enemy.position.y}`, this.heuristic(enemy.position, target.position));
+    
+    while (openSet.length > 0) {
+      openSet.sort((a, b) => a.f - b.f);
+      const current = openSet.shift()!;
+      const currentKey = `${current.x},${current.y}`;
+      
+      if (current.x === target.position.x && current.y === target.position.y) {
+        // Reconstruct path
+        const path = [];
+        let currentPos = { x: current.x, y: current.y };
+        while (cameFrom.has(`${currentPos.x},${currentPos.y}`)) {
+          path.unshift(currentPos);
+          currentPos = cameFrom.get(`${currentPos.x},${currentPos.y}`)!;
+        }
+        path.unshift({ x: enemy.position.x, y: enemy.position.y });
+        return path;
+      }
+      
+      closedSet.add(currentKey);
+      
+      // Check neighbors
+      const directions = [{ dx: -1, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: -1 }, { dx: 0, dy: 1 }];
+      for (const dir of directions) {
+        const neighbor = { x: current.x + dir.dx, y: current.y + dir.dy };
+        const neighborKey = `${neighbor.x},${neighbor.y}`;
+        
+        if (neighbor.x < 0 || neighbor.x >= this.state.battleMap.width ||
+            neighbor.y < 0 || neighbor.y >= this.state.battleMap.height ||
+            closedSet.has(neighborKey)) {
+          continue;
+        }
+        
+        const tile = this.state.battleMap.tiles[neighbor.y][neighbor.x];
+        if (tile.type === 'wall' || tile.occupied) {
+          continue;
+        }
+        
+        const tentativeGScore = gScore.get(currentKey)! + (tile.type === 'difficult' ? 2 : 1);
+        
+        if (!gScore.has(neighborKey) || tentativeGScore < gScore.get(neighborKey)!) {
+          cameFrom.set(neighborKey, { x: current.x, y: current.y });
+          gScore.set(neighborKey, tentativeGScore);
+          fScore.set(neighborKey, tentativeGScore + this.heuristic(neighbor, target.position));
+          
+          if (!openSet.find(node => node.x === neighbor.x && node.y === neighbor.y)) {
+            openSet.push({
+              x: neighbor.x,
+              y: neighbor.y,
+              g: tentativeGScore,
+              h: this.heuristic(neighbor, target.position),
+              f: tentativeGScore + this.heuristic(neighbor, target.position),
+              parent: null
+            });
+          }
+        }
+      }
+    }
+    
+    return [{ x: enemy.position.x, y: enemy.position.y }];
+  }
+
+  private heuristic(from: { x: number; y: number }, to: { x: number; y: number }): number {
+    return Math.abs(from.x - to.x) + Math.abs(from.y - to.y);
+  }
+
+  private findRetreatPosition(enemy: Combatant, target: Combatant): { x: number; y: number } | null {
+    const directions = [{ dx: -1, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: -1 }, { dx: 0, dy: 1 }];
+    
+    for (const dir of directions) {
+      const newX = enemy.position.x + dir.dx;
+      const newY = enemy.position.y + dir.dy;
+      
+      if (newX >= 0 && newX < this.state.battleMap.width &&
+          newY >= 0 && newY < this.state.battleMap.height) {
+        const tile = this.state.battleMap.tiles[newY][newX];
+        if (tile.type !== 'wall' && !tile.occupied) {
+          const distance = Math.abs(newX - target.position.x) + Math.abs(newY - target.position.y);
+          if (distance > 1) {
+            return { x: newX, y: newY };
+          }
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  private findTacticalPosition(enemy: Combatant, target: Combatant): { x: number; y: number } | null {
+    // Find position that provides flanking or better cover
+    const directions = [{ dx: -1, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: -1 }, { dx: 0, dy: 1 }];
+    
+    for (const dir of directions) {
+      const newX = enemy.position.x + dir.dx;
+      const newY = enemy.position.y + dir.dy;
+      
+      if (newX >= 0 && newX < this.state.battleMap.width &&
+          newY >= 0 && newY < this.state.battleMap.height) {
+        const tile = this.state.battleMap.tiles[newY][newX];
+        if (tile.type !== 'wall' && !tile.occupied) {
+          // Check if this position provides better tactical advantage
+          const tempPosition = { x: newX, y: newY };
+          const flankingBonus = this.calculateFlankingBonus({ ...enemy, position: tempPosition }, target);
+          if (flankingBonus > 0 || tile.cover > 0) {
+            return tempPosition;
+          }
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  private getMovementTowardsPlayers(enemy: Combatant): CombatAction | null {
+    const players = this.state.combatants.filter(c => c.type === 'player' && c.health > 0);
+    if (players.length === 0) return { type: 'end-turn' };
+    
+    // Move towards the closest player
+    const closestPlayer = players.reduce((closest, current) => {
+      const closestDist = Math.abs(closest.position.x - enemy.position.x) + Math.abs(closest.position.y - enemy.position.y);
+      const currentDist = Math.abs(current.position.x - enemy.position.x) + Math.abs(current.position.y - enemy.position.y);
+      return currentDist < closestDist ? current : closest;
+    });
+    
+    const path = this.findPathToTarget(enemy, closestPlayer);
+    if (path.length > 1 && enemy.currentActionPoints.move > 0) {
+      return {
+        type: 'move',
+        target: path[1],
+        path: path
+      };
+    }
+    
+    return { type: 'end-turn' };
+  }
+
+  // Enhanced attack calculation with line of sight and flanking
   private executeAttack(combatant: Combatant, action: CombatAction): { success: boolean; message: string; newState?: CombatState } {
     if (combatant.currentActionPoints.action <= 0) {
       return { success: false, message: 'No action points remaining' };
@@ -249,16 +644,22 @@ export class CombatService {
       return { success: false, message: 'No target at specified position' };
     }
 
+    // Check line of sight
+    if (!this.calculateLineOfSight(combatant.position, targetCombatant.position)) {
+      return { success: false, message: 'Target not in line of sight' };
+    }
+
     // Check range
     const distance = Math.abs(targetX - combatant.position.x) + Math.abs(targetY - combatant.position.y);
     if (distance > combatant.reach) {
       return { success: false, message: 'Target out of range' };
     }
 
-    // Calculate attack
+    // Calculate attack with flanking bonus
     const attackRoll = Math.floor(Math.random() * 20) + 1;
     const attackMod = Math.floor((combatant.stats.strength - 10) / 2);
-    const totalAttack = attackRoll + attackMod;
+    const flankingBonus = this.calculateFlankingBonus(combatant, targetCombatant);
+    const totalAttack = attackRoll + attackMod + flankingBonus;
 
     if (totalAttack >= targetCombatant.stats.armorClass) {
       // Hit! Calculate damage
@@ -274,7 +675,9 @@ export class CombatService {
       });
 
       this.state.combatants = updatedCombatants;
-      this.addCombatLog(combatant.id, 'attack', `${combatant.name} hit ${targetCombatant.name} for ${damage} damage`);
+      
+      const flankingText = flankingBonus > 0 ? ' (flanking!)' : '';
+      this.addCombatLog(combatant.id, 'attack', `${combatant.name} hit ${targetCombatant.name} for ${damage} damage${flankingText}`);
 
       // Check if target is defeated
       if (targetCombatant.health - damage <= 0) {
@@ -289,7 +692,7 @@ export class CombatService {
 
       return { 
         success: true, 
-        message: `${combatant.name} hit ${targetCombatant.name} for ${damage} damage`,
+        message: `${combatant.name} hit ${targetCombatant.name} for ${damage} damage${flankingText}`,
         newState: this.getState()
       };
     } else {
@@ -442,6 +845,21 @@ export class CombatService {
     }
 
     return { ended: false };
+  }
+
+  // Execute AI turn for enemies
+  public executeAITurn(): { success: boolean; message: string; newState?: CombatState } {
+    const activeCombatant = this.getActiveCombatant();
+    if (!activeCombatant || activeCombatant.type !== 'enemy') {
+      return { success: false, message: 'No enemy combatant active' };
+    }
+
+    const aiAction = this.getEnemyAIAction(activeCombatant);
+    if (!aiAction) {
+      return this.endTurn();
+    }
+
+    return this.executeAction(aiAction);
   }
 }
 

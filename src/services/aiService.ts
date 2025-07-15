@@ -1,7 +1,8 @@
 // Advanced AI Dungeon Master Service for MythSeeker
 // This provides intelligent, contextual, and responsive DM responses using Vertex AI Gemini Pro
 
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../firebase';
 
 export interface AIResponse {
   narrative: string;
@@ -63,29 +64,23 @@ export interface AIResponse {
 }
 
 class AdvancedAIService {
-  private functions = getFunctions();
-  private aiDungeonMaster = httpsCallable(this.functions, 'aiDungeonMaster');
+  private aiDungeonMaster = httpsCallable(functions, 'aiDungeonMaster');
 
   // Generate intelligent, contextual response using Vertex AI Gemini Pro
-  async complete(prompt: string): Promise<string> {
+  async complete(prompt: string, campaign?: any): Promise<string> {
     try {
-      // Call the Firebase function that uses Vertex AI Gemini Pro
-      const result = await this.aiDungeonMaster({
-        prompt: prompt,
-        campaignId: 'default', // You can make this dynamic based on current campaign
-        playerName: 'Player' // You can make this dynamic based on current player
-      });
-      
-      const response = result.data as any;
-      
-      // Simulate AI processing time for better UX
-      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-      
-      return response.response || this.generateFallbackResponse();
+      // If campaign is not multiplayer, always use local AI
+      if (!campaign || !campaign.isMultiplayer) {
+        // Simulate AI processing time for better UX
+        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+        return this.generateLocalResponse(prompt);
+      }
+      // Otherwise, call the Firebase function for multiplayer campaigns
+      const result = await this.aiDungeonMaster({ prompt, campaignId: campaign.id, playerName: campaign.playerName });
+      return result.data as string;
     } catch (error) {
-      console.error('Error calling Vertex AI:', error);
-      // Fallback to local AI if Vertex AI is unavailable
-      return this.generateLocalResponse(prompt);
+      console.error('Error generating AI response:', error);
+      return JSON.stringify(this.generateFallbackResponse());
     }
   }
 
@@ -401,7 +396,7 @@ class AdvancedAIService {
         atmosphere: {
           mood: 'analytical',
           tension: 'medium',
-          environmentalDetails: 'The captain\'s assessment seems to carry the weight of military experience and strategic thinking'
+          environmentalDetails: "The captain's assessment seems to carry the weight of experience and the urgency of someone who has seen too much"
         }
       };
     }
@@ -616,6 +611,30 @@ class AdvancedAIService {
           activity: 'pulses with the energy of fear and desperation',
           mood: 'terrifying',
           details: 'The air is thick with the scent of decay and the weight of forgotten lives'
+        },
+        urban: {
+          name: 'The Midnight Bar',
+          atmosphere: 'dim lighting creates intimate corners for private conversations',
+          description: 'buzzes with the energy of city nightlife',
+          activity: 'throbs with the pulse of urban life',
+          mood: 'mysterious',
+          details: 'The air carries the mingled scents of coffee, alcohol, and urban mystery'
+        },
+        apocalypse: {
+          name: 'The Last Stop',
+          atmosphere: 'makeshift barricades and dim emergency lighting',
+          description: 'echoes with the sounds of survivors sharing stories',
+          activity: 'hums with the quiet desperation of those who remain',
+          mood: 'grim',
+          details: 'The air is thick with the scent of survival and the weight of lost civilization'
+        },
+        pirate: {
+          name: 'The Salty Dog',
+          atmosphere: 'lanterns swing gently with the rhythm of the sea',
+          description: 'roars with the laughter of sailors and adventurers',
+          activity: 'bustles with tales of treasure and adventure',
+          mood: 'adventurous',
+          details: 'The air carries the salty tang of the ocean and the promise of fortune'
         }
       }
     };
