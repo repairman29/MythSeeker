@@ -942,6 +942,9 @@ const AIDungeonMaster = () => {
       const gameId = await multiplayerService.createCampaign(newCampaign as any);
       const createdCampaign = { ...newCampaign, id: gameId } as any;
       
+      // Save the campaign with the proper ID
+      await saveCampaign(createdCampaign);
+      
       setCampaigns([...campaigns, createdCampaign]);
       setCurrentCampaign(createdCampaign);
       setCurrentEnvironment(theme.bg);
@@ -1229,6 +1232,7 @@ const AIDungeonMaster = () => {
       e.preventDefault();
       sendMessage();
     }
+    // Don't prevent default for other keys to allow normal typing
   };
 
   // Combat functions

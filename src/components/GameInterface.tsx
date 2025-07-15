@@ -74,12 +74,18 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
   const localInputRef = useRef<HTMLInputElement>(null);
   const inputRef = propInputRef || localInputRef;
 
-  // Focus management effect
+  // Focus management effect - temporarily disabled for debugging
+  // useEffect(() => {
+  //   if (inputRef.current && !isAIThinking && document.activeElement !== inputRef.current) {
+  //     console.log('Focusing input field');
+  //     inputRef.current.focus();
+  //   }
+  // }, [inputMessage, isAIThinking, inputRef]);
+
+  // Debug input changes
   useEffect(() => {
-    if (inputRef.current && !isAIThinking && document.activeElement !== inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [inputMessage, isAIThinking, inputRef]);
+    console.log('Input message changed:', inputMessage);
+  }, [inputMessage]);
 
   const tabs = [
     { 
@@ -278,8 +284,23 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
           <input
             type="text"
             value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyDown={handleKeyPress}
+            onChange={(e) => {
+              console.log('Input onChange:', e.target.value);
+              setInputMessage(e.target.value);
+            }}
+            onKeyDown={(e) => {
+              console.log('Input onKeyDown:', e.key);
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
+            onFocus={(e) => {
+              console.log('Input focused');
+            }}
+            onBlur={(e) => {
+              console.log('Input blurred');
+            }}
             placeholder="What do you do? (Press Enter to send)"
             className="flex-1 px-4 py-2 rounded-lg bg-white/20 text-white placeholder-gray-300 border border-white/30 focus:outline-none focus:border-blue-400"
             disabled={isAIThinking}

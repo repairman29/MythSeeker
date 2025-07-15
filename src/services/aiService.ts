@@ -298,7 +298,7 @@ class AdvancedAIService {
       }
     };
 
-    const enemies = themeEnemies[theme as keyof typeof themeEnemies]?.[location as keyof any] || 
+    const enemies = (themeEnemies as any)[theme]?.[location] || 
                    themeEnemies.fantasy.tavern;
     
     const enemyCount = Math.min(characterLevel, 3);
@@ -401,7 +401,7 @@ class AdvancedAIService {
         atmosphere: {
           mood: 'analytical',
           tension: 'medium',
-          environmentalDetails: "The captain's assessment seems to carry the weight of military experience and strategic thinking"
+          environmentalDetails: 'The captain\'s assessment seems to carry the weight of military experience and strategic thinking'
         }
       };
     }
