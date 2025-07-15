@@ -127,7 +127,13 @@ class FirebaseService {
   async signInWithGoogle(): Promise<User> {
     const provider = new GoogleAuthProvider();
     const result = await signInWithPopup(auth, provider);
-    return result.user;
+    // Create user profile in Firestore if not exists
+    const user = result.user;
+    const userProfile = await this.getUserProfile(user.uid);
+    if (!userProfile) {
+      await this.createUserProfile(user);
+    }
+    return user;
   }
 
   async signOut(): Promise<void> {
@@ -480,4 +486,5 @@ class FirebaseService {
   }
 }
 
-export const firebaseService = new FirebaseService(); 
+export const firebaseService = new FirebaseService();
+export { db }; 

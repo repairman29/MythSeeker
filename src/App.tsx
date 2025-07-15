@@ -1,36 +1,37 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, SetStateAction, Dispatch, RefObject } from 'react';
 import { Dice1, Dice6, Sword, Shield, Zap, Heart, User, Users, Plus, Play, Settings, Sparkles, Flame, Copy, Share2, Star, Award, Package, Hammer, TrendingUp, Target, Clock, Swords, MapPin, Eye, Crosshair, Globe, AlertTriangle, Crown, Calendar, History, ChevronDown, ChevronUp, X, Menu } from 'lucide-react';
 import { multiplayerService, MultiplayerGame, Player, GameMessage } from './multiplayer';
 import { demoMultiplayerService } from './demoMultiplayer';
+import UserProfile from './UserProfile';
 
 const AIDungeonMaster = () => {
   const [currentScreen, setCurrentScreen] = useState('welcome');
   const [playerName, setPlayerName] = useState('');
-  const [character, setCharacter] = useState(null);
-  const [currentCampaign, setCurrentCampaign] = useState(null);
-  const [campaigns, setCampaigns] = useState([]);
-  const [messages, setMessages] = useState([]);
+  const [character, setCharacter] = useState<any>(null);
+  const [currentCampaign, setCurrentCampaign] = useState<any>(null);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [messages, setMessages] = useState<any[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isAIThinking, setIsAIThinking] = useState(false);
   const [currentEnvironment, setCurrentEnvironment] = useState('default');
-  const [statusEffects, setStatusEffects] = useState({});
+  const [statusEffects, setStatusEffects] = useState<Record<string, any>>({});
   const [playerId, setPlayerId] = useState(null);
   const [joinCode, setJoinCode] = useState('');
   const [showLevelUp, setShowLevelUp] = useState(null);
   const [pendingLevelUp, setPendingLevelUp] = useState(null);
   const [combatState, setCombatState] = useState(null);
-  const [combatLog, setCombatLog] = useState([]);
-  const [battleMap, setBattleMap] = useState(null);
-  const [selectedCombatant, setSelectedCombatant] = useState(null);
-  const [hoveredTile, setHoveredTile] = useState(null);
-  const [targetingMode, setTargetingMode] = useState(null);
-  const [lineOfSightCache, setLineOfSightCache] = useState({});
-  const [worldState, setWorldState] = useState(null);
+  const [combatLog, setCombatLog] = useState<any[]>([]);
+  const [battleMap, setBattleMap] = useState<any>(null);
+  const [selectedCombatant, setSelectedCombatant] = useState<any>(null);
+  const [hoveredTile, setHoveredTile] = useState<any>(null);
+  const [targetingMode, setTargetingMode] = useState<any>(null);
+  const [lineOfSightCache, setLineOfSightCache] = useState<Record<string, any>>({});
+  const [worldState, setWorldState] = useState<any>(null);
   const [showWorldEvents, setShowWorldEvents] = useState(false);
-  const [pendingChoices, setPendingChoices] = useState([]);
-  const [achievements, setAchievements] = useState([]);
+  const [pendingChoices, setPendingChoices] = useState<any[]>([]);
+  const [achievements, setAchievements] = useState<any[]>([]);
   const [showAchievements, setShowAchievements] = useState(false);
-  const messagesEndRef = useRef(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Generate unique player ID on load
   useEffect(() => {
@@ -40,7 +41,7 @@ const AIDungeonMaster = () => {
   }, [playerId]);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    (messagesEndRef.current as HTMLDivElement | null)?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
@@ -217,20 +218,20 @@ const AIDungeonMaster = () => {
 
   // Utility functions
   const rollDice = (sides = 20) => Math.floor(Math.random() * sides) + 1;
-  const getModifier = (stat) => Math.floor((stat - 10) / 2);
+  const getModifier = (stat: number) => Math.floor((stat - 10) / 2);
   const generateCampaignCode = () => Math.random().toString(36).substr(2, 6).toUpperCase();
 
-  const calculateStats = (character) => {
+  const calculateStats = (character: any) => {
     if (!character) return null;
     
     let totalStats = { ...character.baseStats };
     let bonuses = { attack: 0, defense: 0, magic: 0, health: 0, mana: 0, crit: 0 };
     
     // Equipment bonuses
-    Object.values(character.equipment || {}).forEach(item => {
+    Object.values(character.equipment || {}).forEach((item: any) => {
       if (item && equipmentTypes[item.type] && equipmentTypes[item.type][item.name]) {
         const itemStats = equipmentTypes[item.type][item.name];
-        Object.keys(itemStats).forEach(stat => {
+        Object.keys(itemStats).forEach((stat: string) => {
           if (stat !== 'durability' && stat !== 'rarity' && stat !== 'price' && stat !== 'range') {
             if (totalStats[stat] !== undefined) {
               totalStats[stat] += itemStats[stat];
@@ -251,7 +252,7 @@ const AIDungeonMaster = () => {
     return { ...totalStats, ...bonuses };
   };
 
-  const checkAchievements = (action, context = {}) => {
+  const checkAchievements = (action: string, context: any = {}) => {
     // Achievement checking logic would go here
     // This is a simplified version
     const newAchievements = [];
@@ -275,7 +276,7 @@ const AIDungeonMaster = () => {
     }
   };
 
-  const createCharacter = (characterData) => {
+  const createCharacter = (characterData: any) => {
     const classData = classes.find(c => c.name === characterData.class);
     const newCharacter = {
       ...characterData,
@@ -304,7 +305,7 @@ const AIDungeonMaster = () => {
     setCurrentScreen('lobby');
   };
 
-  const createCampaign = async (theme, customPrompt = '', isMultiplayer = true) => {
+  const createCampaign = async (theme: any, customPrompt = '', isMultiplayer = true) => {
     const campaignCode = generateCampaignCode();
     
     const newCampaign = {
@@ -348,7 +349,7 @@ const AIDungeonMaster = () => {
     }
   };
 
-  const startCampaign = async (campaign) => {
+  const startCampaign = async (campaign: any) => {
     setIsAIThinking(true);
     
     const partyStats = campaign.players.map(p => {
@@ -454,7 +455,7 @@ Your entire response MUST be a single, valid JSON object.`;
     }
   };
 
-  const handleKeyPress = (e) => {
+  const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -465,6 +466,9 @@ Your entire response MUST be a single, valid JSON object.`;
   if (currentScreen === 'welcome') {
     return (
       <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} flex items-center justify-center p-4 transition-all duration-1000`}>
+        <div className="absolute top-4 right-4 z-50">
+          <UserProfile />
+        </div>
         <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 max-w-md w-full border border-white/20">
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold text-white mb-2">⚔️ AI Dungeon Master</h1>
@@ -765,8 +769,8 @@ Your entire response MUST be a single, valid JSON object.`;
 };
 
 // Character Creation Component
-const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }) => {
-  const [selectedClass, setSelectedClass] = useState(null);
+const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }: { playerName: string, classes: any[], onCreateCharacter: (characterData: any) => void, joinCode: string }) => {
+  const [selectedClass, setSelectedClass] = useState<any>(null);
   const [characterName, setCharacterName] = useState(playerName);
   const [backstory, setBackstory] = useState('');
 
@@ -896,9 +900,9 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode })
 };
 
 // Campaign Lobby Component
-const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character }) => {
+const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character }: { campaigns: any[], campaignThemes: any[], onCreateCampaign: (theme: any, customPrompt: string, isMultiplayer: boolean) => void, character: any }) => {
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
-  const [selectedTheme, setSelectedTheme] = useState(null);
+  const [selectedTheme, setSelectedTheme] = useState<any>(null);
   const [customPrompt, setCustomPrompt] = useState('');
   const [isMultiplayer, setIsMultiplayer] = useState(true);
 
@@ -1030,6 +1034,21 @@ const GameInterface = ({
   playerId,
   calculateStats,
   achievements
+}: { 
+  campaign: any, 
+  messages: any[], 
+  inputMessage: string, 
+  setInputMessage: Dispatch<SetStateAction<string>>, 
+  sendMessage: () => void, 
+  handleKeyPress: (e: React.KeyboardEvent) => void, 
+  isAIThinking: boolean, 
+  onBack: () => void,
+  messagesEndRef: RefObject<HTMLDivElement>,
+  statusEffects: Record<string, any>,
+  currentEnvironment: string,
+  playerId: string | null,
+  calculateStats: (character: any) => any,
+  achievements: any[]
 }) => {
   const [showPartySheet, setShowPartySheet] = useState(true);
   const currentPlayer = campaign.players.find(p => p.id === playerId);

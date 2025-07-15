@@ -1,23 +1,20 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import * as cors from 'cors';
 
 admin.initializeApp();
 
-const corsHandler = cors({ origin: true });
-
 // Types
-interface UserProfile {
-  uid: string;
-  displayName: string;
-  email: string;
-  photoURL?: string;
-  createdAt: number;
-  lastSeen: number;
-  totalPlayTime: number;
-  campaignsHosted: number;
-  campaignsJoined: number;
-}
+// interface UserProfile {
+//   uid: string;
+//   displayName: string;
+//   email: string;
+//   photoURL?: string;
+//   createdAt: number;
+//   lastSeen: number;
+//   totalPlayTime: number;
+//   campaignsHosted: number;
+//   campaignsJoined: number;
+// }
 
 interface Character {
   id: string;
@@ -73,21 +70,21 @@ interface GameSession {
 }
 
 // Create user profile when user signs up
-export const createUserProfile = functions.auth.user().onCreate(async (user) => {
-  const userProfile: UserProfile = {
-    uid: user.uid,
-    displayName: user.displayName || 'Adventurer',
-    email: user.email || '',
-    photoURL: user.photoURL || '',
-    createdAt: Date.now(),
-    lastSeen: Date.now(),
-    totalPlayTime: 0,
-    campaignsHosted: 0,
-    campaignsJoined: 0
-  };
+// export const createUserProfile = functions.auth.user().onCreate(async (user) => {
+//   const userProfile: UserProfile = {
+//     uid: user.uid,
+//     displayName: user.displayName || 'Adventurer',
+//     email: user.email || '',
+//     photoURL: user.photoURL || '',
+//     createdAt: Date.now(),
+//     lastSeen: Date.now(),
+//     totalPlayTime: 0,
+//     campaignsHosted: 0,
+//     campaignsJoined: 0
+//   };
 
-  await admin.firestore().collection('users').doc(user.uid).set(userProfile);
-});
+//   await admin.firestore().collection('users').doc(user.uid).set(userProfile);
+// });
 
 // Update user last seen
 export const updateUserLastSeen = functions.https.onCall(async (data, context) => {
@@ -115,6 +112,7 @@ export const saveCharacter = functions.https.onCall(async (data: Character, cont
   if (data.id) {
     // Update existing character
     await admin.firestore().collection('characters').doc(data.id).update(characterData);
+    return { characterId: data.id };
   } else {
     // Create new character
     const docRef = await admin.firestore().collection('characters').add(characterData);
@@ -356,20 +354,20 @@ function generateGameCode(): string {
 }
 
 // Clean up old games (runs daily)
-export const cleanupOldGames = functions.pubsub.schedule('every 24 hours').onRun(async (context) => {
-  const cutoffTime = Date.now() - (7 * 24 * 60 * 60 * 1000); // 7 days ago
+// export const cleanupOldGames = functions.pubsub.schedule('every 24 hours').onRun(async (context) => {
+//   const cutoffTime = Date.now() - (7 * 24 * 60 * 60 * 1000); // 7 days ago
 
-  const oldGamesSnapshot = await admin.firestore()
-    .collection('games')
-    .where('lastActivity', '<', cutoffTime)
-    .where('started', '==', false)
-    .get();
+//   const oldGamesSnapshot = await admin.firestore()
+//     .collection('games')
+//     .where('lastActivity', '<', cutoffTime)
+//     .where('started', '==', false)
+//     .get();
 
-  const batch = admin.firestore().batch();
-  oldGamesSnapshot.docs.forEach(doc => {
-    batch.delete(doc.ref);
-  });
+//   const batch = admin.firestore().batch();
+//   oldGamesSnapshot.docs.forEach(doc => {
+//     batch.delete(doc.ref);
+//   });
 
-  await batch.commit();
-  console.log(`Cleaned up ${oldGamesSnapshot.docs.length} old games`);
-}); 
+//   await batch.commit();
+//   console.log(`Cleaned up ${oldGamesSnapshot.docs.length} old games`);
+// }); 
