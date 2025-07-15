@@ -268,7 +268,7 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
             type="text"
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyPress}
             placeholder="What do you do? (Press Enter to send)"
             className="flex-1 px-4 py-2 rounded-lg bg-white/20 text-white placeholder-gray-300 border border-white/30 focus:outline-none focus:border-blue-400"
             disabled={isAIThinking}

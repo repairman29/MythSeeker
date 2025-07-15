@@ -63,6 +63,10 @@ interface RightDrawerProps {
   achievements?: any[];
   onSendMessage?: (message: string) => void;
   onUpdateSettings?: (settings: any) => void;
+  drawerWidth?: number;
+  setDrawerWidth?: (w: number) => void;
+  minWidth?: number;
+  maxWidth?: number;
 }
 
 const RightDrawer: React.FC<RightDrawerProps> = ({
@@ -77,12 +81,15 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
   worldState,
   achievements = [],
   onSendMessage,
-  onUpdateSettings
+  onUpdateSettings,
+  drawerWidth = 400,
+  setDrawerWidth,
+  minWidth = 320,
+  maxWidth = 600
 }) => {
-  const [isResizing, setIsResizing] = useState(false);
-  const [drawerWidth, setDrawerWidth] = useState(400);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [isResizing, setIsResizing] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -102,17 +109,17 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
 
   // Mouse event handlers for resizing
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (isMobile) return;
+    if (isMobile || !setDrawerWidth) return;
     resizing.current = true;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
   };
   const handleMouseMove = (e: MouseEvent) => {
-    if (!resizing.current) return;
+    if (!resizing.current || !setDrawerWidth) return;
     const winWidth = window.innerWidth;
     const newWidth = Math.min(
-      Math.max(winWidth - e.clientX, MIN_WIDTH),
-      MAX_WIDTH
+      Math.max(winWidth - e.clientX, minWidth),
+      maxWidth
     );
     setDrawerWidth(newWidth);
   };
@@ -135,7 +142,7 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
   });
   // Double-click to reset width
   const handleDoubleClick = () => {
-    setDrawerWidth(DEFAULT_WIDTH);
+    setDrawerWidth?.(DEFAULT_WIDTH);
   };
 
   const tabs = [
@@ -674,6 +681,11 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
     }
   };
 
+  // Drawer style
+  const drawerStyle = !isMobile
+    ? { width: drawerWidth, minWidth, maxWidth, transition: 'width 0.2s cubic-bezier(.4,2,.6,1)' }
+    : {};
+
   return (
     <>
       {/* Mobile overlay */}
@@ -685,18 +697,18 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
       )}
       {/* Drawer */}
       <div
-        className={`fixed top-0 right-0 h-full bg-gradient-to-b from-blue-900 via-indigo-900 to-purple-900 border-l border-white/20 shadow-2xl z-50 transition-transform duration-300 ease-in-out ${
+        className={`$(!isMobile ? '' : 'fixed top-0 right-0 h-full') bg-gradient-to-b from-blue-900 via-indigo-900 to-purple-900 border-l border-white/20 shadow-2xl z-50 transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         } ${isMobile ? 'w-full sm:w-96' : ''}`}
-        style={!isMobile ? { width: drawerWidth, minWidth: MIN_WIDTH, maxWidth: MAX_WIDTH, transition: 'width 0.2s cubic-bezier(.4,2,.6,1)' } : {}}
+        style={drawerStyle}
       >
         {/* Drag handle (desktop only) */}
-        {!isMobile && isOpen && (
+        {!isMobile && isOpen && setDrawerWidth && (
           <div
             className="absolute left-0 top-0 h-full w-2 z-50 cursor-col-resize group"
             style={{ marginLeft: -8 }}
             onMouseDown={handleMouseDown}
-            onDoubleClick={handleDoubleClick}
+            onDoubleClick={() => setDrawerWidth(384)}
             tabIndex={0}
             aria-label="Resize drawer"
             role="separator"

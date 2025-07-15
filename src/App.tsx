@@ -117,6 +117,11 @@ const AIDungeonMaster = () => {
     consequences: []
   });
 
+  // Add at the top of AIDungeonMaster
+  const [drawerWidth, setDrawerWidth] = useState(400);
+  const MIN_WIDTH = 320;
+  const MAX_WIDTH = 600;
+
   // Show success feedback
   const showSuccessFeedback = (type: string) => {
     // Convert to toast notification instead
@@ -1890,186 +1895,214 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
         theme={currentEnvironment}
         isMobile={false}
       />
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Top Bar */}
-        <TopBar 
-          onNewCampaign={handleNewCampaign}
-          isMobile={isMobile}
-          onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
-          currentScreen={currentScreen}
-          onHelpClick={() => setShowHelp(true)}
-        />
-        {/* Main Content - Only render the active screen */}
-        <div className="flex-1 flex pb-16 lg:pb-0">
-          <div className="flex-1 px-4 lg:px-6">
-            {currentScreen === 'dashboard' && (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center">
-                  <h2 className="text-3xl font-bold text-white mb-4">Dashboard</h2>
-                  <p className="text-blue-200 mb-6">Welcome to MythSeeker RPG!</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl">
-                    <button
-                      onClick={() => handleNavChange('campaigns')}
-                      className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
-                    >
-                      <Book size={32} className="text-blue-400 mx-auto mb-2" />
-                      <h3 className="text-white font-semibold">Campaigns</h3>
-                      <p className="text-blue-200 text-sm">Create or join campaigns</p>
-                    </button>
-                    <button
-                      onClick={() => handleNavChange('characters')}
-                      className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
-                    >
-                      <User size={32} className="text-green-400 mx-auto mb-2" />
-                      <h3 className="text-white font-semibold">Characters</h3>
-                      <p className="text-blue-200 text-sm">Manage your characters</p>
-                    </button>
-                    <button
-                      onClick={() => handleNavChange('party')}
-                      className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
-                    >
-                      <Users size={32} className="text-purple-400 mx-auto mb-2" />
-                      <h3 className="text-white font-semibold">Party</h3>
-                      <p className="text-blue-200 text-sm">View party members</p>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-            {currentScreen === 'character' && (
-              <CharacterCreation 
-                playerName={currentUser?.displayName || ''}
-                classes={classes}
-                onCreateCharacter={createCharacter}
-                joinCode={joinCode}
-              />
-            )}
-            {currentScreen === 'lobby' && (
-              <CampaignLobby 
-                campaigns={campaigns}
-                campaignThemes={campaignThemes}
-                onCreateCampaign={createCampaign}
-                character={character}
-                onDeleteCampaign={deleteCampaign}
-                onJoinCampaign={joinCampaign}
-                onResumeCampaign={resumeCampaign}
-                onPauseCampaign={pauseCampaign}
-              />
-            )}
-            {currentScreen === 'waiting' && (
-              <WaitingRoom 
-                campaign={currentCampaign}
-                onStart={startCampaign}
-                onBack={() => setCurrentScreen('lobby')}
-              />
-            )}
-            {currentScreen === 'game' && (
-              <Gameplay
-                campaign={currentCampaign}
-                messages={messages}
-                inputMessage={inputMessage}
-                setInputMessage={setInputMessage}
-                sendMessage={sendMessage}
-                handleKeyPress={handleKeyPress}
-                isAIThinking={isAIThinking}
-                messagesEndRef={messagesEndRef}
-                onStartCombat={startCombat}
-                worldState={worldState}
-                aiMemory={aiMemory}
-                inputRef={gameInputRef}
-              />
-            )}
-            {currentScreen === 'party' && (
-              <div className="h-full p-6">
-                <h2 className="text-2xl font-bold text-white mb-6">Party Management</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {partyState.players.map((player) => (
-                    <div key={player.id} className="bg-white/10 rounded-lg p-4 border border-white/20">
-                      <h3 className="text-white font-semibold">{player.character?.name || player.name}</h3>
-                      <p className="text-blue-200 text-sm">{player.character?.class || 'Unknown Class'}</p>
-                      <p className="text-green-400 text-xs">Level {player.character?.level || 1}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {currentScreen === 'world' && (
-              <div className="h-full p-6">
-                <h2 className="text-2xl font-bold text-white mb-6">World Map & Exploration</h2>
-                <div className="bg-white/10 rounded-lg p-6 border border-white/20">
-                  <p className="text-blue-200 mb-4">Interactive world map coming soon!</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-black/20 rounded-lg p-4">
-                      <h3 className="text-white font-semibold mb-2">Current Location</h3>
-                      <p className="text-blue-200">{worldState?.currentLocation || 'Unknown'}</p>
-                    </div>
-                    <div className="bg-black/20 rounded-lg p-4">
-                      <h3 className="text-white font-semibold mb-2">Discovered Areas</h3>
-                      <p className="text-blue-200">0 locations explored</p>
+      {/* Main Content + Drawer Row */}
+      <div className="flex-1 flex flex-row h-full">
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col" style={!isMobile ? { marginRight: drawerOpen ? drawerWidth : 0 } : {}}>
+          {/* Top Bar */}
+          <TopBar 
+            onNewCampaign={handleNewCampaign}
+            isMobile={isMobile}
+            onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
+            currentScreen={currentScreen}
+            onHelpClick={() => setShowHelp(true)}
+          />
+          {/* Main Content - Only render the active screen */}
+          <div className="flex-1 flex pb-16 lg:pb-0">
+            <div className="flex-1 px-4 lg:px-6">
+              {currentScreen === 'dashboard' && (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <h2 className="text-3xl font-bold text-white mb-4">Dashboard</h2>
+                    <p className="text-blue-200 mb-6">Welcome to MythSeeker RPG!</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl">
+                      <button
+                        onClick={() => handleNavChange('campaigns')}
+                        className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
+                      >
+                        <Book size={32} className="text-blue-400 mx-auto mb-2" />
+                        <h3 className="text-white font-semibold">Campaigns</h3>
+                        <p className="text-blue-200 text-sm">Create or join campaigns</p>
+                      </button>
+                      <button
+                        onClick={() => handleNavChange('characters')}
+                        className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
+                      >
+                        <User size={32} className="text-green-400 mx-auto mb-2" />
+                        <h3 className="text-white font-semibold">Characters</h3>
+                        <p className="text-blue-200 text-sm">Manage your characters</p>
+                      </button>
+                      <button
+                        onClick={() => handleNavChange('party')}
+                        className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
+                      >
+                        <Users size={32} className="text-purple-400 mx-auto mb-2" />
+                        <h3 className="text-white font-semibold">Party</h3>
+                        <p className="text-blue-200 text-sm">View party members</p>
+                      </button>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
-            {currentScreen === 'combat' && combatState && (
-              <CombatSystem
-                combatants={combatState.combatants}
-                battleMap={combatState.battleMap}
-                currentTurn={combatState.currentTurn}
-                activeCombatantId={combatState.turnOrder[combatState.currentCombatantIndex]}
-                onAction={handleCombatAction}
-                onEndCombat={endCombat}
-                isPlayerTurn={combatService.isPlayerTurn()}
-              />
-            )}
-            {currentScreen === 'magic' && (
-              <div className="h-full p-6">
-                <h2 className="text-2xl font-bold text-white mb-6">Magic & Spells</h2>
-                <div className="bg-white/10 rounded-lg p-6 border border-white/20">
-                  <p className="text-blue-200 mb-4">Spell system coming soon!</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-black/20 rounded-lg p-4">
-                      <h3 className="text-white font-semibold mb-2">Known Spells</h3>
-                      <p className="text-blue-200">No spells learned yet</p>
-                    </div>
-                    <div className="bg-black/20 rounded-lg p-4">
-                      <h3 className="text-white font-semibold mb-2">Spell Slots</h3>
-                      <p className="text-blue-200">0 slots available</p>
+              )}
+              {currentScreen === 'character' && (
+                <CharacterCreation 
+                  playerName={currentUser?.displayName || ''}
+                  classes={classes}
+                  onCreateCharacter={createCharacter}
+                  joinCode={joinCode}
+                />
+              )}
+              {currentScreen === 'lobby' && (
+                <CampaignLobby 
+                  campaigns={campaigns}
+                  campaignThemes={campaignThemes}
+                  onCreateCampaign={createCampaign}
+                  character={character}
+                  onDeleteCampaign={deleteCampaign}
+                  onJoinCampaign={joinCampaign}
+                  onResumeCampaign={resumeCampaign}
+                  onPauseCampaign={pauseCampaign}
+                />
+              )}
+              {currentScreen === 'waiting' && (
+                <WaitingRoom 
+                  campaign={currentCampaign}
+                  onStart={startCampaign}
+                  onBack={() => setCurrentScreen('lobby')}
+                />
+              )}
+              {currentScreen === 'game' && (
+                <Gameplay
+                  campaign={currentCampaign}
+                  messages={messages}
+                  inputMessage={inputMessage}
+                  setInputMessage={setInputMessage}
+                  sendMessage={sendMessage}
+                  handleKeyPress={handleKeyPress}
+                  isAIThinking={isAIThinking}
+                  messagesEndRef={messagesEndRef}
+                  onStartCombat={startCombat}
+                  worldState={worldState}
+                  aiMemory={aiMemory}
+                  inputRef={gameInputRef}
+                />
+              )}
+              {currentScreen === 'party' && (
+                <div className="h-full p-6">
+                  <h2 className="text-2xl font-bold text-white mb-6">Party Management</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {partyState.players.map((player) => (
+                      <div key={player.id} className="bg-white/10 rounded-lg p-4 border border-white/20">
+                        <h3 className="text-white font-semibold">{player.character?.name || player.name}</h3>
+                        <p className="text-blue-200 text-sm">{player.character?.class || 'Unknown Class'}</p>
+                        <p className="text-green-400 text-xs">Level {player.character?.level || 1}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {currentScreen === 'world' && (
+                <div className="h-full p-6">
+                  <h2 className="text-2xl font-bold text-white mb-6">World Map & Exploration</h2>
+                  <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+                    <p className="text-blue-200 mb-4">Interactive world map coming soon!</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-black/20 rounded-lg p-4">
+                        <h3 className="text-white font-semibold mb-2">Current Location</h3>
+                        <p className="text-blue-200">{worldState?.currentLocation || 'Unknown'}</p>
+                      </div>
+                      <div className="bg-black/20 rounded-lg p-4">
+                        <h3 className="text-white font-semibold mb-2">Discovered Areas</h3>
+                        <p className="text-blue-200">0 locations explored</p>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
-            {/* Default case - show dashboard if no screen matches */}
-            {!['dashboard', 'character', 'lobby', 'waiting', 'game', 'party', 'world', 'combat', 'magic'].includes(currentScreen) && (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center">
-                  <h2 className="text-3xl font-bold text-white mb-4">Welcome to MythSeeker</h2>
-                  <p className="text-blue-200">Use the navigation to get started!</p>
+              )}
+              {currentScreen === 'combat' && combatState && (
+                <CombatSystem
+                  combatants={combatState.combatants}
+                  battleMap={combatState.battleMap}
+                  currentTurn={combatState.currentTurn}
+                  activeCombatantId={combatState.turnOrder[combatState.currentCombatantIndex]}
+                  onAction={handleCombatAction}
+                  onEndCombat={endCombat}
+                  isPlayerTurn={combatService.isPlayerTurn()}
+                />
+              )}
+              {currentScreen === 'magic' && (
+                <div className="h-full p-6">
+                  <h2 className="text-2xl font-bold text-white mb-6">Magic & Spells</h2>
+                  <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+                    <p className="text-blue-200 mb-4">Spell system coming soon!</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-black/20 rounded-lg p-4">
+                        <h3 className="text-white font-semibold mb-2">Known Spells</h3>
+                        <p className="text-blue-200">No spells learned yet</p>
+                      </div>
+                      <div className="bg-black/20 rounded-lg p-4">
+                        <h3 className="text-white font-semibold mb-2">Spell Slots</h3>
+                        <p className="text-blue-200">0 slots available</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+              {/* Default case - show dashboard if no screen matches */}
+              {!['dashboard', 'character', 'lobby', 'waiting', 'game', 'party', 'world', 'combat', 'magic'].includes(currentScreen) && (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <h2 className="text-3xl font-bold text-white mb-4">Welcome to MythSeeker</h2>
+                    <p className="text-blue-200">Use the navigation to get started!</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
+        {/* Right Drawer - desktop as flex child, mobile as fixed overlay */}
+        {!isMobile && (
+          <RightDrawer
+            isOpen={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            activeTab={activeDrawerTab}
+            onTabChange={setActiveDrawerTab}
+            isMobile={isMobile}
+            campaign={currentCampaign}
+            messages={messages}
+            players={partyState.players}
+            worldState={worldState}
+            achievements={achievements}
+            onSendMessage={sendMultiplayerMessage}
+            onUpdateSettings={(settings) => {
+              console.log('Settings updated:', settings);
+            }}
+            drawerWidth={drawerWidth}
+            setDrawerWidth={setDrawerWidth}
+            minWidth={MIN_WIDTH}
+            maxWidth={MAX_WIDTH}
+          />
+        )}
+        {/* Mobile Drawer as overlay */}
+        {isMobile && (
+          <RightDrawer
+            isOpen={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            activeTab={activeDrawerTab}
+            onTabChange={setActiveDrawerTab}
+            isMobile={isMobile}
+            campaign={currentCampaign}
+            messages={messages}
+            players={partyState.players}
+            worldState={worldState}
+            achievements={achievements}
+            onSendMessage={sendMultiplayerMessage}
+            onUpdateSettings={(settings) => {
+              console.log('Settings updated:', settings);
+            }}
+          />
+        )}
       </div>
-      {/* Right Drawer - contextual info, chat, party, log, etc. */}
-      <RightDrawer
-        isOpen={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        activeTab={activeDrawerTab}
-        onTabChange={setActiveDrawerTab}
-        isMobile={isMobile}
-        campaign={currentCampaign}
-        messages={messages}
-        players={partyState.players}
-        worldState={worldState}
-        achievements={achievements}
-        onSendMessage={sendMultiplayerMessage}
-        onUpdateSettings={(settings) => {
-          console.log('Settings updated:', settings);
-        }}
-      />
       {/* Floating Action Button - sets drawer tab and opens drawer */}
       <FloatingActionButton
         onToggleDrawer={() => setDrawerOpen(!drawerOpen)}
