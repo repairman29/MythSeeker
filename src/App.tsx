@@ -1232,7 +1232,7 @@ const AIDungeonMaster = () => {
       e.preventDefault();
       sendMessage();
     }
-    // Don't prevent default for other keys to allow normal typing
+    // Allow all other keys to work normally for typing
   };
 
   // Combat functions
@@ -1637,7 +1637,7 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
             type="text"
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyPress}
             placeholder="What do you do? (Be specific and creative!)"
             className="flex-1 px-3 py-2 bg-black/20 rounded text-white text-sm lg:text-base"
           />
