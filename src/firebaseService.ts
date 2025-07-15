@@ -37,15 +37,16 @@ import {
   remove
 } from 'firebase/database';
 
-// Firebase configuration - replace with your actual config
+// Firebase configuration for mythseekers-rpg project
 const firebaseConfig = {
-  apiKey: "your-api-key",
-  authDomain: "your-project.firebaseapp.com",
-  databaseURL: "https://your-project-default-rtdb.firebaseio.com",
-  projectId: "your-project-id",
-  storageBucket: "your-project.appspot.com",
-  messagingSenderId: "123456789012",
-  appId: "1:123456789012:web:abcdef1234567890"
+  apiKey: "AIzaSyAVJvau3Hit06q1pNYCTOF-pVuutmk4oNQ",
+  authDomain: "mythseekers-rpg.firebaseapp.com",
+  databaseURL: "https://mythseekers-rpg-default-rtdb.firebaseio.com",
+  projectId: "mythseekers-rpg",
+  storageBucket: "mythseekers-rpg.firebasestorage.app",
+  messagingSenderId: "659018227506",
+  appId: "1:659018227506:web:82425e7adaf80c2e3c412b",
+  measurementId: "G-E3T1V81ZX3"
 };
 
 // Initialize Firebase
@@ -125,15 +126,20 @@ class FirebaseService {
 
   // Authentication
   async signInWithGoogle(): Promise<User> {
-    const provider = new GoogleAuthProvider();
-    const result = await signInWithPopup(auth, provider);
-    // Create user profile in Firestore if not exists
-    const user = result.user;
-    const userProfile = await this.getUserProfile(user.uid);
-    if (!userProfile) {
-      await this.createUserProfile(user);
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      // Create user profile in Firestore if not exists
+      const user = result.user;
+      const userProfile = await this.getUserProfile(user.uid);
+      if (!userProfile) {
+        await this.createUserProfile(user);
+      }
+      return user;
+    } catch (error) {
+      console.error('Error signing in with Google:', error);
+      throw error;
     }
-    return user;
   }
 
   async signOut(): Promise<void> {
@@ -150,29 +156,39 @@ class FirebaseService {
 
   // User Profile Management
   async createUserProfile(user: User): Promise<void> {
-    const userProfile: UserProfile = {
-      uid: user.uid,
-      displayName: user.displayName || 'Adventurer',
-      email: user.email || '',
-      photoURL: user.photoURL || '',
-      createdAt: Date.now(),
-      lastSeen: Date.now(),
-      totalPlayTime: 0,
-      campaignsHosted: 0,
-      campaignsJoined: 0
-    };
+    try {
+      const userProfile: UserProfile = {
+        uid: user.uid,
+        displayName: user.displayName || 'Adventurer',
+        email: user.email || '',
+        photoURL: user.photoURL || '',
+        createdAt: Date.now(),
+        lastSeen: Date.now(),
+        totalPlayTime: 0,
+        campaignsHosted: 0,
+        campaignsJoined: 0
+      };
 
-    await setDoc(doc(db, 'users', user.uid), userProfile);
+      await setDoc(doc(db, 'users', user.uid), userProfile);
+    } catch (error) {
+      console.error('Error creating user profile:', error);
+      throw error;
+    }
   }
 
   async getUserProfile(uid: string): Promise<UserProfile | null> {
-    const docRef = doc(db, 'users', uid);
-    const docSnap = await getDoc(docRef);
-    
-    if (docSnap.exists()) {
-      return docSnap.data() as UserProfile;
+    try {
+      const docRef = doc(db, 'users', uid);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        return docSnap.data() as UserProfile;
+      }
+      return null;
+    } catch (error) {
+      console.warn('Error getting user profile:', error);
+      return null;
     }
-    return null;
   }
 
   async updateUserLastSeen(uid: string): Promise<void> {
@@ -486,5 +502,4 @@ class FirebaseService {
   }
 }
 
-export const firebaseService = new FirebaseService();
-export { db }; 
+export const firebaseService = new FirebaseService(); 

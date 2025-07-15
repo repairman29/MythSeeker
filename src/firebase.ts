@@ -1,21 +1,21 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
 
-// Demo Firebase configuration for testing
-// In production, replace with your actual Firebase config
+// Firebase configuration for mythseekers-rpg project
 const firebaseConfig = {
-  apiKey: "demo-key",
-  authDomain: "demo.firebaseapp.com",
-  databaseURL: "https://demo-default-rtdb.firebaseio.com",
-  projectId: "demo",
-  storageBucket: "demo.appspot.com",
-  messagingSenderId: "123456789012",
-  appId: "1:123456789012:web:demo"
+  apiKey: "AIzaSyAVJvau3Hit06q1pNYCTOF-pVuutmk4oNQ",
+  authDomain: "mythseekers-rpg.firebaseapp.com",
+  databaseURL: "https://mythseekers-rpg-default-rtdb.firebaseio.com",
+  projectId: "mythseekers-rpg",
+  storageBucket: "mythseekers-rpg.firebasestorage.app",
+  messagingSenderId: "659018227506",
+  appId: "1:659018227506:web:82425e7adaf80c2e3c412b",
+  measurementId: "G-E3T1V81ZX3"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const database = getDatabase(app);
 
-// Demo mode - uses local storage instead of Firebase for testing
-export const useDemoMode = true; 
+// Production mode - uses real Firebase
+export const useDemoMode = false; 

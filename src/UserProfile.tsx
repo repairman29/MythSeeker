@@ -11,8 +11,13 @@ const UserProfile: React.FC = () => {
       setUser(firebaseUser);
       setLoading(false);
       if (firebaseUser) {
-        const userProfile = await firebaseService.getUserProfile(firebaseUser.uid);
-        setProfile(userProfile);
+        try {
+          const userProfile = await firebaseService.getUserProfile(firebaseUser.uid);
+          setProfile(userProfile);
+        } catch (error) {
+          console.warn('Error loading user profile:', error);
+          setProfile(null);
+        }
       } else {
         setProfile(null);
       }

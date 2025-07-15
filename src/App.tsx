@@ -1,25 +1,42 @@
-import React, { useState, useEffect, useRef, useCallback, SetStateAction, Dispatch, RefObject } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dice1, Dice6, Sword, Shield, Zap, Heart, User, Users, Plus, Play, Settings, Sparkles, Flame, Copy, Share2, Star, Award, Package, Hammer, TrendingUp, Target, Clock, Swords, MapPin, Eye, Crosshair, Globe, AlertTriangle, Crown, Calendar, History, ChevronDown, ChevronUp, X, Menu } from 'lucide-react';
 import { multiplayerService, MultiplayerGame, Player, GameMessage } from './multiplayer';
 import { demoMultiplayerService } from './demoMultiplayer';
 import UserProfile from './UserProfile';
+import ResumeGame from './ResumeGame';
+import { NavBar, TopBar, RightDrawer, MainTabs, CharacterSheet, Inventory, WorldMap, CampaignLog, CombatSystem } from './components';
+import FloatingActionButton from './components/FloatingActionButton';
+import GameInterface from './components/GameInterface';
+import CombatService, { CombatState } from './services/combatService';
+import { Combatant, CombatAction } from './components/CombatSystem';
 
 const AIDungeonMaster = () => {
+  // Combat service instance
+  const combatService = React.useMemo(() => new CombatService(), []);
+  
+  // Navigation state
+  const [activeNav, setActiveNav] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('gameplay');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  
+  // Game state
   const [currentScreen, setCurrentScreen] = useState('welcome');
   const [playerName, setPlayerName] = useState('');
   const [character, setCharacter] = useState<any>(null);
-  const [currentCampaign, setCurrentCampaign] = useState<any>(null);
-  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [currentCampaign, setCurrentCampaign] = useState<MultiplayerGame | null>(null);
+  const [campaigns, setCampaigns] = useState<MultiplayerGame[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isAIThinking, setIsAIThinking] = useState(false);
   const [currentEnvironment, setCurrentEnvironment] = useState('default');
   const [statusEffects, setStatusEffects] = useState<Record<string, any>>({});
-  const [playerId, setPlayerId] = useState(null);
+  const [playerId, setPlayerId] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState('');
-  const [showLevelUp, setShowLevelUp] = useState(null);
-  const [pendingLevelUp, setPendingLevelUp] = useState(null);
-  const [combatState, setCombatState] = useState(null);
+  const [showLevelUp, setShowLevelUp] = useState<any>(null);
+  const [pendingLevelUp, setPendingLevelUp] = useState<any>(null);
+  const [combatState, setCombatState] = useState<any>(null);
   const [combatLog, setCombatLog] = useState<any[]>([]);
   const [battleMap, setBattleMap] = useState<any>(null);
   const [selectedCombatant, setSelectedCombatant] = useState<any>(null);
@@ -33,12 +50,66 @@ const AIDungeonMaster = () => {
   const [showAchievements, setShowAchievements] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  // Multiplayer state
+  const [isConnected, setIsConnected] = useState(false);
+  const [partyState, setPartyState] = useState<{
+    players: Player[];
+    isHost: boolean;
+    lastSync: Date | null;
+  }>({
+    players: [],
+    isHost: false,
+    lastSync: null
+  });
+
+  // Drawer tab state for right drawer
+  const [activeDrawerTab, setActiveDrawerTab] = useState('chat');
+
   // Generate unique player ID on load
   useEffect(() => {
     if (!playerId) {
       setPlayerId(Date.now().toString(36) + Math.random().toString(36).substr(2));
     }
   }, [playerId]);
+
+  // Mobile detection
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Multiplayer campaign subscription
+  useEffect(() => {
+    if (currentCampaign?.id) {
+      const unsubscribe = multiplayerService.subscribeToCampaign(
+        currentCampaign.id,
+        (updatedCampaign) => {
+          setCurrentCampaign(updatedCampaign);
+          setMessages(updatedCampaign.messages || []);
+          setPartyState({
+            players: updatedCampaign.players || [],
+            isHost: multiplayerService.isHost(updatedCampaign),
+            lastSync: new Date()
+          });
+          setIsConnected(true);
+        }
+      );
+
+      // Start heartbeat
+      const heartbeatCleanup = multiplayerService.startHeartbeat(currentCampaign.id);
+
+      return () => {
+        unsubscribe();
+        heartbeatCleanup();
+      };
+    }
+  }, [currentCampaign?.id]);
 
   const scrollToBottom = () => {
     (messagesEndRef.current as HTMLDivElement | null)?.scrollIntoView({ behavior: "smooth" });
@@ -47,6 +118,49 @@ const AIDungeonMaster = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Navigation handlers
+  const handleNavChange = (navKey: string) => {
+    setActiveNav(navKey);
+    setCurrentScreen(navKey);
+    if (navKey === 'campaigns') {
+      setCurrentScreen('lobby');
+    } else if (navKey === 'characters') {
+      setCurrentScreen('character');
+    } else if (navKey === 'combat') {
+      setCurrentScreen('combat');
+    } else if (navKey === 'gameplay') {
+      setCurrentScreen('game');
+    }
+  };
+
+  const handleTabChange = (tabKey: string) => {
+    setActiveTab(tabKey);
+  };
+
+  const handleNewCampaign = () => {
+    setActiveNav('campaigns');
+    setCurrentScreen('lobby');
+  };
+
+  const sendMultiplayerMessage = async (message: string) => {
+    if (!message.trim() || !currentCampaign?.id) return;
+
+    try {
+      await multiplayerService.sendMessage(currentCampaign.id, {
+        type: 'player',
+        content: message,
+        character: character?.name,
+        playerId: playerId!,
+        playerName: playerName
+      });
+    } catch (error) {
+      console.error('Error sending message:', error);
+    }
+  };
+
+  // Add missing functions that were referenced but not defined
+
 
   // Classes with enhanced skill system
   const classes = [
@@ -224,27 +338,29 @@ const AIDungeonMaster = () => {
   const calculateStats = (character: any) => {
     if (!character) return null;
     
-    let totalStats = { ...character.baseStats };
+    let totalStats = character.baseStats ? { ...character.baseStats } : { strength: 10, dexterity: 10, intelligence: 10, charisma: 10 };
     let bonuses = { attack: 0, defense: 0, magic: 0, health: 0, mana: 0, crit: 0 };
     
     // Equipment bonuses
-    Object.values(character.equipment || {}).forEach((item: any) => {
-      if (item && equipmentTypes[item.type] && equipmentTypes[item.type][item.name]) {
-        const itemStats = equipmentTypes[item.type][item.name];
-        Object.keys(itemStats).forEach((stat: string) => {
-          if (stat !== 'durability' && stat !== 'rarity' && stat !== 'price' && stat !== 'range') {
-            if (totalStats[stat] !== undefined) {
-              totalStats[stat] += itemStats[stat];
-            } else if (bonuses[stat] !== undefined) {
-              bonuses[stat] += itemStats[stat];
+    if (character.equipment) {
+      Object.values(character.equipment).forEach((item: any) => {
+        if (item && equipmentTypes[item.type] && equipmentTypes[item.type][item.name]) {
+          const itemStats = equipmentTypes[item.type][item.name];
+          Object.keys(itemStats).forEach((stat: string) => {
+            if (stat !== 'durability' && stat !== 'rarity' && stat !== 'price' && stat !== 'range') {
+              if (totalStats[stat] !== undefined) {
+                totalStats[stat] += itemStats[stat];
+              } else if (bonuses[stat] !== undefined) {
+                bonuses[stat] += itemStats[stat];
+              }
             }
-          }
-        });
-      }
-    });
+          });
+        }
+      });
+    }
     
     // Level bonuses
-    const levelBonus = Math.floor(character.level / 2);
+    const levelBonus = Math.floor((character.level || 1) / 2);
     Object.keys(totalStats).forEach(stat => {
       totalStats[stat] += levelBonus;
     });
@@ -255,7 +371,7 @@ const AIDungeonMaster = () => {
   const checkAchievements = (action: string, context: any = {}) => {
     // Achievement checking logic would go here
     // This is a simplified version
-    const newAchievements = [];
+    const newAchievements: any[] = [];
     
     if (action === 'combat_win' && !achievements.find(a => a.id === 'first_blood')) {
       newAchievements.push(achievementCategories.combat.achievements[0]);
@@ -352,9 +468,33 @@ const AIDungeonMaster = () => {
   const startCampaign = async (campaign: any) => {
     setIsAIThinking(true);
     
+    // Add null checks and fallbacks
+    if (!campaign) {
+      console.error('Campaign is undefined');
+      setIsAIThinking(false);
+      return;
+    }
+    
+    if (!campaign.players || !Array.isArray(campaign.players)) {
+      console.error('Campaign players is undefined or not an array:', campaign.players);
+      // Create a fallback campaign with the current character
+      campaign.players = [{
+        id: playerId,
+        name: playerName,
+        character: character,
+        isHost: true,
+        isOnline: true
+      }];
+    }
+    
     const partyStats = campaign.players.map(p => {
+      if (!p || !p.character) {
+        console.error('Player or character is undefined:', p);
+        return 'Unknown Player: Stats unavailable';
+      }
+      
       const stats = calculateStats(p.character);
-      return `${p.character.name} (Level ${p.character.level} ${p.character.class}): STR ${stats.strength}, DEX ${stats.dexterity}, INT ${stats.intelligence}, CHA ${stats.charisma}`;
+      return `${p.character.name || 'Unknown'} (Level ${p.character.level || 1} ${p.character.class || 'Adventurer'}): STR ${stats?.strength || 10}, DEX ${stats?.dexterity || 10}, INT ${stats?.intelligence || 10}, CHA ${stats?.charisma || 10}`;
     }).join('\n');
 
     const initPrompt = `You are an AI Dungeon Master for a ${campaign.theme} campaign. Start an engaging adventure for this party:
@@ -426,7 +566,7 @@ Your entire response MUST be a single, valid JSON object.`;
     try {
       // Send message to multiplayer service
       if (currentCampaign?.id) {
-        await demoMultiplayerService.sendMessage(currentCampaign.id, playerMessage);
+        await multiplayerService.sendMessage(currentCampaign.id, playerMessage);
       }
       
       setInputMessage('');
@@ -442,7 +582,7 @@ Your entire response MUST be a single, valid JSON object.`;
         };
         
         if (currentCampaign?.id) {
-          demoMultiplayerService.sendMessage(currentCampaign.id, dmMessage);
+          multiplayerService.sendMessage(currentCampaign.id, dmMessage);
         }
         
         setIsAIThinking(false);
@@ -460,6 +600,107 @@ Your entire response MUST be a single, valid JSON object.`;
       e.preventDefault();
       sendMessage();
     }
+  };
+
+  // Combat functions
+  const startCombat = (enemies: any[]) => {
+    if (!character) return;
+
+    // Convert character and enemies to combatants
+    const playerCombatant: Combatant = {
+      id: character.id || playerId || 'player',
+      name: character.name,
+      type: 'player',
+      character: character,
+      position: { x: 0, y: 0 }, // Will be set by combat service
+      health: character.health,
+      maxHealth: character.maxHealth,
+      mana: character.mana,
+      maxMana: character.maxMana,
+      actionPoints: character.actionPoints || { move: 6, action: 1, bonus: 1, reaction: 1 },
+      currentActionPoints: { move: 6, action: 1, bonus: 1, reaction: 1 },
+      stats: {
+        strength: character.baseStats?.strength || 10,
+        dexterity: character.baseStats?.dexterity || 10,
+        intelligence: character.baseStats?.intelligence || 10,
+        charisma: character.baseStats?.charisma || 10,
+        armorClass: 10
+      },
+      statusEffects: [],
+      isActive: false,
+      hasActed: false,
+      reach: 1,
+      skills: character.skills || {}
+    };
+
+    const enemyCombatants: Combatant[] = enemies.map((enemy, index) => ({
+      id: `enemy-${index}`,
+      name: enemy.name || `Enemy ${index + 1}`,
+      type: 'enemy',
+      position: { x: 0, y: 0 }, // Will be set by combat service
+      health: enemy.health || 25,
+      maxHealth: enemy.health || 25,
+      actionPoints: { move: 4, action: 1, bonus: 0, reaction: 1 },
+      currentActionPoints: { move: 4, action: 1, bonus: 0, reaction: 1 },
+      stats: {
+        strength: enemy.strength || 12,
+        dexterity: enemy.dexterity || 10,
+        intelligence: enemy.intelligence || 8,
+        charisma: enemy.charisma || 8,
+        armorClass: enemy.armorClass || 12
+      },
+      statusEffects: [],
+      isActive: false,
+      hasActed: false,
+      reach: 1,
+      skills: {}
+    }));
+
+    const allCombatants = [playerCombatant, ...enemyCombatants];
+    const combatState = combatService.startCombat(allCombatants);
+    setCombatState(combatState);
+    setCurrentScreen('combat');
+  };
+
+  const handleCombatAction = (action: CombatAction) => {
+    const result = combatService.executeAction(action);
+    
+    if (result.success && result.newState) {
+      setCombatState(result.newState);
+      
+      // Check if combat has ended
+      const combatEnd = combatService.checkCombatEnd();
+      if (combatEnd.ended) {
+        if (combatEnd.winner === 'players') {
+          alert('Victory! You have defeated your enemies!');
+          // Award experience and loot
+          setCharacter(prev => prev ? {
+            ...prev,
+            experience: prev.experience + 50,
+            health: Math.min(prev.maxHealth, prev.health + 20)
+          } : null);
+        } else {
+          alert('Defeat! Your party has been defeated...');
+          // Handle defeat - maybe respawn or game over
+          setCharacter(prev => prev ? {
+            ...prev,
+            health: Math.max(1, prev.health - 10)
+          } : null);
+        }
+        
+        combatService.endCombat();
+        setCombatState(null);
+        setCurrentScreen('game');
+      }
+    } else {
+      alert(result.message);
+    }
+  };
+
+  const endCombat = () => {
+    combatService.endCombat();
+    setCombatState(null);
+    setCurrentScreen('game');
   };
 
   // Welcome Screen
@@ -517,32 +758,13 @@ Your entire response MUST be a single, valid JSON object.`;
                   className="flex-1 px-3 py-2 rounded-lg bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 text-center"
                 />
                 <button
-                  onClick={async () => {
+                  onClick={() => {
                     if (playerName.trim() && joinCode.trim()) {
                       if (!character) {
                         setCurrentScreen('character');
                       } else {
-                        try {
-                          const joinedGame = await demoMultiplayerService.joinGame(joinCode, {
-                            id: playerId,
-                            name: playerName,
-                            character: { ...character, playerId },
-                            isHost: false,
-                            isOnline: true
-                          });
-                          
-                          if (joinedGame) {
-                            setCurrentCampaign(joinedGame);
-                            setCurrentEnvironment(joinedGame.background);
-                            setCurrentScreen('waiting');
-                            setJoinCode('');
-                          } else {
-                            alert('Campaign not found or full. Please check the code.');
-                          }
-                        } catch (error) {
-                          console.error('Error joining campaign:', error);
-                          alert('Failed to join campaign. Please try again.');
-                        }
+                        // Join campaign logic would go here
+                        alert('Join campaign feature coming soon!');
                       }
                     }
                   }}
@@ -559,213 +781,120 @@ Your entire response MUST be a single, valid JSON object.`;
     );
   }
 
-  // Character Creation Screen
-  if (currentScreen === 'character') {
-    return (
-      <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} p-4 transition-all duration-1000`}>
-        <div className="max-w-6xl mx-auto">
-          <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20">
-            <h2 className="text-3xl font-bold text-white mb-6 text-center">Create Your Hero</h2>
-            <CharacterCreation 
-              playerName={playerName}
-              classes={classes}
-              onCreateCharacter={createCharacter}
-              joinCode={joinCode}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Campaign Lobby Screen
-  if (currentScreen === 'lobby') {
-    return (
-      <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} p-4 transition-all duration-1000`}>
-        <div className="max-w-6xl mx-auto">
-          <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20">
-            <div className="flex justify-between items-center mb-8">
-              <div>
-                <h2 className="text-3xl font-bold text-white">Campaign Lobby</h2>
-                <p className="text-blue-200">Welcome, {character.name} the Level {character.level} {character.class}!</p>
-              </div>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => setShowAchievements(true)}
-                  className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-all flex items-center space-x-2"
-                >
-                  <Award size={16} />
-                  <span>Achievements</span>
-                </button>
-                <button
-                  onClick={() => setCurrentScreen('character')}
-                  className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
-                >
-                  Edit Character
-                </button>
-              </div>
-            </div>
-            
-            <CampaignLobby 
-              campaigns={campaigns}
-              campaignThemes={campaignThemes}
-              onCreateCampaign={createCampaign}
-              character={character}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Waiting Room Screen (for multiplayer)
-  if (currentScreen === 'waiting') {
-    // Set up real-time updates for the waiting room
-    useEffect(() => {
-      if (currentCampaign?.id) {
-        const unsubscribe = demoMultiplayerService.onGameUpdate(currentCampaign.id, (updatedGame) => {
-          setCurrentCampaign(updatedGame);
-          
-          // Auto-start if host started the game
-          if (updatedGame.started && !currentCampaign.started) {
-            startCampaign(updatedGame);
-          }
-        });
-
-        // Update player status as online
-        demoMultiplayerService.updatePlayerStatus(currentCampaign.id, playerId, true);
-
-        return () => {
-          unsubscribe();
-          // Update player status as offline when leaving
-          demoMultiplayerService.updatePlayerStatus(currentCampaign.id, playerId, false);
-        };
-      }
-    }, [currentCampaign?.id, playerId]);
-
-    return (
-      <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} p-4 transition-all duration-1000`}>
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-white mb-4">Waiting for Adventurers</h2>
-              <div className="bg-black/20 rounded-xl p-4 mb-6">
-                <p className="text-blue-200 mb-2">Campaign Code:</p>
-                <div className="flex items-center justify-center space-x-2">
-                  <span className="text-2xl font-mono text-yellow-400">{currentCampaign.code}</span>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(currentCampaign.code);
-                      alert('Campaign code copied!');
-                    }}
-                    className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-all"
-                  >
-                    <Copy size={16} />
-                  </button>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                {currentCampaign.players.map((player) => (
-                  <div key={player.id} className={`bg-white/10 rounded-lg p-4 ${!player.isOnline ? 'opacity-50' : ''}`}>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-white font-semibold">{player.character.name}</h4>
-                        <p className="text-blue-200 text-sm">Level {player.character.level} {player.character.class}</p>
-                        <p className="text-green-400 text-xs">{player.name} {player.isHost && '(Host)'}</p>
-                      </div>
-                      <div className={`w-3 h-3 rounded-full ${player.isOnline ? 'bg-green-400' : 'bg-red-400'}`}></div>
-                    </div>
-                  </div>
-                ))}
-                
-                {/* Empty slots */}
-                {Array.from({ length: currentCampaign.maxPlayers - currentCampaign.players.length }).map((_, index) => (
-                  <div key={`empty-${index}`} className="bg-white/5 rounded-lg p-4 border-2 border-dashed border-white/20">
-                    <div className="text-center text-white/50">
-                      <Users size={24} className="mx-auto mb-2" />
-                      <p className="text-sm">Waiting for player...</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              
-              <div className="flex justify-center space-x-4">
-                <button
-                  onClick={async () => {
-                    if (currentCampaign?.id) {
-                      await demoMultiplayerService.leaveGame(currentCampaign.id, playerId);
-                    }
-                    setCurrentScreen('lobby');
-                  }}
-                  className="px-6 py-3 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
-                >
-                  ← Back to Lobby
-                </button>
-                {currentCampaign.players.find(p => p.id === playerId)?.isHost && (
-                  <button
-                    onClick={async () => {
-                      if (currentCampaign?.id) {
-                        await demoMultiplayerService.startGame(currentCampaign.id);
-                      }
-                    }}
-                    className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all"
-                  >
-                    Start Adventure
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Game Screen
-  if (currentScreen === 'game') {
-    // Set up real-time updates for the game
-    useEffect(() => {
-      if (currentCampaign?.id) {
-        const unsubscribe = demoMultiplayerService.onGameUpdate(currentCampaign.id, (updatedGame) => {
-          setCurrentCampaign(updatedGame);
-          setMessages(updatedGame.messages || []);
-        });
-
-        return () => {
-          unsubscribe();
-        };
-      }
-    }, [currentCampaign?.id]);
-
-    return (
-      <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} flex flex-col transition-all duration-1000`}>
-        <GameInterface
-          campaign={currentCampaign}
-          messages={messages}
-          inputMessage={inputMessage}
-          setInputMessage={setInputMessage}
-          sendMessage={sendMessage}
-          handleKeyPress={handleKeyPress}
-          isAIThinking={isAIThinking}
-          onBack={async () => {
-            if (currentCampaign?.id) {
-              await demoMultiplayerService.leaveGame(currentCampaign.id, playerId);
-            }
-            setCurrentScreen('lobby');
-          }}
-          messagesEndRef={messagesEndRef}
-          statusEffects={statusEffects}
-          currentEnvironment={currentEnvironment}
-          playerId={playerId}
-          calculateStats={calculateStats}
-          achievements={achievements}
+  // Main App Layout (for all other screens)
+  return (
+    <div className="h-screen flex bg-gradient-to-br from-blue-950 via-indigo-950 to-purple-950">
+      {/* Desktop Side NavBar */}
+      <NavBar 
+        active={activeNav} 
+        onNavigate={handleNavChange} 
+        theme={currentEnvironment}
+        isMobile={false}
+      />
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Top Bar */}
+        <TopBar 
+          onNewCampaign={handleNewCampaign}
+          isMobile={isMobile}
+          onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
+          currentScreen={currentScreen}
         />
+        {/* Main Content - Only render the active screen */}
+        <div className="flex-1 flex pb-16 lg:pb-0">
+          <div className="flex-1">
+            {currentScreen === 'character' && (
+              <CharacterCreation 
+                playerName={playerName}
+                classes={classes}
+                onCreateCharacter={createCharacter}
+                joinCode={joinCode}
+              />
+            )}
+            {currentScreen === 'lobby' && (
+              <CampaignLobby 
+                campaigns={campaigns}
+                campaignThemes={campaignThemes}
+                onCreateCampaign={createCampaign}
+                character={character}
+              />
+            )}
+            {currentScreen === 'waiting' && (
+              <WaitingRoom 
+                campaign={currentCampaign}
+                onStart={startCampaign}
+                onBack={() => setCurrentScreen('lobby')}
+              />
+            )}
+            {currentScreen === 'game' && (
+              <GameInterface
+                campaign={currentCampaign}
+                messages={messages}
+                inputMessage={inputMessage}
+                setInputMessage={setInputMessage}
+                sendMessage={sendMessage}
+                handleKeyPress={handleKeyPress}
+                isAIThinking={isAIThinking}
+                messagesEndRef={messagesEndRef}
+                onStartCombat={startCombat}
+                worldState={worldState}
+                character={character}
+                // Remove tab logic from here
+              />
+            )}
+            {currentScreen === 'combat' && combatState && (
+              <CombatSystem
+                combatants={combatState.combatants}
+                battleMap={combatState.battleMap}
+                currentTurn={combatState.currentTurn}
+                activeCombatantId={combatState.turnOrder[combatState.currentCombatantIndex]}
+                onAction={handleCombatAction}
+                onEndCombat={endCombat}
+                isPlayerTurn={combatService.isPlayerTurn()}
+              />
+            )}
+          </div>
+        </div>
       </div>
-    );
-  }
-
-  return null;
+      {/* Right Drawer - contextual info, chat, party, log, etc. */}
+      <RightDrawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        activeTab={activeDrawerTab}
+        onTabChange={setActiveDrawerTab}
+        isMobile={isMobile}
+        campaign={currentCampaign}
+        messages={messages}
+        players={partyState.players}
+        worldState={worldState}
+        achievements={achievements}
+        onSendMessage={sendMultiplayerMessage}
+        onUpdateSettings={(settings) => {
+          console.log('Settings updated:', settings);
+        }}
+      />
+      {/* Floating Action Button - sets drawer tab and opens drawer */}
+      <FloatingActionButton
+        onToggleDrawer={() => setDrawerOpen(!drawerOpen)}
+        isDrawerOpen={drawerOpen}
+        onQuickAction={(action) => {
+          setActiveDrawerTab(action);
+          setDrawerOpen(true);
+        }}
+        isMobile={isMobile}
+        hasNotifications={messages.length > 0}
+        notificationCount={messages.filter(m => m.type === 'system').length}
+      />
+      {/* Mobile Navigation - Bottom */}
+      <NavBar 
+        active={activeNav} 
+        onNavigate={handleNavChange} 
+        theme={currentEnvironment}
+        isMobile={true}
+        onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
+      />
+    </div>
+  );
 };
 
 // Character Creation Component
@@ -773,6 +902,7 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }:
   const [selectedClass, setSelectedClass] = useState<any>(null);
   const [characterName, setCharacterName] = useState(playerName);
   const [backstory, setBackstory] = useState('');
+  const [hoveredClass, setHoveredClass] = useState<any>(null);
 
   const handleSubmit = () => {
     if (selectedClass && characterName.trim() && backstory.trim()) {
@@ -784,44 +914,68 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }:
     }
   };
 
+  // Get the class to display in preview (hovered or selected)
+  const previewClass = hoveredClass || selectedClass;
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <div className="space-y-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-8">
+      <div className="space-y-4 lg:space-y-6">
         <div>
-          <label className="block text-white font-semibold mb-3">Character Name</label>
+          <label className="block text-white font-semibold mb-2 lg:mb-3 text-sm lg:text-base">Character Name</label>
           <input
             type="text"
             value={characterName}
             onChange={(e) => setCharacterName(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400"
+            className="w-full px-3 lg:px-4 py-2 lg:py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 text-sm lg:text-base"
           />
         </div>
 
         <div>
-          <label className="block text-white font-semibold mb-3">Choose Your Class</label>
-          <div className="grid grid-cols-2 gap-4">
+          <label className="block text-white font-semibold mb-2 lg:mb-3 text-sm lg:text-base">Choose Your Class</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4">
             {classes.map((cls) => (
               <div
                 key={cls.name}
                 onClick={() => setSelectedClass(cls)}
-                className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                onMouseEnter={() => setHoveredClass(cls)}
+                onMouseLeave={() => setHoveredClass(null)}
+                className={`p-3 lg:p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
                   selectedClass?.name === cls.name
-                    ? 'border-blue-400 bg-blue-500/30'
-                    : 'border-white/30 bg-white/10 hover:border-white/50'
+                    ? 'border-green-400 bg-green-500/30 shadow-lg scale-105'
+                    : hoveredClass?.name === cls.name
+                    ? 'border-blue-400 bg-blue-500/20 shadow-md scale-102'
+                    : 'border-white/30 bg-white/10 hover:border-white/50 hover:scale-102'
                 }`}
               >
                 <div className="text-center">
-                  <div className="text-3xl mb-2">{cls.icon}</div>
-                  <h3 className="text-white font-semibold">{cls.name}</h3>
-                  <div className="text-xs text-blue-200 mt-2 space-y-1">
-                    <div>STR: {cls.stats.strength}</div>
-                    <div>DEX: {cls.stats.dexterity}</div>
-                    <div>INT: {cls.stats.intelligence}</div>
-                    <div>CHA: {cls.stats.charisma}</div>
+                  <div className="text-2xl lg:text-3xl mb-2">{cls.icon}</div>
+                  <h3 className="text-white font-semibold text-sm lg:text-base mb-2">{cls.name}</h3>
+                  
+                  {/* Quick Stats with Meaningful Context */}
+                  <div className="text-xs text-blue-200 space-y-1 mb-2">
+                    <div className="flex justify-between">
+                      <span>STR: {cls.stats.strength}</span>
+                      <span className="text-yellow-300">Attack Power</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>DEX: {cls.stats.dexterity}</span>
+                      <span className="text-green-300">Agility</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>INT: {cls.stats.intelligence}</span>
+                      <span className="text-purple-300">Magic</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>CHA: {cls.stats.charisma}</span>
+                      <span className="text-pink-300">Social</span>
+                    </div>
                   </div>
+                  
+                  {/* Visual Confirmation for Selected Class */}
                   {selectedClass?.name === cls.name && (
-                    <div className="mt-2 text-xs text-yellow-200">
-                      Move: {cls.actionPoints.move} tiles
+                    <div className="flex items-center justify-center space-x-1 text-green-400 text-xs">
+                      <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                      <span>Selected</span>
                     </div>
                   )}
                 </div>
@@ -831,68 +985,143 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }:
         </div>
 
         <div>
-          <label className="block text-white font-semibold mb-3">Character Backstory</label>
+          <label className="block text-white font-semibold mb-2 lg:mb-3 text-sm lg:text-base">
+            Character Backstory <span className="text-blue-300 text-xs">(Optional)</span>
+          </label>
+          
+          {/* Backstory Prompts for Creative Scaffolding */}
+          <div className="mb-3 flex flex-wrap gap-2">
+            {[
+              "What is your character's greatest fear?",
+              "Where did they grow up?",
+              "What brought them to adventure?",
+              "Who is their closest friend?",
+              "What do they value most?"
+            ].map((prompt, index) => (
+              <button
+                key={index}
+                onClick={() => setBackstory(prev => prev ? `${prev}\n\n${prompt}` : prompt)}
+                className="px-2 py-1 bg-blue-600/30 text-blue-200 text-xs rounded hover:bg-blue-600/50 transition-all"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+          
           <textarea
             value={backstory}
             onChange={(e) => setBackstory(e.target.value)}
-            placeholder="Describe your character's background, motivations, and personality..."
-            className="w-full px-4 py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 h-32 resize-none"
+            placeholder="Describe your character's background, motivations, and personality... (Click prompts above for inspiration)"
+            className="w-full px-3 lg:px-4 py-2 lg:py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 h-24 lg:h-32 resize-none text-sm lg:text-base"
           />
         </div>
 
         <button
           onClick={handleSubmit}
-          disabled={!selectedClass || !characterName.trim() || !backstory.trim()}
-          className="w-full px-6 py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          disabled={!selectedClass || !characterName.trim()}
+          className={`w-full px-4 lg:px-6 py-3 rounded-xl font-semibold transition-all text-sm lg:text-base ${
+            selectedClass && characterName.trim()
+              ? 'bg-gradient-to-r from-green-600 to-blue-600 text-white hover:from-green-700 hover:to-blue-700 shadow-lg'
+              : 'bg-gray-600 text-gray-300 cursor-not-allowed opacity-50'
+          }`}
         >
-          Create Character
+          {selectedClass && characterName.trim() 
+            ? `Create ${characterName} the ${selectedClass.name}` 
+            : 'Complete required fields to create character'
+          }
         </button>
       </div>
 
-      {/* Class Preview */}
-      <div className="bg-white/10 rounded-xl p-6">
-        <h3 className="text-xl font-bold text-white mb-4">Class Preview</h3>
-        {selectedClass ? (
-          <div>
+      {/* Enhanced Class Preview */}
+      <div className="bg-white/10 rounded-xl p-4 lg:p-6">
+        <h3 className="text-xl font-bold text-white mb-4">
+          {previewClass ? `Class Preview: ${previewClass.name}` : 'Select a Class'}
+        </h3>
+        
+        {previewClass ? (
+          <div className="space-y-4">
+            {/* Class Header */}
             <div className="flex items-center space-x-3 mb-4">
-              <div className="text-4xl">{selectedClass.icon}</div>
+              <div className="text-4xl">{previewClass.icon}</div>
               <div>
-                <h4 className="text-lg font-semibold text-white">{selectedClass.name}</h4>
+                <h4 className="text-lg font-semibold text-white">{previewClass.name}</h4>
                 <p className="text-blue-200 text-sm">Master of tactical combat</p>
               </div>
             </div>
             
-            <div className="space-y-4">
-              <div>
-                <h5 className="text-white font-semibold mb-2">Base Stats</h5>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="text-blue-200">Strength: {selectedClass.stats.strength}</div>
-                  <div className="text-blue-200">Dexterity: {selectedClass.stats.dexterity}</div>
-                  <div className="text-blue-200">Intelligence: {selectedClass.stats.intelligence}</div>
-                  <div className="text-blue-200">Charisma: {selectedClass.stats.charisma}</div>
+            {/* Class Description */}
+            <div className="bg-black/20 rounded-lg p-3">
+              <h5 className="text-white font-semibold mb-2">Class Description</h5>
+              <p className="text-blue-200 text-sm leading-relaxed">
+                {previewClass.name === 'Warrior' && "A mighty warrior skilled in close combat, wielding powerful weapons and wearing heavy armor. Your strength and endurance make you the frontline defender of your party."}
+                {previewClass.name === 'Rogue' && "A stealthy rogue who excels at sneaking, lockpicking, and dealing devastating sneak attacks. Your agility and cunning allow you to strike from the shadows."}
+                {previewClass.name === 'Mage' && "A powerful spellcaster who harnesses the arcane arts to cast devastating spells. Your intelligence and magical prowess make you a force to be reckoned with."}
+                {previewClass.name === 'Cleric' && "A divine spellcaster who channels the power of the gods to heal allies and smite enemies. Your faith and charisma make you an invaluable support."}
+                {previewClass.name === 'Ranger' && "A skilled hunter and tracker who excels at ranged combat and wilderness survival. Your dexterity and knowledge of nature make you a versatile adventurer."}
+                {previewClass.name === 'Bard' && "A charismatic performer who uses music and magic to inspire allies and charm enemies. Your creativity and social skills make you the heart of any party."}
+              </p>
+            </div>
+            
+            {/* Enhanced Stats with Context */}
+            <div>
+              <h5 className="text-white font-semibold mb-2">Base Stats & Meaning</h5>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="bg-black/20 rounded p-2">
+                  <div className="text-yellow-400 font-semibold">Strength: {previewClass.stats.strength}</div>
+                  <div className="text-blue-200 text-xs">Melee damage, carrying capacity</div>
                 </div>
-              </div>
-              
-              <div>
-                <h5 className="text-white font-semibold mb-2">Class Abilities</h5>
-                <div className="space-y-2">
-                  {Object.entries(selectedClass.skills).slice(0, 3).map(([level, skill]) => (
-                    <div key={level} className="bg-black/20 rounded-lg p-2">
-                      <div className="text-yellow-400 text-sm font-semibold">Level {level}: {skill.name}</div>
-                      <div className="text-blue-200 text-xs">{skill.description}</div>
-                      <div className="text-green-400 text-xs">
-                        Cost: {skill.cost} | Range: {skill.range || 1} tiles
-                        {skill.aoe && ` | AOE: ${skill.radius || 2} tiles`}
-                      </div>
-                    </div>
-                  ))}
-                  <div className="text-blue-200 text-xs text-center">+ More abilities as you level up!</div>
+                <div className="bg-black/20 rounded p-2">
+                  <div className="text-green-400 font-semibold">Dexterity: {previewClass.stats.dexterity}</div>
+                  <div className="text-blue-200 text-xs">Ranged attacks, stealth, reflexes</div>
+                </div>
+                <div className="bg-black/20 rounded p-2">
+                  <div className="text-purple-400 font-semibold">Intelligence: {previewClass.stats.intelligence}</div>
+                  <div className="text-blue-200 text-xs">Spell power, knowledge, problem-solving</div>
+                </div>
+                <div className="bg-black/20 rounded p-2">
+                  <div className="text-pink-400 font-semibold">Charisma: {previewClass.stats.charisma}</div>
+                  <div className="text-blue-200 text-xs">Social skills, spell casting, leadership</div>
                 </div>
               </div>
             </div>
+            
+            {/* Class Abilities Preview */}
+            <div>
+              <h5 className="text-white font-semibold mb-2">Signature Abilities</h5>
+              <div className="space-y-2">
+                {Object.entries(previewClass.skills).slice(0, 3).map(([level, skill]: [string, any]) => (
+                  <div key={level} className="bg-black/20 rounded-lg p-2">
+                    <div className="text-yellow-400 text-sm font-semibold">Level {level}: {skill.name}</div>
+                    <div className="text-blue-200 text-xs">{skill.description}</div>
+                    <div className="text-green-400 text-xs mt-1">
+                      Cost: {skill.cost} | Range: {skill.range || 1} tiles
+                      {skill.aoe && ` | AOE: ${skill.radius || 2} tiles`}
+                    </div>
+                  </div>
+                ))}
+                <div className="text-blue-200 text-xs text-center">+ More abilities as you level up!</div>
+              </div>
+            </div>
+            
+            {/* Playstyle Recommendation */}
+            <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-lg p-3 border border-blue-400/30">
+              <h5 className="text-white font-semibold mb-2">Recommended Playstyle</h5>
+              <p className="text-blue-200 text-sm">
+                {previewClass.name === 'Warrior' && "Lead from the front! Use your high health and armor to protect allies while dealing heavy melee damage."}
+                {previewClass.name === 'Rogue' && "Strike from the shadows! Use stealth and positioning to get advantage on your attacks and avoid damage."}
+                {previewClass.name === 'Mage' && "Control the battlefield! Use your spells to damage enemies, buff allies, and control the flow of combat."}
+                {previewClass.name === 'Cleric' && "Support your party! Heal allies, buff them with divine magic, and turn undead when needed."}
+                {previewClass.name === 'Ranger' && "Master the wilderness! Use your ranged attacks and animal companions to control the battlefield from a distance."}
+                {previewClass.name === 'Bard' && "Inspire greatness! Use your music and magic to buff allies, debuff enemies, and solve problems creatively."}
+              </p>
+            </div>
           </div>
         ) : (
-          <p className="text-blue-200">Select a class to see preview</p>
+          <div className="text-center py-8">
+            <div className="text-6xl mb-4 opacity-50">⚔️</div>
+            <p className="text-blue-200 text-lg">Hover over or click a class to see detailed information</p>
+            <p className="text-blue-300 text-sm mt-2">Each class offers unique abilities and playstyles</p>
+          </div>
         )}
       </div>
     </div>
@@ -917,41 +1146,41 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character 
 
   if (showCreateCampaign) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 lg:space-y-6">
         <div className="flex justify-between items-center">
-          <h3 className="text-2xl font-bold text-white">Create New Campaign</h3>
+          <h3 className="text-xl lg:text-2xl font-bold text-white">Create New Campaign</h3>
           <button
             onClick={() => setShowCreateCampaign(false)}
-            className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
+            className="px-3 lg:px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all text-sm lg:text-base"
           >
             ← Back
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
           {campaignThemes.map((theme) => (
             <div
               key={theme.name}
               onClick={() => setSelectedTheme(theme)}
-              className={`p-6 rounded-xl border-2 cursor-pointer transition-all ${
+              className={`p-4 lg:p-6 rounded-xl border-2 cursor-pointer transition-all ${
                 selectedTheme?.name === theme.name
                   ? 'border-blue-400 bg-blue-500/30'
                   : 'border-white/30 bg-white/10 hover:border-white/50'
               }`}
             >
               <div className="text-center">
-                <div className="text-4xl mb-3">{theme.icon}</div>
-                <h4 className="text-white font-semibold mb-2">{theme.name}</h4>
-                <p className="text-blue-200 text-sm">{theme.description}</p>
+                <div className="text-2xl lg:text-4xl mb-2 lg:mb-3">{theme.icon}</div>
+                <h4 className="text-white font-semibold mb-1 lg:mb-2 text-sm lg:text-base">{theme.name}</h4>
+                <p className="text-blue-200 text-xs lg:text-sm">{theme.description}</p>
               </div>
             </div>
           ))}
         </div>
 
         {selectedTheme && (
-          <div className="space-y-4">
-            <div className="flex items-center space-x-4">
-              <label className="flex items-center space-x-2 text-white">
+          <div className="space-y-3 lg:space-y-4">
+            <div className="flex items-center space-x-3 lg:space-x-4">
+              <label className="flex items-center space-x-2 text-white text-sm lg:text-base">
                 <input
                   type="checkbox"
                   checked={isMultiplayer}
@@ -963,18 +1192,18 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character 
             </div>
 
             <div>
-              <label className="block text-white font-semibold mb-2">Custom Campaign Prompt (Optional)</label>
+              <label className="block text-white font-semibold mb-2 text-sm lg:text-base">Custom Campaign Prompt (Optional)</label>
               <textarea
                 value={customPrompt}
                 onChange={(e) => setCustomPrompt(e.target.value)}
                 placeholder="Add any specific details, themes, or story elements you want the AI to include..."
-                className="w-full px-4 py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 h-24 resize-none"
+                className="w-full px-3 lg:px-4 py-2 lg:py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 h-20 lg:h-24 resize-none text-sm lg:text-base"
               />
             </div>
 
             <button
               onClick={handleCreateCampaign}
-              className="w-full px-6 py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all"
+              className="w-full px-4 lg:px-6 py-2 lg:py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all text-sm lg:text-base"
             >
               Create {selectedTheme.name} Campaign
             </button>
@@ -985,11 +1214,11 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character 
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 lg:space-y-6">
       <div className="text-center">
         <button
           onClick={() => setShowCreateCampaign(true)}
-          className="px-8 py-4 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all text-lg"
+          className="px-6 lg:px-8 py-3 lg:py-4 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all text-base lg:text-lg"
         >
           + Create New Campaign
         </button>
@@ -997,17 +1226,17 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character 
 
       {campaigns.length > 0 && (
         <div>
-          <h3 className="text-xl font-bold text-white mb-4">Your Campaigns</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h3 className="text-lg lg:text-xl font-bold text-white mb-3 lg:mb-4">Your Campaigns</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4">
             {campaigns.map((campaign) => (
-              <div key={campaign.id} className="bg-white/10 rounded-xl p-4 border border-white/20">
-                <h4 className="text-white font-semibold">{campaign.theme}</h4>
-                <p className="text-blue-200 text-sm">
+              <div key={campaign.id} className="bg-white/10 rounded-xl p-3 lg:p-4 border border-white/20">
+                <h4 className="text-white font-semibold text-sm lg:text-base">{campaign.theme}</h4>
+                <p className="text-blue-200 text-xs lg:text-sm">
                   {campaign.players.length} player{campaign.players.length !== 1 ? 's' : ''}
                   {campaign.started ? ' • In Progress' : ' • Waiting'}
                 </p>
                 {!campaign.started && campaign.isMultiplayer && (
-                  <p className="text-yellow-400 text-sm">Code: {campaign.code}</p>
+                  <p className="text-yellow-400 text-xs lg:text-sm">Code: {campaign.code}</p>
                 )}
               </div>
             ))}
@@ -1019,245 +1248,67 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character 
 };
 
 // Game Interface Component
-const GameInterface = ({ 
-  campaign, 
-  messages, 
-  inputMessage, 
-  setInputMessage, 
-  sendMessage, 
-  handleKeyPress, 
-  isAIThinking, 
-  onBack,
-  messagesEndRef,
-  statusEffects,
-  currentEnvironment,
-  playerId,
-  calculateStats,
-  achievements
-}: { 
+const Gameplay: React.FC<{ 
   campaign: any, 
   messages: any[], 
   inputMessage: string, 
-  setInputMessage: Dispatch<SetStateAction<string>>, 
+  setInputMessage: (msg: string) => void, 
   sendMessage: () => void, 
   handleKeyPress: (e: React.KeyboardEvent) => void, 
   isAIThinking: boolean, 
-  onBack: () => void,
-  messagesEndRef: RefObject<HTMLDivElement>,
-  statusEffects: Record<string, any>,
-  currentEnvironment: string,
-  playerId: string | null,
-  calculateStats: (character: any) => any,
-  achievements: any[]
-}) => {
-  const [showPartySheet, setShowPartySheet] = useState(true);
-  const currentPlayer = campaign.players.find(p => p.id === playerId);
-
-  return (
-    <>
-      {/* Header */}
-      <div className="bg-black/20 border-b border-white/20 p-4">
-        <div className="flex justify-between items-center">
-          <button
-            onClick={onBack}
-            className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
-          >
-            ← Back to Lobby
-          </button>
-          <div className="text-center">
-            <h2 className="text-xl font-bold text-white">{campaign.theme}</h2>
-            <p className="text-blue-200 text-sm">{campaign.players.length} adventurers</p>
-          </div>
-          <button
-            onClick={() => setShowPartySheet(!showPartySheet)}
-            className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
-          >
-            <Users size={20} />
-          </button>
+  messagesEndRef: React.RefObject<HTMLDivElement>,
+  onStartCombat?: (enemies: any[]) => void
+}> = ({ campaign, messages, inputMessage, setInputMessage, sendMessage, handleKeyPress, isAIThinking, messagesEndRef, onStartCombat }) => (
+  <div className="text-white p-2 lg:p-4">
+    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 lg:mb-4 space-y-2 sm:space-y-0">
+      <h2 className="text-xl lg:text-2xl font-bold">Gameplay</h2>
+      {onStartCombat && (
+        <button
+          onClick={() => onStartCombat([
+            { name: 'Goblin Warrior', health: 25, strength: 12, dexterity: 10, armorClass: 12 },
+            { name: 'Goblin Archer', health: 20, strength: 10, dexterity: 14, armorClass: 13 }
+          ])}
+          className="px-3 lg:px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all flex items-center space-x-2 text-sm lg:text-base"
+        >
+          <Sword size={16} />
+          <span>Start Combat Test</span>
+        </button>
+      )}
+    </div>
+    <div className="space-y-3 lg:space-y-4">
+      {messages.map((msg, index) => (
+        <div key={index} className="bg-black/20 p-3 lg:p-4 rounded text-sm lg:text-base">
+          {msg.content}
         </div>
+      ))}
+      {isAIThinking && <div className="text-blue-200 text-sm lg:text-base">AI is thinking...</div>}
+      <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+        <input
+          type="text"
+          value={inputMessage}
+          onChange={(e) => setInputMessage(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder="What do you do?"
+          className="flex-1 px-3 py-2 bg-black/20 rounded text-white text-sm lg:text-base"
+        />
+        <button onClick={sendMessage} className="px-4 py-2 bg-blue-600 rounded text-sm lg:text-base hover:bg-blue-700 transition-all">Send</button>
       </div>
+    </div>
+    <div ref={messagesEndRef} />
+  </div>
+);
 
-      <div className="flex-1 flex">
-        {/* Party Sheet Sidebar */}
-        {showPartySheet && (
-          <div className="w-80 bg-black/20 border-r border-white/20 p-4 overflow-auto">
-            <h3 className="text-lg font-bold text-white mb-4">Party</h3>
-            <div className="space-y-4">
-              {campaign.players.map((player) => {
-                const stats = calculateStats(player.character);
-                const playerEffects = statusEffects[player.id] || {};
-                
-                return (
-                  <div key={player.id} className="bg-white/10 rounded-lg p-3 border border-white/20">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h4 className="text-white font-semibold">{player.character.name}</h4>
-                        <p className="text-blue-200 text-sm">
-                          Level {player.character.level} {player.character.class}
-                        </p>
-                        <p className="text-green-400 text-xs">{player.name}</p>
-                      </div>
-                      <div className="text-right text-sm">
-                        <div className="text-yellow-400">XP: {player.character.experience}</div>
-                        <div className="text-yellow-400">Gold: {player.character.gold || 0}</div>
-                      </div>
-                    </div>
-                    
-                    {/* Health Bar */}
-                    <div className="mb-2">
-                      <div className="flex justify-between text-xs text-white mb-1">
-                        <span>Health</span>
-                        <span>{player.character.health}/{player.character.maxHealth + (stats?.health || 0)}</span>
-                      </div>
-                      <div className="w-full bg-red-900 rounded-full h-2">
-                        <div 
-                          className={`health-bar-${player.id} bg-red-500 h-2 rounded-full transition-all duration-300`}
-                          style={{ width: `${(player.character.health / (player.character.maxHealth + (stats?.health || 0))) * 100}%` }}
-                        />
-                      </div>
-                    </div>
 
-                    {/* Mana Bar */}
-                    {player.character.mana !== undefined && (
-                      <div className="mb-2">
-                        <div className="flex justify-between text-xs text-white mb-1">
-                          <span>Mana</span>
-                          <span>{player.character.mana}/{player.character.maxMana + (stats?.mana || 0)}</span>
-                        </div>
-                        <div className="w-full bg-blue-900 rounded-full h-2">
-                          <div 
-                            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${(player.character.mana / (player.character.maxMana + (stats?.mana || 0))) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
 
-                    {/* Status Effects */}
-                    {Object.keys(playerEffects).length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {Object.keys(playerEffects).map(effectName => (
-                          <span key={effectName} className="px-2 py-1 bg-purple-600 text-white text-xs rounded">
-                            {effectName}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Quick Stats */}
-                    <div className="grid grid-cols-4 gap-1 mt-2 text-xs text-blue-200">
-                      <div>STR: {stats?.strength || 0}</div>
-                      <div>DEX: {stats?.dexterity || 0}</div>
-                      <div>INT: {stats?.intelligence || 0}</div>
-                      <div>CHA: {stats?.charisma || 0}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Main Game Area */}
-        <div className="flex-1 flex flex-col">
-          {/* Messages */}
-          <div className="flex-1 overflow-auto p-4 space-y-4">
-            {messages.map((message) => (
-              <div key={message.id} className={`flex ${message.type === 'player' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-3xl rounded-lg p-4 ${
-                  message.type === 'player' 
-                    ? 'bg-blue-600 text-white ml-8' 
-                    : 'bg-white/10 text-white mr-8'
-                }`}>
-                  {message.type === 'player' && (
-                    <div className="text-xs text-blue-200 mb-1">{message.character} ({message.playerName})</div>
-                  )}
-                  <div className="whitespace-pre-wrap">{message.content}</div>
-                  
-                  {message.choices && (
-                    <div className="mt-3 space-y-2">
-                      {message.choices.map((choice, index) => (
-                        <button
-                          key={index}
-                          onClick={() => setInputMessage(choice)}
-                          className="block w-full text-left px-3 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-all text-sm"
-                        >
-                          {choice}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  
-                  {message.diceRoll && (
-                    <div className="mt-2 text-sm text-yellow-400">
-                      🎲 Rolled {message.diceRoll.type}: {message.diceRoll.result} 
-                      {message.diceRoll.success ? ' (Success!)' : ' (Failed)'}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-            
-            {isAIThinking && (
-              <div className="flex justify-start">
-                <div className="bg-white/10 text-white rounded-lg p-4 mr-8">
-                  <div className="flex items-center space-x-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>AI Dungeon Master is thinking...</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input Area */}
-          <div className="border-t border-white/20 p-4">
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="What do you do?"
-                className="flex-1 px-4 py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400"
-                disabled={isAIThinking}
-              />
-              <button
-                onClick={sendMessage}
-                disabled={!inputMessage.trim() || isAIThinking}
-                className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                Send
-              </button>
-            </div>
-            <div className="mt-2 text-xs text-blue-200 text-center">
-              Press Enter to send • Shift+Enter for new line
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Achievement Notifications */}
-      <style jsx>{`
-        .heal-flash {
-          animation: heal-flash 0.6s ease-in-out;
-        }
-        .damage-flash {
-          animation: damage-flash 0.6s ease-in-out;
-        }
-        @keyframes heal-flash {
-          0%, 100% { background-color: rgb(34 197 94); }
-          50% { background-color: rgb(22 163 74); }
-        }
-        @keyframes damage-flash {
-          0%, 100% { background-color: rgb(239 68 68); }
-          50% { background-color: rgb(220 38 38); }
-        }
-      `}</style>
-    </>
-  );
-};
+const WaitingRoom: React.FC<{ campaign: any, onStart: () => void, onBack: () => void }> = ({ campaign, onStart, onBack }) => (
+  <div className="text-white p-3 lg:p-4">
+    <h2 className="text-xl lg:text-2xl font-bold mb-3 lg:mb-4">Waiting for Players</h2>
+    <p className="text-sm lg:text-base mb-3 lg:mb-4">Campaign Code: <span className="font-mono bg-white/20 px-2 py-1 rounded">{campaign?.code}</span></p>
+    <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
+      <button onClick={onStart} className="px-4 py-2 bg-green-600 rounded text-sm lg:text-base hover:bg-green-700 transition-all">Start Game</button>
+      <button onClick={onBack} className="px-4 py-2 bg-gray-600 rounded text-sm lg:text-base hover:bg-gray-700 transition-all">Back</button>
+    </div>
+  </div>
+);
 
 export default AIDungeonMaster;
