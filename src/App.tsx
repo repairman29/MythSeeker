@@ -303,21 +303,45 @@ const AIDungeonMaster = () => {
               setCurrentScreen('welcome');
               analyticsService.trackPageView('welcome', 'MythSeeker - Welcome');
             }
+          } else {
+            setCurrentScreen('welcome');
+            analyticsService.trackPageView('welcome', 'MythSeeker - Welcome');
           }
-        } catch (error) {
-          console.error('Error loading user data:', error);
-          analyticsService.trackError(error as Error, { context: 'user_data_loading' });
-          setCurrentScreen('welcome');
+        } catch (firebaseError) {
+          console.error('Firebase error loading user data:', firebaseError);
+          // If Firebase fails, try to load from local storage
+          const localCharacters = JSON.parse(localStorage.getItem('mythseeker_characters') || '[]');
+          if (localCharacters.length > 0) {
+            setUserCharacters(localCharacters);
+            setCurrentScreen('character-select');
+            analyticsService.trackPageView('character-select', 'MythSeeker - Character Selection');
+          } else {
+            setCurrentScreen('welcome');
+            analyticsService.trackPageView('welcome', 'MythSeeker - Welcome');
+          }
+          
+          // User not authenticated
+          setCurrentUser(null);
+          setIsAuthenticated(false);
         }
       } else {
         // Track user sign out
         analyticsService.trackUserAction('user_signed_out');
         
+        // User not authenticated - try to load from local storage
+        const localCharacters = JSON.parse(localStorage.getItem('mythseeker_characters') || '[]');
+        if (localCharacters.length > 0) {
+          setUserCharacters(localCharacters);
+          setCurrentScreen('character-select');
+          analyticsService.trackPageView('character-select', 'MythSeeker - Character Selection');
+        } else {
+          setCurrentScreen('welcome');
+          analyticsService.trackPageView('welcome', 'MythSeeker - Welcome');
+        }
+        
         // User not authenticated
         setCurrentUser(null);
-        setUserCharacters([]);
         setIsAuthenticated(false);
-        setCurrentScreen('welcome');
       }
       setIsLoading(false);
     });
@@ -345,8 +369,50 @@ const AIDungeonMaster = () => {
     console.log('currentUser:', currentUser);
     
     if (!currentUser) {
-      console.error('No current user found');
-      addToast('error', { message: 'Please sign in to save your character' });
+      console.log('No current user found, saving to local storage');
+      // Save to local storage for unauthenticated users
+      const localCharacter = {
+        id: Date.now().toString(),
+        name: characterData.name,
+        class: characterData.class,
+        level: 1,
+        experience: 0,
+        health: 100,
+        maxHealth: 100,
+        mana: 50,
+        maxMana: 50,
+        gold: 100,
+        inventory: {
+          'Healing Potion': 3,
+          'Iron Ore': 2,
+          'Herb': 5
+        },
+        equipment: {
+          weapon: { name: 'Iron Sword', type: 'weapon' },
+          armor: { name: 'Leather Armor', type: 'armor' }
+        },
+        stats: characterData.baseStats,
+        skills: characterData.skills || {},
+        achievements: [],
+        createdAt: Date.now(),
+        lastPlayed: Date.now(),
+        totalPlayTime: 0,
+        isLocal: true // Flag to indicate this is a local character
+      };
+
+      // Save to localStorage
+      const localCharacters = JSON.parse(localStorage.getItem('mythseeker_characters') || '[]');
+      localCharacters.push(localCharacter);
+      localStorage.setItem('mythseeker_characters', JSON.stringify(localCharacters));
+      
+      addToast('characterCreated', { character: characterData });
+      
+      // Update local state
+      setUserCharacters(prev => [localCharacter, ...prev]);
+      setCharacter(localCharacter);
+      setCurrentScreen('lobby');
+      
+      console.log('Character saved to local storage, navigating to lobby');
       return;
     }
 
@@ -394,17 +460,33 @@ const AIDungeonMaster = () => {
       console.log('Character state updated, navigating to lobby');
     } catch (error) {
       console.error('Error saving character:', error);
-      addToast('error', { message: 'Failed to save character' });
+      addToast('error', { message: 'Failed to save character. Please try signing in again.' });
     }
   };
 
   const loadCharacter = async (characterId: string) => {
     try {
-      const character = await firebaseService.getCharacter(characterId);
-      if (character) {
-        setCharacter(character);
+      // First try to load from local storage
+      const localCharacters = JSON.parse(localStorage.getItem('mythseeker_characters') || '[]');
+      const localCharacter = localCharacters.find((c: any) => c.id === characterId);
+      
+      if (localCharacter) {
+        setCharacter(localCharacter);
         setCurrentScreen('lobby');
-        addToast('characterLoaded', { character: character.name });
+        addToast('characterLoaded', { character: localCharacter.name });
+        return;
+      }
+      
+      // If not found locally and user is authenticated, try Firebase
+      if (currentUser) {
+        const character = await firebaseService.getCharacter(characterId);
+        if (character) {
+          setCharacter(character);
+          setCurrentScreen('lobby');
+          addToast('characterLoaded', { character: character.name });
+        }
+      } else {
+        addToast('error', { message: 'Character not found' });
       }
     } catch (error) {
       console.error('Error loading character:', error);
