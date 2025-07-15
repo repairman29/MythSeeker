@@ -1582,6 +1582,13 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
     inputRef: React.RefObject<HTMLInputElement>
   }> = ({ campaign, messages, inputMessage, setInputMessage, sendMessage, handleKeyPress, isAIThinking, messagesEndRef, onStartCombat, worldState, aiMemory, inputRef }) => {
     
+    // Focus management effect
+    React.useEffect(() => {
+      if (inputRef?.current && !isAIThinking) {
+        inputRef.current.focus();
+      }
+    }, [inputMessage, isAIThinking, inputRef]);
+    
     return (
     <div className="text-white p-2 lg:p-4 game-interface">
       {/* World State Display */}
