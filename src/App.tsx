@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dice1, Dice6, Sword, Shield, Zap, Heart, User, Users, Plus, Play, Settings, Sparkles, Flame, Copy, Share2, Star, Award, Package, Hammer, TrendingUp, Target, Clock, Swords, MapPin, Eye, Crosshair, Globe, AlertTriangle, Crown, Calendar, History, ChevronDown, ChevronUp, X, Menu } from 'lucide-react';
+import { multiplayerService, MultiplayerGame, Player, GameMessage } from './multiplayer';
+import { demoMultiplayerService } from './demoMultiplayer';
 
 const AIDungeonMaster = () => {
   const [currentScreen, setCurrentScreen] = useState('welcome');
@@ -303,11 +305,9 @@ const AIDungeonMaster = () => {
   };
 
   const createCampaign = async (theme, customPrompt = '', isMultiplayer = true) => {
-    const campaignId = Date.now();
     const campaignCode = generateCampaignCode();
     
     const newCampaign = {
-      id: campaignId,
       code: campaignCode,
       theme: theme.name,
       background: theme.bg,
@@ -315,7 +315,8 @@ const AIDungeonMaster = () => {
         id: playerId, 
         name: playerName, 
         character: { ...character, playerId },
-        isHost: true 
+        isHost: true,
+        isOnline: true
       }],
       messages: [],
       systemMessages: [],
@@ -325,16 +326,25 @@ const AIDungeonMaster = () => {
       maxPlayers: isMultiplayer ? 6 : 1
     };
 
-    setCampaigns([...campaigns, newCampaign]);
-    setCurrentCampaign(newCampaign);
-    setCurrentEnvironment(theme.bg);
-    
-    checkAchievements('adventure_start');
-    
-    if (isMultiplayer) {
-      setCurrentScreen('waiting');
-    } else {
-      await startCampaign(newCampaign);
+    try {
+      // Use demo service for now
+      const gameId = await demoMultiplayerService.createGame(newCampaign);
+      const createdCampaign = { ...newCampaign, id: gameId };
+      
+      setCampaigns([...campaigns, createdCampaign]);
+      setCurrentCampaign(createdCampaign);
+      setCurrentEnvironment(theme.bg);
+      
+      checkAchievements('adventure_start');
+      
+      if (isMultiplayer) {
+        setCurrentScreen('waiting');
+      } else {
+        await startCampaign(createdCampaign);
+      }
+    } catch (error) {
+      console.error('Error creating campaign:', error);
+      alert('Failed to create campaign. Please try again.');
     }
   };
 
@@ -405,74 +415,43 @@ Your entire response MUST be a single, valid JSON object.`;
     if (!inputMessage.trim() || isAIThinking) return;
 
     const playerMessage = {
-      id: Date.now(),
       type: 'player',
       content: inputMessage,
       character: character.name,
       playerId: playerId,
-      playerName: playerName,
-      timestamp: new Date()
+      playerName: playerName
     };
 
-    const updatedMessages = [...messages, playerMessage];
-    setMessages(updatedMessages);
-    setInputMessage('');
-    setIsAIThinking(true);
-
-    const conversationHistory = updatedMessages.map(msg => ({
-      role: msg.type === 'player' ? 'user' : 'assistant',
-      content: msg.type === 'player' ? `${msg.character} (${msg.playerName}): ${msg.content}` : msg.content
-    }));
-
-    const dmPrompt = `Continue this ${currentCampaign.theme} campaign. Here's the conversation history:
-
-${JSON.stringify(conversationHistory)}
-
-The player ${character.name} (Level ${character.level} ${character.class}) just said: "${inputMessage}"
-
-Respond with a JSON object:
-{
-  "narrative": "Your response with consequences and world reactions",
-  "choices": ["Choice 1", "Choice 2", "Choice 3"],
-  "environment": "dungeon|forest|tavern|city" (if changed),
-  "combatEncounter": {
-    "active": true,
-    "enemies": [{"name": "Goblin", "health": 25, "attack": 4}]
-  } (if combat starts),
-  "characterUpdates": [{"playerId": "${playerId}", "xpGain": 10, "xpReason": "Good roleplay"}]
-}
-
-Your entire response MUST be a single, valid JSON object.`;
-
     try {
-      const response = await window.claude.complete(dmPrompt);
-      const dmResponse = JSON.parse(response);
-      
-      if (dmResponse.environment) {
-        setCurrentEnvironment(dmResponse.environment);
+      // Send message to multiplayer service
+      if (currentCampaign?.id) {
+        await demoMultiplayerService.sendMessage(currentCampaign.id, playerMessage);
       }
       
-      const dmMessage = {
-        id: Date.now() + 1,
-        type: 'dm',
-        content: dmResponse.narrative,
-        choices: dmResponse.choices,
-        timestamp: new Date()
-      };
+      setInputMessage('');
+      setIsAIThinking(true);
+
+      // For now, we'll use a simple AI response
+      // In a full implementation, you'd want to coordinate AI responses across all players
+      setTimeout(() => {
+        const dmMessage = {
+          type: 'dm',
+          content: `The dungeon master considers your words carefully. "${inputMessage}" - how will this choice affect your journey?`,
+          choices: ['Continue exploring', 'Ask for more details', 'Take a different approach']
+        };
+        
+        if (currentCampaign?.id) {
+          demoMultiplayerService.sendMessage(currentCampaign.id, dmMessage);
+        }
+        
+        setIsAIThinking(false);
+      }, 2000);
       
-      setMessages(prev => [...prev, dmMessage]);
     } catch (error) {
-      console.error('Error getting DM response:', error);
-      const fallbackMessage = {
-        id: Date.now() + 1,
-        type: 'dm',
-        content: `The story continues to unfold... (AI temporarily unavailable)`,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, fallbackMessage]);
+      console.error('Error sending message:', error);
+      alert('Failed to send message. Please try again.');
+      setIsAIThinking(false);
     }
-    
-    setIsAIThinking(false);
   };
 
   const handleKeyPress = (e) => {
@@ -534,13 +513,32 @@ Your entire response MUST be a single, valid JSON object.`;
                   className="flex-1 px-3 py-2 rounded-lg bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 text-center"
                 />
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (playerName.trim() && joinCode.trim()) {
                       if (!character) {
                         setCurrentScreen('character');
                       } else {
-                        // Join campaign logic would go here
-                        alert('Join campaign feature coming soon!');
+                        try {
+                          const joinedGame = await demoMultiplayerService.joinGame(joinCode, {
+                            id: playerId,
+                            name: playerName,
+                            character: { ...character, playerId },
+                            isHost: false,
+                            isOnline: true
+                          });
+                          
+                          if (joinedGame) {
+                            setCurrentCampaign(joinedGame);
+                            setCurrentEnvironment(joinedGame.background);
+                            setCurrentScreen('waiting');
+                            setJoinCode('');
+                          } else {
+                            alert('Campaign not found or full. Please check the code.');
+                          }
+                        } catch (error) {
+                          console.error('Error joining campaign:', error);
+                          alert('Failed to join campaign. Please try again.');
+                        }
                       }
                     }
                   }}
@@ -618,6 +616,29 @@ Your entire response MUST be a single, valid JSON object.`;
 
   // Waiting Room Screen (for multiplayer)
   if (currentScreen === 'waiting') {
+    // Set up real-time updates for the waiting room
+    useEffect(() => {
+      if (currentCampaign?.id) {
+        const unsubscribe = demoMultiplayerService.onGameUpdate(currentCampaign.id, (updatedGame) => {
+          setCurrentCampaign(updatedGame);
+          
+          // Auto-start if host started the game
+          if (updatedGame.started && !currentCampaign.started) {
+            startCampaign(updatedGame);
+          }
+        });
+
+        // Update player status as online
+        demoMultiplayerService.updatePlayerStatus(currentCampaign.id, playerId, true);
+
+        return () => {
+          unsubscribe();
+          // Update player status as offline when leaving
+          demoMultiplayerService.updatePlayerStatus(currentCampaign.id, playerId, false);
+        };
+      }
+    }, [currentCampaign?.id, playerId]);
+
     return (
       <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} p-4 transition-all duration-1000`}>
         <div className="max-w-4xl mx-auto">
@@ -642,10 +663,15 @@ Your entire response MUST be a single, valid JSON object.`;
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 {currentCampaign.players.map((player) => (
-                  <div key={player.id} className="bg-white/10 rounded-lg p-4">
-                    <h4 className="text-white font-semibold">{player.character.name}</h4>
-                    <p className="text-blue-200 text-sm">Level {player.character.level} {player.character.class}</p>
-                    <p className="text-green-400 text-xs">{player.name} {player.isHost && '(Host)'}</p>
+                  <div key={player.id} className={`bg-white/10 rounded-lg p-4 ${!player.isOnline ? 'opacity-50' : ''}`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-white font-semibold">{player.character.name}</h4>
+                        <p className="text-blue-200 text-sm">Level {player.character.level} {player.character.class}</p>
+                        <p className="text-green-400 text-xs">{player.name} {player.isHost && '(Host)'}</p>
+                      </div>
+                      <div className={`w-3 h-3 rounded-full ${player.isOnline ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                    </div>
                   </div>
                 ))}
                 
@@ -662,14 +688,23 @@ Your entire response MUST be a single, valid JSON object.`;
               
               <div className="flex justify-center space-x-4">
                 <button
-                  onClick={() => setCurrentScreen('lobby')}
+                  onClick={async () => {
+                    if (currentCampaign?.id) {
+                      await demoMultiplayerService.leaveGame(currentCampaign.id, playerId);
+                    }
+                    setCurrentScreen('lobby');
+                  }}
                   className="px-6 py-3 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
                 >
                   ← Back to Lobby
                 </button>
                 {currentCampaign.players.find(p => p.id === playerId)?.isHost && (
                   <button
-                    onClick={() => startCampaign(currentCampaign)}
+                    onClick={async () => {
+                      if (currentCampaign?.id) {
+                        await demoMultiplayerService.startGame(currentCampaign.id);
+                      }
+                    }}
                     className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all"
                   >
                     Start Adventure
@@ -685,6 +720,20 @@ Your entire response MUST be a single, valid JSON object.`;
 
   // Game Screen
   if (currentScreen === 'game') {
+    // Set up real-time updates for the game
+    useEffect(() => {
+      if (currentCampaign?.id) {
+        const unsubscribe = demoMultiplayerService.onGameUpdate(currentCampaign.id, (updatedGame) => {
+          setCurrentCampaign(updatedGame);
+          setMessages(updatedGame.messages || []);
+        });
+
+        return () => {
+          unsubscribe();
+        };
+      }
+    }, [currentCampaign?.id]);
+
     return (
       <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} flex flex-col transition-all duration-1000`}>
         <GameInterface
@@ -695,7 +744,12 @@ Your entire response MUST be a single, valid JSON object.`;
           sendMessage={sendMessage}
           handleKeyPress={handleKeyPress}
           isAIThinking={isAIThinking}
-          onBack={() => setCurrentScreen('lobby')}
+          onBack={async () => {
+            if (currentCampaign?.id) {
+              await demoMultiplayerService.leaveGame(currentCampaign.id, playerId);
+            }
+            setCurrentScreen('lobby');
+          }}
           messagesEndRef={messagesEndRef}
           statusEffects={statusEffects}
           currentEnvironment={currentEnvironment}
