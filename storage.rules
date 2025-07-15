@@ -1,0 +1,28 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // User avatars and character images
+    match /users/{userId}/avatars/{allPaths=**} {
+      allow read: if true; // Anyone can view avatars
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Game assets (maps, tokens, etc.)
+    match /games/{gameId}/assets/{allPaths=**} {
+      allow read: if true; // Anyone can view game assets
+      allow write: if request.auth != null; // Authenticated users can upload
+    }
+    
+    // Character portraits
+    match /characters/{characterId}/portraits/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Campaign maps and resources
+    match /campaigns/{campaignId}/resources/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+} 
