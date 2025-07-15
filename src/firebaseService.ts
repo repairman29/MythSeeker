@@ -200,6 +200,8 @@ class FirebaseService {
 
   // Character Management
   async saveCharacter(character: Character): Promise<string> {
+    console.log('FirebaseService.saveCharacter called with:', character);
+    
     const characterData = {
       ...character,
       lastPlayed: Date.now()
@@ -207,12 +209,16 @@ class FirebaseService {
 
     if (character.id) {
       // Update existing character
+      console.log('Updating existing character with ID:', character.id);
       const docRef = doc(db, 'characters', character.id);
       await updateDoc(docRef, characterData);
+      console.log('Character updated successfully');
       return character.id;
     } else {
       // Create new character
+      console.log('Creating new character');
       const docRef = await addDoc(collection(db, 'characters'), characterData);
+      console.log('New character created with ID:', docRef.id);
       return docRef.id;
     }
   }
@@ -220,12 +226,15 @@ class FirebaseService {
   async getUserCharacters(userId: string): Promise<Character[]> {
     const q = query(
       collection(db, 'characters'),
-      where('userId', '==', userId),
-      orderBy('lastPlayed', 'desc')
+      where('userId', '==', userId)
+      // Removed orderBy to avoid composite index requirement
     );
     
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Character));
+    const characters = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Character));
+    
+    // Sort in memory instead
+    return characters.sort((a, b) => b.lastPlayed - a.lastPlayed);
   }
 
   async getCharacter(characterId: string): Promise<Character | null> {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   MessageSquare, 
   BookOpen, 
@@ -79,8 +79,13 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
   onSendMessage,
   onUpdateSettings
 }) => {
+  const [isResizing, setIsResizing] = useState(false);
+  const [drawerWidth, setDrawerWidth] = useState(400);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [settings, setSettings] = useState({
     soundEnabled: true,
     musicEnabled: true,
@@ -89,6 +94,49 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
     theme: 'dark',
     language: 'en'
   });
+  // Resizable drawer state (desktop only)
+  const DEFAULT_WIDTH = 384; // 24rem
+  const MIN_WIDTH = 320;
+  const MAX_WIDTH = 600;
+  const resizing = useRef(false);
+
+  // Mouse event handlers for resizing
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (isMobile) return;
+    resizing.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!resizing.current) return;
+    const winWidth = window.innerWidth;
+    const newWidth = Math.min(
+      Math.max(winWidth - e.clientX, MIN_WIDTH),
+      MAX_WIDTH
+    );
+    setDrawerWidth(newWidth);
+  };
+  const handleMouseUp = () => {
+    if (resizing.current) {
+      resizing.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  };
+  React.useEffect(() => {
+    if (!isMobile) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  });
+  // Double-click to reset width
+  const handleDoubleClick = () => {
+    setDrawerWidth(DEFAULT_WIDTH);
+  };
 
   const tabs = [
     { key: 'chat', label: 'Chat', icon: <MessageSquare size={20} />, description: 'Real-time messaging' },
@@ -131,6 +179,7 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
         </div>
         <div className="flex space-x-2">
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Search messages..."
             value={searchTerm}
@@ -184,6 +233,7 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
       <div className="p-4 border-t border-white/20">
         <div className="flex space-x-2">
           <input
+            ref={chatInputRef}
             type="text"
             placeholder="Type your message..."
             className="flex-1 px-3 py-2 bg-white/10 text-white placeholder-gray-300 rounded-lg border border-white/20 focus:outline-none focus:border-blue-400"
@@ -208,6 +258,7 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
         <h3 className="text-lg font-semibold text-white mb-3">Campaign Log</h3>
         <div className="flex space-x-2">
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Search log entries..."
             className="flex-1 px-3 py-2 bg-white/10 text-white placeholder-gray-300 rounded-lg border border-white/20 focus:outline-none focus:border-blue-400"
@@ -632,12 +683,30 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
           onClick={onClose}
         />
       )}
-      
       {/* Drawer */}
-      <div className={`fixed top-0 right-0 h-full bg-gradient-to-b from-blue-900 via-indigo-900 to-purple-900 border-l border-white/20 shadow-2xl z-50 transition-transform duration-300 ease-in-out ${
-        isOpen ? 'translate-x-0' : 'translate-x-full'
-      } ${isMobile ? 'w-full sm:w-96' : 'w-96'}`}>
-        
+      <div
+        className={`fixed top-0 right-0 h-full bg-gradient-to-b from-blue-900 via-indigo-900 to-purple-900 border-l border-white/20 shadow-2xl z-50 transition-transform duration-300 ease-in-out ${
+          isOpen ? 'translate-x-0' : 'translate-x-full'
+        } ${isMobile ? 'w-full sm:w-96' : ''}`}
+        style={!isMobile ? { width: drawerWidth, minWidth: MIN_WIDTH, maxWidth: MAX_WIDTH, transition: 'width 0.2s cubic-bezier(.4,2,.6,1)' } : {}}
+      >
+        {/* Drag handle (desktop only) */}
+        {!isMobile && isOpen && (
+          <div
+            className="absolute left-0 top-0 h-full w-2 z-50 cursor-col-resize group"
+            style={{ marginLeft: -8 }}
+            onMouseDown={handleMouseDown}
+            onDoubleClick={handleDoubleClick}
+            tabIndex={0}
+            aria-label="Resize drawer"
+            role="separator"
+            title="Drag to resize drawer. Double-click to reset."
+          >
+            <div className="w-2 h-full flex items-center justify-center">
+              <div className="w-1 h-16 mx-auto bg-white/30 rounded-full group-hover:bg-blue-400 transition-colors" />
+            </div>
+          </div>
+        )}
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-white/20">
           <h2 className="text-xl font-bold text-white">Campaign Tools</h2>
@@ -648,7 +717,6 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
             <X size={20} />
           </button>
         </div>
-
         {/* Tab Navigation */}
         <div className="flex border-b border-white/20 overflow-x-auto">
           {tabs.map((tab) => (
@@ -667,7 +735,6 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
             </button>
           ))}
         </div>
-
         {/* Tab Content */}
         <div className="flex-1 overflow-hidden">
           {renderTabContent()}

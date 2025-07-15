@@ -46,6 +46,7 @@ interface GameInterfaceProps {
   character?: any;
   onTabChange?: (tab: string) => void;
   activeTab?: string;
+  inputRef?: React.RefObject<HTMLInputElement>;
 }
 
 const GameInterface: React.FC<GameInterfaceProps> = ({
@@ -61,7 +62,8 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
   worldState,
   character,
   onTabChange,
-  activeTab = 'gameplay'
+  activeTab = 'gameplay',
+  inputRef
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -270,6 +272,7 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
             placeholder="What do you do? (Press Enter to send)"
             className="flex-1 px-4 py-2 rounded-lg bg-white/20 text-white placeholder-gray-300 border border-white/30 focus:outline-none focus:border-blue-400"
             disabled={isAIThinking}
+            ref={inputRef}
           />
           <button
             onClick={sendMessage}

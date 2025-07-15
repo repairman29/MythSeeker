@@ -1,13 +1,14 @@
 import React from 'react';
 import UserProfile from '../UserProfile';
-import { Bell, PlusCircle, Menu } from 'lucide-react';
+import { Bell, PlusCircle, Menu, HelpCircle } from 'lucide-react';
 
 const TopBar: React.FC<{ 
   onNewCampaign: () => void,
   isMobile?: boolean,
   onToggleMobile?: () => void,
-  currentScreen?: string
-}> = ({ onNewCampaign, isMobile = false, onToggleMobile, currentScreen }) => {
+  currentScreen?: string,
+  onHelpClick?: () => void
+}> = ({ onNewCampaign, isMobile = false, onToggleMobile, currentScreen, onHelpClick }) => {
   // Get screen title for better context
   const getScreenTitle = () => {
     switch (currentScreen) {
@@ -52,6 +53,17 @@ const TopBar: React.FC<{
       </div>
       
       <div className="flex items-center space-x-3 lg:space-x-6">
+        {/* Help Button */}
+        {onHelpClick && (
+          <button 
+            onClick={onHelpClick}
+            className="text-blue-200 hover:text-yellow-300 transition-all p-2 help-indicator"
+            title="Help & Tutorial"
+          >
+            <HelpCircle size={20} className="lg:w-6 lg:h-6" />
+          </button>
+        )}
+        
         {/* Notification Center */}
         <button 
           className="relative text-blue-200 hover:text-yellow-300 transition-all p-2"

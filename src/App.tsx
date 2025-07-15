@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Dice1, Dice6, Sword, Shield, Zap, Heart, User, Users, Plus, Play, Settings, Sparkles, Flame, Copy, Share2, Star, Award, Package, Hammer, TrendingUp, Target, Clock, Swords, MapPin, Eye, Crosshair, Globe, AlertTriangle, Crown, Calendar, History, ChevronDown, ChevronUp, X, Menu } from 'lucide-react';
-import { multiplayerService, MultiplayerGame, Player, GameMessage } from './multiplayer';
+import { Dice1, Dice6, Sword, Shield, Zap, Heart, User, Users, Plus, Play, Settings, Sparkles, Flame, Copy, Share2, Star, Award, Package, Hammer, TrendingUp, Target, Clock, Swords, MapPin, Eye, Crosshair, Globe, AlertTriangle, Crown, Calendar, History, ChevronDown, ChevronUp, X, Menu, Book, HelpCircle } from 'lucide-react';
+import { multiplayerService, MultiplayerGame, Player, GameMessage } from './services/multiplayerService';
 import { demoMultiplayerService } from './demoMultiplayer';
+import { firebaseService, UserProfile as FirebaseUserProfile, Character as FirebaseCharacter } from './firebaseService';
+import { aiService } from './services/aiService';
 import UserProfile from './UserProfile';
 import ResumeGame from './ResumeGame';
 import { NavBar, TopBar, RightDrawer, MainTabs, CharacterSheet, Inventory, WorldMap, CampaignLog, CombatSystem } from './components';
@@ -9,10 +11,35 @@ import FloatingActionButton from './components/FloatingActionButton';
 import GameInterface from './components/GameInterface';
 import CombatService, { CombatState } from './services/combatService';
 import { Combatant, CombatAction } from './components/CombatSystem';
+import ToastNotifications, { ToastMessage, generateToastMessage } from './components/ToastNotifications';
+import WelcomeOverlay from './components/WelcomeOverlay';
+import SimpleHelp from './components/SimpleHelp';
 
 const AIDungeonMaster = () => {
   // Combat service instance
   const combatService = React.useMemo(() => new CombatService(), []);
+  
+  // Success feedback state
+  const [successFeedback, setSuccessFeedback] = useState<{
+    message: string;
+    icon: React.ReactNode;
+    duration: number;
+  } | null>(null);
+  
+  // Toast notifications state
+  const [toastMessages, setToastMessages] = useState<ToastMessage[]>([]);
+  
+  // Welcome overlay state
+  const [showWelcomeOverlay, setShowWelcomeOverlay] = useState(false);
+  
+  // Simple help state
+  const [showHelp, setShowHelp] = useState(false);
+  
+  // Firebase authentication state
+  const [currentUser, setCurrentUser] = useState<FirebaseUserProfile | null>(null);
+  const [userCharacters, setUserCharacters] = useState<FirebaseCharacter[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   
   // Navigation state
   const [activeNav, setActiveNav] = useState('dashboard');
@@ -43,12 +70,26 @@ const AIDungeonMaster = () => {
   const [hoveredTile, setHoveredTile] = useState<any>(null);
   const [targetingMode, setTargetingMode] = useState<any>(null);
   const [lineOfSightCache, setLineOfSightCache] = useState<Record<string, any>>({});
-  const [worldState, setWorldState] = useState<any>(null);
+  const [worldState, setWorldState] = useState<any>({
+    locations: {},
+    npcs: {},
+    factions: {},
+    events: [],
+    weather: 'clear',
+    timeOfDay: 'day',
+    currentLocation: null,
+    playerReputation: {},
+    discoveredSecrets: [],
+    activeQuests: [],
+    completedQuests: [],
+    worldEvents: []
+  });
   const [showWorldEvents, setShowWorldEvents] = useState(false);
   const [pendingChoices, setPendingChoices] = useState<any[]>([]);
   const [achievements, setAchievements] = useState<any[]>([]);
   const [showAchievements, setShowAchievements] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const gameInputRef = useRef<HTMLInputElement>(null);
 
   // Multiplayer state
   const [isConnected, setIsConnected] = useState(false);
@@ -65,12 +106,203 @@ const AIDungeonMaster = () => {
   // Drawer tab state for right drawer
   const [activeDrawerTab, setActiveDrawerTab] = useState('chat');
 
+  // Enhanced AI Dungeon Master System
+  const [aiMemory, setAiMemory] = useState<any>({
+    playerActions: [],
+    npcInteractions: {},
+    combatHistory: [],
+    explorationHistory: [],
+    playerPreferences: {},
+    storyThreads: [],
+    consequences: []
+  });
+
+  // Show success feedback
+  const showSuccessFeedback = (type: string) => {
+    // Convert to toast notification instead
+    addToast(type);
+  };
+  
+  // Toast notification functions
+  const addToast = (action: string, context?: any) => {
+    const toast = generateToastMessage(action, context);
+    setToastMessages(prev => [...prev, toast]);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => dismissToast(toast.id), 5000);
+    
+    // Show success feedback for certain actions
+    if (action === 'characterCreated') {
+      showSuccessFeedback('character');
+    } else if (action === 'campaignCreated') {
+      showSuccessFeedback('campaign');
+    } else if (action === 'campaignPaused') {
+      showSuccessFeedback('pause');
+    } else if (action === 'campaignResumed') {
+      showSuccessFeedback('resume');
+    }
+  };
+  
+  const dismissToast = (id: string) => {
+    setToastMessages(prev => prev.filter(toast => toast.id !== id));
+  };
+
   // Generate unique player ID on load
   useEffect(() => {
     if (!playerId) {
       setPlayerId(Date.now().toString(36) + Math.random().toString(36).substr(2));
     }
   }, [playerId]);
+
+  // Firebase authentication and data loading
+  useEffect(() => {
+    const unsubscribe = firebaseService.onAuthStateChange(async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          // Get user profile
+          const userProfile = await firebaseService.getUserProfile(firebaseUser.uid);
+          if (userProfile) {
+            setCurrentUser(userProfile);
+            setPlayerName(userProfile.displayName);
+            setIsAuthenticated(true);
+            
+            // Load user's characters
+            const characters = await firebaseService.getUserCharacters(firebaseUser.uid);
+            setUserCharacters(characters);
+            
+            // If user has characters, show character selection or resume game
+            if (characters.length > 0) {
+              setCurrentScreen('character-select');
+            } else {
+              setCurrentScreen('welcome');
+            }
+          }
+        } catch (error) {
+          console.error('Error loading user data:', error);
+          setCurrentScreen('welcome');
+        }
+      } else {
+        // User not authenticated
+        setCurrentUser(null);
+        setUserCharacters([]);
+        setIsAuthenticated(false);
+        setCurrentScreen('welcome');
+      }
+      setIsLoading(false);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  // Initialize AI service
+  useEffect(() => {
+    // Ensure AI service is available
+    if (typeof window !== 'undefined' && !(window as any).claude) {
+      (window as any).claude = {
+        complete: (prompt: string) => aiService.complete(prompt)
+      };
+    }
+  }, []);
+
+  // Character management functions
+  const saveCharacter = async (characterData: any) => {
+    console.log('saveCharacter called with:', characterData);
+    console.log('currentUser:', currentUser);
+    
+    if (!currentUser) {
+      console.error('No current user found');
+      addToast('error', { message: 'Please sign in to save your character' });
+      return;
+    }
+
+    try {
+      const firebaseCharacter: FirebaseCharacter = {
+        userId: currentUser.uid,
+        name: characterData.name,
+        class: characterData.class,
+        level: 1,
+        experience: 0,
+        health: 100,
+        maxHealth: 100,
+        mana: 50,
+        maxMana: 50,
+        gold: 100,
+        inventory: {
+          'Healing Potion': 3,
+          'Iron Ore': 2,
+          'Herb': 5
+        },
+        equipment: {
+          weapon: { name: 'Iron Sword', type: 'weapon' },
+          armor: { name: 'Leather Armor', type: 'armor' }
+        },
+        stats: characterData.baseStats,
+        skills: characterData.skills || {},
+        achievements: [],
+        createdAt: Date.now(),
+        lastPlayed: Date.now(),
+        totalPlayTime: 0
+      };
+
+      console.log('Saving character to Firebase:', firebaseCharacter);
+      const characterId = await firebaseService.saveCharacter(firebaseCharacter);
+      console.log('Character saved with ID:', characterId);
+      
+      addToast('characterCreated', { character: characterData });
+      
+      // Update local state
+      const savedCharacter = { ...firebaseCharacter, id: characterId };
+      setUserCharacters(prev => [savedCharacter, ...prev]);
+      setCharacter(savedCharacter);
+      setCurrentScreen('lobby');
+      
+      console.log('Character state updated, navigating to lobby');
+    } catch (error) {
+      console.error('Error saving character:', error);
+      addToast('error', { message: 'Failed to save character' });
+    }
+  };
+
+  const loadCharacter = async (characterId: string) => {
+    try {
+      const character = await firebaseService.getCharacter(characterId);
+      if (character) {
+        setCharacter(character);
+        setCurrentScreen('lobby');
+        addToast('characterLoaded', { character: character.name });
+      }
+    } catch (error) {
+      console.error('Error loading character:', error);
+      addToast('error', { message: 'Failed to load character' });
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    try {
+      setIsLoading(true);
+      await firebaseService.signInWithGoogle();
+      addToast('welcome', { message: 'Welcome to MythSeeker!' });
+    } catch (error) {
+      console.error('Error signing in:', error);
+      addToast('error', { message: 'Failed to sign in' });
+      setIsLoading(false);
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      await firebaseService.signOut();
+      setCharacter(null);
+      setCurrentCampaign(null);
+      setUserCharacters([]);
+      setCurrentUser(null);
+      setIsAuthenticated(false);
+      setCurrentScreen('welcome');
+      addToast('goodbye', { message: 'See you next time, adventurer!' });
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
 
   // Mobile detection
   useEffect(() => {
@@ -112,25 +344,49 @@ const AIDungeonMaster = () => {
   }, [currentCampaign?.id]);
 
   const scrollToBottom = () => {
-    (messagesEndRef.current as HTMLDivElement | null)?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
+  // Restore focus to input field after AI responses
+  useEffect(() => {
+    if (!isAIThinking && gameInputRef.current) {
+      gameInputRef.current.focus();
+    }
+  }, [isAIThinking]);
+
   // Navigation handlers
   const handleNavChange = (navKey: string) => {
     setActiveNav(navKey);
-    setCurrentScreen(navKey);
-    if (navKey === 'campaigns') {
-      setCurrentScreen('lobby');
-    } else if (navKey === 'characters') {
-      setCurrentScreen('character');
-    } else if (navKey === 'combat') {
-      setCurrentScreen('combat');
-    } else if (navKey === 'gameplay') {
-      setCurrentScreen('game');
+    
+    // Map navigation keys to screens
+    switch (navKey) {
+      case 'dashboard':
+        setCurrentScreen('dashboard');
+        break;
+      case 'campaigns':
+        setCurrentScreen('lobby');
+        break;
+      case 'characters':
+        setCurrentScreen('character');
+        break;
+      case 'party':
+        setCurrentScreen('party');
+        break;
+      case 'world':
+        setCurrentScreen('world');
+        break;
+      case 'combat':
+        setCurrentScreen('combat');
+        break;
+      case 'magic':
+        setCurrentScreen('magic');
+        break;
+      default:
+        setCurrentScreen('dashboard');
     }
   };
 
@@ -154,13 +410,238 @@ const AIDungeonMaster = () => {
         playerId: playerId!,
         playerName: playerName
       });
+      showSuccessFeedback('messageSent');
     } catch (error) {
       console.error('Error sending message:', error);
     }
   };
 
-  // Add missing functions that were referenced but not defined
+  // Campaign persistence and management
+  const saveCampaign = async (campaign: any) => {
+    if (!campaign?.id) {
+      console.warn('Attempted to save campaign without ID');
+      return;
+    }
+    
+    try {
+      console.log('Saving campaign:', campaign.id, campaign.theme);
+      
+      // Always save to local storage first for immediate persistence
+      const savedCampaigns = JSON.parse(localStorage.getItem('mythseeker_campaigns') || '[]');
+      const existingIndex = savedCampaigns.findIndex((c: any) => c.id === campaign.id);
+      
+      if (existingIndex >= 0) {
+        savedCampaigns[existingIndex] = campaign;
+      } else {
+        savedCampaigns.push(campaign);
+      }
+      
+      localStorage.setItem('mythseeker_campaigns', JSON.stringify(savedCampaigns));
+      console.log('Campaign saved to localStorage:', campaign.id);
+      
+      // Update local state immediately
+      setCampaigns(prev => prev.map(c => c.id === campaign.id ? campaign : c));
+      
+      // Try to save to Firebase if multiplayer and authenticated
+      if (campaign.isMultiplayer && isAuthenticated && currentUser) {
+        try {
+          await multiplayerService.updateCampaignState(campaign.id, {
+            messages: campaign.messages || [],
+            systemMessages: campaign.systemMessages || [],
+            started: campaign.started,
+            worldState: campaign.worldState,
+            currentEnvironment: campaign.currentEnvironment,
+            combatState: campaign.combatState,
+            lastActivity: new Date() as any
+          });
+          console.log('Campaign saved to Firebase:', campaign.id);
+        } catch (firebaseError) {
+          console.error('Error saving to Firebase, but localStorage backup exists:', firebaseError);
+        }
+      }
+      
+      console.log('Campaign saved successfully:', campaign.id);
+    } catch (error) {
+      console.error('Error saving campaign:', error);
+      // Even if there's an error, try to save to localStorage as last resort
+      try {
+        const savedCampaigns = JSON.parse(localStorage.getItem('mythseeker_campaigns') || '[]');
+        const existingIndex = savedCampaigns.findIndex((c: any) => c.id === campaign.id);
+        
+        if (existingIndex >= 0) {
+          savedCampaigns[existingIndex] = campaign;
+        } else {
+          savedCampaigns.push(campaign);
+        }
+        
+        localStorage.setItem('mythseeker_campaigns', JSON.stringify(savedCampaigns));
+        console.log('Campaign saved to localStorage as fallback:', campaign.id);
+      } catch (localStorageError) {
+        console.error('Failed to save campaign even to localStorage:', localStorageError);
+      }
+    }
+  };
 
+  const loadCampaigns = async () => {
+    try {
+      console.log('Loading campaigns...');
+      
+      // Always load from local storage first for immediate availability
+      const savedCampaigns = JSON.parse(localStorage.getItem('mythseeker_campaigns') || '[]');
+      console.log('Found campaigns in localStorage:', savedCampaigns.length);
+      
+      // Set campaigns immediately from localStorage
+      setCampaigns(savedCampaigns);
+      
+      // Try to load from Firebase for multiplayer campaigns (if authenticated)
+      if (isAuthenticated && currentUser) {
+        try {
+          const firebaseCampaigns = await multiplayerService.getUserCampaigns();
+          console.log('Found campaigns in Firebase:', firebaseCampaigns.length);
+          
+          // Merge campaigns, prioritizing Firebase data for multiplayer campaigns
+          const mergedCampaigns = savedCampaigns.map((localCampaign: any) => {
+            const firebaseCampaign = firebaseCampaigns.find((fc: any) => fc.id === localCampaign.id);
+            return firebaseCampaign || localCampaign;
+          });
+          
+          // Add Firebase-only campaigns
+          firebaseCampaigns.forEach((firebaseCampaign: any) => {
+            if (!mergedCampaigns.find((c: any) => c.id === firebaseCampaign.id)) {
+              mergedCampaigns.push(firebaseCampaign);
+            }
+          });
+          
+          // Update state and localStorage with merged data
+          setCampaigns(mergedCampaigns);
+          localStorage.setItem('mythseeker_campaigns', JSON.stringify(mergedCampaigns));
+          
+          console.log('Total campaigns after merge:', mergedCampaigns.length);
+        } catch (firebaseError) {
+          console.error('Error loading from Firebase, using localStorage only:', firebaseError);
+          // Keep using localStorage campaigns
+        }
+      }
+    } catch (error) {
+      console.error('Error loading campaigns:', error);
+      // Fallback to empty array
+      setCampaigns([]);
+    }
+  };
+
+  const deleteCampaign = async (campaignId: string) => {
+    try {
+      console.log('Deleting campaign:', campaignId);
+      
+      // Find the campaign to delete
+      const campaign = campaigns.find(c => c.id === campaignId);
+      if (!campaign) {
+        console.error('Campaign not found:', campaignId);
+        addToast('error', { message: 'Campaign not found' });
+        return;
+      }
+      
+      // Try to remove from Firebase if multiplayer and authenticated
+      if (campaign.isMultiplayer && isAuthenticated && currentUser) {
+        try {
+          await multiplayerService.deleteCampaign(campaignId);
+          console.log('Campaign deleted from Firebase:', campaignId);
+        } catch (firebaseError) {
+          console.warn('Failed to delete from Firebase, but will continue with localStorage:', firebaseError);
+          // Continue with localStorage deletion even if Firebase fails
+        }
+      }
+      
+      // Always remove from local storage (primary storage)
+      const savedCampaigns = JSON.parse(localStorage.getItem('mythseeker_campaigns') || '[]');
+      const filteredCampaigns = savedCampaigns.filter((c: any) => c.id !== campaignId);
+      localStorage.setItem('mythseeker_campaigns', JSON.stringify(filteredCampaigns));
+      console.log('Campaign deleted from localStorage:', campaignId);
+      
+      // Update local state
+      setCampaigns(prev => prev.filter(c => c.id !== campaignId));
+      
+      // Clear current campaign if it's the one being deleted
+      if (currentCampaign?.id === campaignId) {
+        setCurrentCampaign(null);
+        setCurrentScreen('lobby');
+      }
+      
+      addToast('campaignDeleted', { campaign });
+      console.log('Campaign deleted successfully:', campaignId);
+    } catch (error) {
+      console.error('Error deleting campaign:', error);
+      addToast('error', { message: 'Failed to delete campaign. Please try again.' });
+    }
+  };
+
+  const joinCampaign = async (campaignCode: string) => {
+    if (!campaignCode.trim() || !character) return;
+    
+    try {
+      const campaignId = await multiplayerService.joinCampaign(campaignCode, {
+        name: playerName,
+        character: character,
+        isHost: false,
+        isOnline: true,
+        status: 'ready' as const
+      });
+      
+      // Load the joined campaign
+      const joinedCampaign = await multiplayerService.getCampaign(campaignId);
+      if (joinedCampaign) {
+        setCurrentCampaign(joinedCampaign);
+        setCampaigns(prev => {
+          const existing = prev.find(c => c.id === joinedCampaign.id);
+          return existing ? prev.map(c => c.id === joinedCampaign.id ? joinedCampaign : c) : [...prev, joinedCampaign];
+        });
+        
+        if (joinedCampaign.started) {
+          setCurrentScreen('game');
+        } else {
+          setCurrentScreen('waiting');
+        }
+        
+        addToast('campaignJoined', { campaign: joinedCampaign });
+      }
+    } catch (error) {
+      console.error('Error joining campaign:', error);
+      alert('Failed to join campaign. Please check the code and try again.');
+    }
+  };
+
+  // Auto-save campaign when it changes
+  useEffect(() => {
+    if (currentCampaign && currentCampaign.started) {
+      const autoSaveTimer = setTimeout(() => {
+        saveCampaign(currentCampaign);
+      }, 30000); // Auto-save every 30 seconds
+      
+      return () => clearTimeout(autoSaveTimer);
+    }
+  }, [currentCampaign]);
+
+  // Load campaigns on app start and when character changes
+  useEffect(() => {
+    loadCampaigns();
+  }, [character, isAuthenticated]);
+
+  // Load campaigns from localStorage on initial load (before authentication)
+  useEffect(() => {
+    const savedCampaigns = JSON.parse(localStorage.getItem('mythseeker_campaigns') || '[]');
+    if (savedCampaigns.length > 0) {
+      setCampaigns(savedCampaigns);
+      console.log('Loaded campaigns from localStorage:', savedCampaigns.length);
+    }
+  }, []);
+
+  // Save campaign when messages change
+  useEffect(() => {
+    if (currentCampaign && messages.length > 0) {
+      const updatedCampaign = { ...currentCampaign, messages };
+      saveCampaign(updatedCampaign);
+    }
+  }, [messages]);
 
   // Classes with enhanced skill system
   const classes = [
@@ -394,9 +875,15 @@ const AIDungeonMaster = () => {
 
   const createCharacter = (characterData: any) => {
     const classData = classes.find(c => c.name === characterData.class);
+    if (!classData) {
+      addToast('error', { message: 'Invalid character class' });
+      return;
+    }
+
     const newCharacter = {
       ...characterData,
       baseStats: classData.stats,
+      skills: classData.skills,
       health: 100,
       maxHealth: 100,
       mana: 50,
@@ -417,8 +904,9 @@ const AIDungeonMaster = () => {
       id: playerId,
       playerId: playerId
     };
-    setCharacter(newCharacter);
-    setCurrentScreen('lobby');
+
+    // Save character to Firebase
+    saveCharacter(newCharacter);
   };
 
   const createCampaign = async (theme: any, customPrompt = '', isMultiplayer = true) => {
@@ -429,11 +917,12 @@ const AIDungeonMaster = () => {
       theme: theme.name,
       background: theme.bg,
       players: [{ 
-        id: playerId, 
+        id: playerId || 'unknown', 
         name: playerName, 
         character: { ...character, playerId },
         isHost: true,
-        isOnline: true
+        isOnline: true,
+        status: 'ready' as const
       }],
       messages: [],
       systemMessages: [],
@@ -444,13 +933,16 @@ const AIDungeonMaster = () => {
     };
 
     try {
-      // Use demo service for now
-      const gameId = await demoMultiplayerService.createGame(newCampaign);
-      const createdCampaign = { ...newCampaign, id: gameId };
+      // Use the proper multiplayer service
+      const gameId = await multiplayerService.createCampaign(newCampaign as any);
+      const createdCampaign = { ...newCampaign, id: gameId } as any;
       
       setCampaigns([...campaigns, createdCampaign]);
       setCurrentCampaign(createdCampaign);
       setCurrentEnvironment(theme.bg);
+      
+      // Add fun toast notification
+      addToast('campaignCreated', { campaign: createdCampaign });
       
       checkAchievements('adventure_start');
       
@@ -459,6 +951,7 @@ const AIDungeonMaster = () => {
       } else {
         await startCampaign(createdCampaign);
       }
+      // handleFTUEStepComplete('create-campaign'); // Removed as per edit hint
     } catch (error) {
       console.error('Error creating campaign:', error);
       alert('Failed to create campaign. Please try again.');
@@ -475,47 +968,60 @@ const AIDungeonMaster = () => {
       return;
     }
     
+    // Ensure campaign.players is always a valid array
     if (!campaign.players || !Array.isArray(campaign.players)) {
-      console.error('Campaign players is undefined or not an array:', campaign.players);
-      // Create a fallback campaign with the current character
-      campaign.players = [{
-        id: playerId,
-        name: playerName,
-        character: character,
-        isHost: true,
-        isOnline: true
-      }];
-    }
-    
-    const partyStats = campaign.players.map(p => {
-      if (!p || !p.character) {
-        console.error('Player or character is undefined:', p);
-        return 'Unknown Player: Stats unavailable';
+      console.warn('Campaign players is undefined or not an array, creating fallback:', campaign.players);
+      
+      // Handle case where players might be stored as an object
+      let playersArray: any[] = [];
+      if (campaign.players && typeof campaign.players === 'object' && !Array.isArray(campaign.players)) {
+        // Convert object to array if needed
+        playersArray = Object.values(campaign.players).filter((p: any) => p !== null);
       }
       
-      const stats = calculateStats(p.character);
-      return `${p.character.name || 'Unknown'} (Level ${p.character.level || 1} ${p.character.class || 'Adventurer'}): STR ${stats?.strength || 10}, DEX ${stats?.dexterity || 10}, INT ${stats?.intelligence || 10}, CHA ${stats?.charisma || 10}`;
-    }).join('\n');
+      // If still no valid players, create fallback
+      if (playersArray.length === 0) {
+        playersArray = [{
+          id: playerId || 'unknown',
+          name: playerName || 'Unknown Player',
+          character: character || { name: 'Unknown', level: 1, class: 'Adventurer' },
+          isHost: true,
+          isOnline: true,
+          status: 'ready' as const
+        }];
+      }
+      
+      campaign.players = playersArray;
+    }
 
-    const initPrompt = `You are an AI Dungeon Master for a ${campaign.theme} campaign. Start an engaging adventure for this party:
+    // Initialize world state for the campaign
+    const initialWorldState = {
+      ...worldState,
+      currentLocation: 'tavern', // Start in a tavern
+      weather: 'clear',
+      timeOfDay: 'evening',
+      locations: {
+        tavern: {
+          name: 'The Prancing Pony',
+          description: 'A cozy tavern with warm firelight and the sound of laughter',
+          npcs: [],
+          connections: ['market', 'inn', 'streets']
+        }
+      }
+    };
+    setWorldState(initialWorldState);
 
-${partyStats}
-
-Begin with an immersive opening scene that brings the party together and presents their first challenge. Include opportunities for roleplay, combat, and meaningful choices.
-
-Respond with a JSON object:
-{
-  "narrative": "Opening scene description",
-  "choices": ["Option 1", "Option 2", "Option 3"],
-  "environment": "dungeon|forest|tavern|city",
-  "combatEncounter": null
-}
-
-Your entire response MUST be a single, valid JSON object.`;
+    // Generate enhanced initial prompt
+    const initPrompt = generateAIPrompt('', true);
 
     try {
-      const response = await window.claude.complete(initPrompt);
+      const response = await (window as any).claude.complete(initPrompt);
       const dmResponse = JSON.parse(response);
+      
+      // Update world state based on AI response
+      if (dmResponse.worldStateUpdates) {
+        updateWorldState(dmResponse.worldStateUpdates);
+      }
       
       if (dmResponse.environment) {
         setCurrentEnvironment(dmResponse.environment);
@@ -526,12 +1032,13 @@ Your entire response MUST be a single, valid JSON object.`;
         type: 'dm',
         content: dmResponse.narrative,
         choices: dmResponse.choices,
-        timestamp: new Date()
+        timestamp: new Date(),
+        atmosphere: dmResponse.atmosphere
       };
       
       setMessages([openingMessage]);
       
-      const startedCampaign = { ...campaign, started: true };
+      const startedCampaign = { ...campaign, started: true, status: 'active' };
       setCurrentCampaign(startedCampaign);
       setCampaigns(prev => prev.map(c => c.id === campaign.id ? startedCampaign : c));
       
@@ -552,47 +1059,164 @@ Your entire response MUST be a single, valid JSON object.`;
     setIsAIThinking(false);
   };
 
+  const pauseCampaign = async (campaignId: string) => {
+    const campaign = campaigns.find(c => c.id === campaignId);
+    if (!campaign) return;
+
+    const pausedCampaign = { ...campaign, status: 'paused' };
+    setCampaigns(prev => prev.map(c => c.id === campaignId ? pausedCampaign : c));
+    
+    // If this is the current campaign, update it too
+    if (currentCampaign?.id === campaignId) {
+      setCurrentCampaign(pausedCampaign);
+    }
+
+    // Save to Firebase if multiplayer
+    if (campaign.isMultiplayer) {
+      try {
+        await multiplayerService.updateCampaignState(campaignId, { status: 'paused' });
+      } catch (error) {
+        console.error('Error pausing campaign:', error);
+      }
+    }
+
+    addToast('campaignPaused', { campaign: pausedCampaign });
+  };
+
+  const resumeCampaign = async (campaignId: string) => {
+    try {
+      const campaign = campaigns.find(c => c.id === campaignId);
+      if (!campaign) {
+        console.error('Campaign not found:', campaignId);
+        return;
+      }
+
+      // Load campaign data from Firebase if multiplayer
+      if (campaign.isMultiplayer) {
+        const updatedCampaign = await multiplayerService.getCampaign(campaignId);
+        if (updatedCampaign) {
+          setCurrentCampaign(updatedCampaign);
+          setMessages(updatedCampaign.messages || []);
+          setCurrentEnvironment(updatedCampaign.currentEnvironment || 'default');
+          
+          // Update local campaigns list
+          setCampaigns(prev => prev.map(c => c.id === campaignId ? updatedCampaign : c));
+        }
+      } else {
+        // For single player, just set as current campaign
+        setCurrentCampaign(campaign);
+        setMessages(campaign.messages || []);
+        setCurrentEnvironment(campaign.currentEnvironment || 'default');
+      }
+
+      // Update status to active
+      const resumedCampaign = { ...campaign, status: 'active' };
+      setCampaigns(prev => prev.map(c => c.id === campaignId ? resumedCampaign : c));
+      
+      if (currentCampaign?.id === campaignId) {
+        setCurrentCampaign(resumedCampaign);
+      }
+
+      setCurrentScreen('game');
+      addToast('campaignResumed', { campaign: resumedCampaign });
+    } catch (error) {
+      console.error('Error resuming campaign:', error);
+      addToast('error', { message: 'Failed to resume campaign' });
+    }
+  };
+
   const sendMessage = async () => {
     if (!inputMessage.trim() || isAIThinking) return;
 
     const playerMessage = {
+      id: Date.now(),
       type: 'player',
       content: inputMessage,
       character: character.name,
       playerId: playerId,
-      playerName: playerName
+      playerName: playerName,
+      timestamp: new Date()
     };
 
+    const updatedMessages = [...messages, playerMessage];
+    setMessages(updatedMessages);
+    setInputMessage('');
+    setIsAIThinking(true);
+
+    // Generate enhanced AI prompt with full context
+    const dmPrompt = generateAIPrompt(inputMessage, false);
+
     try {
-      // Send message to multiplayer service
-      if (currentCampaign?.id) {
-        await multiplayerService.sendMessage(currentCampaign.id, playerMessage);
+      // Ensure AI service is available
+      if (!(window as any).claude) {
+        (window as any).claude = {
+          complete: (prompt: string) => aiService.complete(prompt)
+        };
+      }
+
+      const response = await (window as any).claude.complete(dmPrompt);
+      const dmResponse = JSON.parse(response);
+      
+      // Update world state based on AI response
+      if (dmResponse.worldStateUpdates) {
+        updateWorldState(dmResponse.worldStateUpdates);
       }
       
-      setInputMessage('');
-      setIsAIThinking(true);
+      if (dmResponse.environment) {
+        setCurrentEnvironment(dmResponse.environment);
+      }
 
-      // For now, we'll use a simple AI response
-      // In a full implementation, you'd want to coordinate AI responses across all players
-      setTimeout(() => {
-        const dmMessage = {
-          type: 'dm',
-          content: `The dungeon master considers your words carefully. "${inputMessage}" - how will this choice affect your journey?`,
-          choices: ['Continue exploring', 'Ask for more details', 'Take a different approach']
-        };
-        
-        if (currentCampaign?.id) {
-          multiplayerService.sendMessage(currentCampaign.id, dmMessage);
-        }
-        
-        setIsAIThinking(false);
-      }, 2000);
+      // Handle character updates
+      if (dmResponse.characterUpdates) {
+        dmResponse.characterUpdates.forEach((update: any) => {
+          if (update.playerId === playerId) {
+            setCharacter(prev => prev ? {
+              ...prev,
+              experience: prev.experience + (update.xpGain || 0),
+              health: Math.max(1, Math.min(prev.maxHealth, prev.health + (update.statChanges?.health || 0))),
+              mana: Math.max(0, Math.min(prev.maxMana, prev.mana + (update.statChanges?.mana || 0))),
+              inventory: { ...prev.inventory, ...update.newItems }
+            } : null);
+
+            // Update reputation
+            if (update.reputationChanges) {
+              setWorldState(prev => ({
+                ...prev,
+                playerReputation: { ...prev.playerReputation, ...update.reputationChanges }
+              }));
+            }
+          }
+        });
+      }
       
+      const dmMessage = {
+        id: Date.now() + 1,
+        type: 'dm',
+        content: dmResponse.narrative,
+        choices: dmResponse.choices,
+        timestamp: new Date(),
+        atmosphere: dmResponse.atmosphere,
+        worldStateUpdates: dmResponse.worldStateUpdates
+      };
+      
+      setMessages(prev => [...prev, dmMessage]);
+
+      // Handle combat encounters
+      if (dmResponse.combatEncounter) {
+        startCombat(dmResponse.combatEncounter.enemies);
+      }
     } catch (error) {
-      console.error('Error sending message:', error);
-      alert('Failed to send message. Please try again.');
-      setIsAIThinking(false);
+      console.error('Error getting DM response:', error);
+      const fallbackMessage = {
+        id: Date.now() + 1,
+        type: 'dm',
+        content: `The story continues to unfold... (AI temporarily unavailable)`,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, fallbackMessage]);
     }
+    
+    setIsAIThinking(false);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -703,13 +1327,328 @@ Your entire response MUST be a single, valid JSON object.`;
     setCurrentScreen('game');
   };
 
+  // Generate dynamic AI prompt with context
+  const generateAIPrompt = (playerInput: string, isInitialPrompt: boolean = false) => {
+    const characterStats = calculateStats(character);
+    const currentLocation = worldState.currentLocation || 'unknown';
+    const timeOfDay = worldState.timeOfDay;
+    const weather = worldState.weather;
+    
+    // Build context from recent actions
+    const recentActions = aiMemory.playerActions.slice(-5);
+    const recentConsequences = aiMemory.consequences.slice(-3);
+    
+    // Build NPC context
+    const activeNPCs = Object.entries(worldState.npcs)
+      .filter(([_, npc]: [string, any]) => npc.currentLocation === currentLocation)
+      .map(([id, npc]: [string, any]) => `${npc.name} (${npc.role}): ${npc.currentMood}, ${npc.currentAction}`)
+      .join('\n');
+
+    // Build faction context
+    const activeFactions = Object.entries(worldState.factions)
+      .filter(([_, faction]: [string, any]) => faction.influence > 0)
+      .map(([id, faction]: [string, any]) => `${faction.name}: ${faction.currentGoal}, Influence: ${faction.influence}`)
+      .join('\n');
+
+    // Build quest context
+    const activeQuests = worldState.activeQuests
+      .map((quest: any) => `${quest.title}: ${quest.description} (${quest.progress}/${quest.totalSteps})`)
+      .join('\n');
+
+    const basePrompt = `You are an advanced AI Dungeon Master for a ${currentCampaign?.theme || 'fantasy'} campaign. You must create dynamic, responsive, and truly intelligent storytelling.
+
+**CORE PRINCIPLES:**
+- NEVER give generic responses. Every response must be specific to the current situation, character actions, and world state.
+- ALWAYS consider consequences of player actions that ripple through the world.
+- NPCs have personalities, memories, and react to player behavior.
+- The world is alive and changes based on player decisions.
+- Combat should be tactical and meaningful, not just "you hit, they hit back."
+- Environmental factors (weather, time, location) affect everything.
+
+**CURRENT WORLD STATE:**
+- Location: ${currentLocation}
+- Time: ${timeOfDay}
+- Weather: ${weather}
+- Player Level: ${character.level} ${character.class}
+- Player Stats: STR ${characterStats?.strength}, DEX ${characterStats?.dexterity}, INT ${characterStats?.intelligence}, CHA ${characterStats?.charisma}
+
+**ACTIVE NPCS IN AREA:**
+${activeNPCs || 'None currently present'}
+
+**ACTIVE FACTIONS:**
+${activeFactions || 'No major faction activity'}
+
+**ACTIVE QUESTS:**
+${activeQuests || 'No active quests'}
+
+**RECENT PLAYER ACTIONS:**
+${recentActions.map((action: any) => `- ${action.description} (${action.timestamp})`).join('\n') || 'No recent actions'}
+
+**RECENT CONSEQUENCES:**
+${recentConsequences.map((consequence: any) => `- ${consequence.description}`).join('\n') || 'No recent consequences'}
+
+**PLAYER REPUTATION:**
+${Object.entries(worldState.playerReputation).map(([faction, rep]: [string, any]) => `${faction}: ${rep}`).join(', ') || 'No reputation established'}
+
+**CUSTOM CAMPAIGN PROMPT:**
+${currentCampaign?.customPrompt || 'Standard fantasy adventure'}
+
+${isInitialPrompt ? `
+**INITIAL SCENE REQUIREMENTS:**
+- Create a vivid, atmospheric opening that establishes the world and tone
+- Introduce at least one NPC with a clear personality and motivation
+- Present multiple meaningful choices that affect the story direction
+- Include environmental details that make the scene feel alive
+- Set up potential story threads that can be developed later
+` : `
+**RESPONSE REQUIREMENTS:**
+- Analyze the player's action and determine realistic consequences
+- Consider how NPCs would react based on their personalities and current situation
+- Update the world state based on player choices
+- Provide 3-4 meaningful choices that lead to different outcomes
+- Include environmental reactions (weather changes, time passing, etc.)
+- Reference previous actions and their consequences
+- Make combat encounters tactical and challenging
+- Include character development opportunities
+`}
+
+**PLAYER INPUT:** "${playerInput}"
+
+Respond with a JSON object:
+{
+  "narrative": "Detailed, atmospheric description that responds specifically to the player's action",
+  "choices": ["Specific choice 1", "Specific choice 2", "Specific choice 3", "Specific choice 4"],
+  "environment": "${currentLocation}",
+  "worldStateUpdates": {
+    "newLocation": "location_name",
+    "newNPCs": [{"name": "NPC Name", "role": "Role", "personality": "Personality", "currentMood": "Mood", "currentAction": "What they're doing"}],
+    "factionChanges": [{"faction": "Faction Name", "change": "What changed", "reason": "Why"}],
+    "questUpdates": [{"quest": "Quest Name", "progress": "What happened", "newObjective": "New goal"}],
+    "consequences": [{"type": "immediate|long-term", "description": "What happens as a result", "affectedAreas": ["area1", "area2"]}]
+  },
+  "combatEncounter": null,
+  "characterUpdates": [{"playerId": "${playerId}", "xpGain": 0, "xpReason": "Why", "statChanges": {"health": 0, "mana": 0}, "newItems": [], "reputationChanges": {}}],
+  "atmosphere": {
+    "mood": "current_mood",
+    "tension": "low|medium|high",
+    "environmentalDetails": "specific details about the surroundings"
+  }
+}
+
+Your response MUST be a single, valid JSON object. Make it dynamic, specific, and truly responsive to the player's actions.`;
+
+    return basePrompt;
+  };
+
+  // Update world state based on AI response
+  const updateWorldState = (updates: any) => {
+    if (!updates) return;
+
+    setWorldState(prev => {
+      const newState = { ...prev };
+
+      // Update location
+      if (updates.newLocation) {
+        newState.currentLocation = updates.newLocation;
+      }
+
+      // Add new NPCs
+      if (updates.newNPCs) {
+        updates.newNPCs.forEach((npc: any) => {
+          newState.npcs[npc.name] = {
+            ...npc,
+            id: Date.now().toString(),
+            firstEncounter: new Date(),
+            relationship: 'neutral',
+            knownSecrets: [],
+            currentLocation: newState.currentLocation
+          };
+        });
+      }
+
+      // Update factions
+      if (updates.factionChanges) {
+        updates.factionChanges.forEach((change: any) => {
+          if (!newState.factions[change.faction]) {
+            newState.factions[change.faction] = {
+              name: change.faction,
+              influence: 10,
+              goals: [],
+              members: []
+            };
+          }
+          // Apply faction changes
+          if (change.change.includes('influence')) {
+            newState.factions[change.faction].influence += 5;
+          }
+        });
+      }
+
+      // Update quests
+      if (updates.questUpdates) {
+        updates.questUpdates.forEach((update: any) => {
+          const questIndex = newState.activeQuests.findIndex((q: any) => q.title === update.quest);
+          if (questIndex >= 0) {
+            newState.activeQuests[questIndex] = {
+              ...newState.activeQuests[questIndex],
+              progress: update.progress,
+              currentObjective: update.newObjective
+            };
+          }
+        });
+      }
+
+      return newState;
+    });
+
+    // Update AI memory
+    setAiMemory(prev => ({
+      ...prev,
+      playerActions: [...prev.playerActions, {
+        description: `Player action: ${inputMessage}`,
+        timestamp: new Date(),
+        location: worldState.currentLocation
+      }],
+      consequences: [...prev.consequences, ...(updates.consequences || [])]
+    }));
+  };
+
+  // World State Display Component
+  const WorldStateDisplay: React.FC<{ worldState: any, aiMemory: any }> = ({ worldState, aiMemory }) => (
+    <div className="bg-black/30 rounded-lg p-3 mb-4">
+      <h3 className="text-white font-semibold mb-2 flex items-center">
+        <Globe size={16} className="mr-2" />
+        World State
+      </h3>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="text-blue-200">
+          <span className="font-semibold">Location:</span> {worldState.currentLocation || 'Unknown'}
+        </div>
+        <div className="text-blue-200">
+          <span className="font-semibold">Time:</span> {worldState.timeOfDay}
+        </div>
+        <div className="text-blue-200">
+          <span className="font-semibold">Weather:</span> {worldState.weather}
+        </div>
+        <div className="text-blue-200">
+          <span className="font-semibold">Active NPCs:</span> {Object.keys(worldState.npcs).length}
+        </div>
+        <div className="text-blue-200">
+          <span className="font-semibold">Active Quests:</span> {worldState.activeQuests.length}
+        </div>
+        <div className="text-blue-200">
+          <span className="font-semibold">Factions:</span> {Object.keys(worldState.factions).length}
+        </div>
+      </div>
+      
+      {/* Recent Consequences */}
+      {aiMemory.consequences.length > 0 && (
+        <div className="mt-2">
+          <h4 className="text-yellow-400 font-semibold text-xs mb-1">Recent Consequences:</h4>
+          <div className="space-y-1">
+            {aiMemory.consequences.slice(-2).map((consequence: any, index: number) => (
+              <div key={index} className="text-xs text-orange-200 bg-orange-900/20 p-1 rounded">
+                {consequence.description}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // Enhanced Gameplay Component
+  const Gameplay: React.FC<{ 
+    campaign: any, 
+    messages: any[], 
+    inputMessage: string, 
+    setInputMessage: (msg: string) => void, 
+    sendMessage: () => void, 
+    handleKeyPress: (e: React.KeyboardEvent) => void, 
+    isAIThinking: boolean, 
+    messagesEndRef: React.RefObject<HTMLDivElement>,
+    onStartCombat?: (enemies: any[]) => void,
+    worldState?: any,
+    aiMemory?: any,
+    inputRef: React.RefObject<HTMLInputElement>
+  }> = ({ campaign, messages, inputMessage, setInputMessage, sendMessage, handleKeyPress, isAIThinking, messagesEndRef, onStartCombat, worldState, aiMemory, inputRef }) => {
+    
+    return (
+    <div className="text-white p-2 lg:p-4 game-interface">
+      {/* World State Display */}
+      {worldState && aiMemory && (
+        <WorldStateDisplay worldState={worldState} aiMemory={aiMemory} />
+      )}
+      
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 lg:mb-4 space-y-2 sm:space-y-0">
+        <h2 className="text-xl lg:text-2xl font-bold">Gameplay</h2>
+        {onStartCombat && (
+          <button
+            onClick={() => onStartCombat([
+              { name: 'Goblin Warrior', health: 25, strength: 12, dexterity: 10, armorClass: 12 },
+              { name: 'Goblin Archer', health: 20, strength: 10, dexterity: 14, armorClass: 13 }
+            ])}
+            className="px-3 lg:px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all flex items-center space-x-2 text-sm lg:text-base"
+          >
+            <Sword size={16} />
+            <span>Start Combat Test</span>
+          </button>
+        )}
+      </div>
+      
+      <div className="space-y-3 lg:space-y-4">
+        {messages.map((msg, index) => (
+          <div key={index} className={`bg-black/20 p-3 lg:p-4 rounded text-sm lg:text-base ${
+            msg.atmosphere?.mood === 'tense' ? 'border-l-4 border-red-500' :
+            msg.atmosphere?.mood === 'mysterious' ? 'border-l-4 border-purple-500' :
+            msg.atmosphere?.mood === 'peaceful' ? 'border-l-4 border-green-500' : ''
+          }`}>
+          {msg.content}
+          
+          {/* Atmosphere indicator */}
+          {msg.atmosphere && (
+            <div className="mt-2 text-xs text-gray-400">
+              <span className="font-semibold">Mood:</span> {msg.atmosphere.mood} | 
+              <span className="font-semibold ml-2">Tension:</span> {msg.atmosphere.tension}
+            </div>
+          )}
+        </div>
+      ))}
+        
+        {isAIThinking && (
+          <div className="text-blue-200 text-sm lg:text-base flex items-center space-x-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+            <span>AI Dungeon Master is crafting your story...</span>
+          </div>
+        )}
+        
+        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="What do you do? (Be specific and creative!)"
+            className="flex-1 px-3 py-2 bg-black/20 rounded text-white text-sm lg:text-base"
+          />
+          <button 
+            onClick={sendMessage} 
+            className="px-4 py-2 bg-blue-600 rounded text-sm lg:text-base hover:bg-blue-700 transition-all"
+          >
+            Send
+          </button>
+        </div>
+      </div>
+      <div ref={messagesEndRef} />
+    </div>
+  );
+  };
+
   // Welcome Screen
   if (currentScreen === 'welcome') {
     return (
       <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} flex items-center justify-center p-4 transition-all duration-1000`}>
-        <div className="absolute top-4 right-4 z-50">
-          <UserProfile />
-        </div>
         <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 max-w-md w-full border border-white/20">
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold text-white mb-2">⚔️ AI Dungeon Master</h1>
@@ -730,51 +1669,178 @@ Your entire response MUST be a single, valid JSON object.`;
             </div>
           </div>
           
-          <div className="space-y-4">
-            <input
-              type="text"
-              placeholder="Enter your name"
-              value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400"
-            />
-            
-            <button
-              onClick={() => playerName.trim() && setCurrentScreen('character')}
-              disabled={!playerName.trim()}
-              className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              Begin Adventure
-            </button>
-
+          {isLoading ? (
             <div className="text-center">
-              <p className="text-blue-200 text-sm mb-3">Or join an existing campaign:</p>
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  placeholder="Campaign Code"
-                  value={joinCode}
-                  onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                  className="flex-1 px-3 py-2 rounded-lg bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 text-center"
-                />
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
+              <p className="text-blue-200">Loading...</p>
+            </div>
+          ) : isAuthenticated ? (
+            <div className="space-y-4">
+              <div className="text-center mb-4">
+                <p className="text-white">Welcome back, {currentUser?.displayName}!</p>
                 <button
-                  onClick={() => {
-                    if (playerName.trim() && joinCode.trim()) {
-                      if (!character) {
-                        setCurrentScreen('character');
-                      } else {
-                        // Join campaign logic would go here
-                        alert('Join campaign feature coming soon!');
-                      }
-                    }
-                  }}
-                  disabled={!playerName.trim() || !joinCode.trim()}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-all"
+                  onClick={() => setCurrentScreen('character-select')}
+                  className="w-full px-6 py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all"
                 >
-                  Join
+                  Continue Adventure
                 </button>
               </div>
+              <button
+                onClick={signOut}
+                className="w-full px-6 py-3 bg-white/20 text-white rounded-xl hover:bg-white/30 transition-all"
+              >
+                Sign Out
+              </button>
             </div>
+          ) : (
+            <div className="space-y-4">
+              <button
+                onClick={signInWithGoogle}
+                disabled={isLoading}
+                className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center space-x-2"
+              >
+                <User size={20} />
+                <span>Sign in with Google</span>
+              </button>
+              
+              <div className="text-center">
+                <p className="text-blue-200 text-sm mb-3">Or join an existing campaign:</p>
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    placeholder="Campaign Code"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                    className="flex-1 px-3 py-2 rounded-lg bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 text-center"
+                  />
+                  <button
+                    onClick={() => {
+                      if (joinCode.trim()) {
+                        addToast('info', { message: 'Please sign in first to join a campaign' });
+                      }
+                    }}
+                    disabled={!joinCode.trim()}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-all"
+                  >
+                    Join
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Character Selection Screen
+  if (currentScreen === 'character-select') {
+    return (
+      <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} p-4 transition-all duration-1000`}>
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h2 className="text-3xl font-bold text-white">Choose Your Character</h2>
+                <p className="text-blue-200">Welcome back, {currentUser?.displayName}!</p>
+              </div>
+              <button
+                onClick={signOut}
+                className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
+              >
+                Sign Out
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+              {userCharacters.map((char) => (
+                <div
+                  key={char.id}
+                  onClick={() => loadCharacter(char.id!)}
+                  className="bg-white/10 rounded-xl p-6 border border-white/20 hover:border-blue-400 hover:bg-white/20 cursor-pointer transition-all"
+                >
+                  <div className="text-center">
+                    <div className="text-4xl mb-3">{char.class === 'Warrior' ? '⚔️' : char.class === 'Rogue' ? '🗡️' : char.class === 'Mage' ? '🔮' : char.class === 'Cleric' ? '⚡' : char.class === 'Ranger' ? '🏹' : '🎵'}</div>
+                    <h3 className="text-xl font-bold text-white mb-2">{char.name}</h3>
+                    <p className="text-blue-200 mb-3">Level {char.level} {char.class}</p>
+                    <div className="grid grid-cols-2 gap-2 text-sm text-blue-200">
+                      <div>HP: {char.health}/{char.maxHealth}</div>
+                      <div>XP: {char.experience}</div>
+                      <div>Gold: {char.gold}</div>
+                      <div>Play Time: {Math.floor(char.totalPlayTime / 60000)}m</div>
+                    </div>
+                    <div className="mt-3 text-xs text-green-400">
+                      Last played: {new Date(char.lastPlayed).toLocaleDateString()}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              
+              {/* Create New Character Card */}
+              <div
+                onClick={() => setCurrentScreen('character')}
+                className="bg-gradient-to-br from-green-500/20 to-blue-500/20 rounded-xl p-6 border-2 border-dashed border-white/30 hover:border-white/50 hover:from-green-500/30 hover:to-blue-500/30 cursor-pointer transition-all"
+              >
+                <div className="text-center">
+                  <div className="text-4xl mb-3">✨</div>
+                  <h3 className="text-xl font-bold text-white mb-2">Create New Character</h3>
+                  <p className="text-blue-200">Start a new adventure with a fresh hero</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="text-center">
+              <button
+                onClick={() => setCurrentScreen('lobby')}
+                className="px-6 py-3 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
+              >
+                ← Back to Welcome
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Character Creation Screen
+  if (currentScreen === 'character') {
+    if (!isAuthenticated) {
+      return (
+        <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} flex items-center justify-center p-4 transition-all duration-1000`}>
+          <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 max-w-md w-full border border-white/20 text-center">
+            <h2 className="text-2xl font-bold text-white mb-4">Authentication Required</h2>
+            <p className="text-blue-200 mb-6">Please sign in to create a character</p>
+            <button
+              onClick={signInWithGoogle}
+              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all"
+            >
+              Sign in with Google
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} p-4 transition-all duration-1000`}>
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-bold text-white">Create Your Hero</h2>
+              <button
+                onClick={() => setCurrentScreen('character-select')}
+                className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
+              >
+                ← Back to Characters
+              </button>
+            </div>
+            <CharacterCreation 
+              playerName={currentUser?.displayName || ''}
+              classes={classes}
+              onCreateCharacter={createCharacter}
+              joinCode={joinCode}
+            />
           </div>
         </div>
       </div>
@@ -784,6 +1850,39 @@ Your entire response MUST be a single, valid JSON object.`;
   // Main App Layout (for all other screens)
   return (
     <div className="h-screen flex bg-gradient-to-br from-blue-950 via-indigo-950 to-purple-950">
+      {/* Success Feedback */}
+      {successFeedback && (
+        <SuccessFeedback
+          message={successFeedback.message}
+          icon={successFeedback.icon}
+          duration={successFeedback.duration}
+          onClose={() => setSuccessFeedback(null)}
+        />
+      )}
+      
+      {/* Toast Notifications */}
+      <ToastNotifications
+        messages={toastMessages}
+        onDismiss={dismissToast}
+      />
+
+      {/* Welcome Overlay */}
+      {showWelcomeOverlay && (
+        <WelcomeOverlay
+          character={character}
+          onStart={() => {
+            setShowWelcomeOverlay(false);
+            setCurrentScreen('lobby');
+            addToast('welcomeBack');
+          }}
+          onDismiss={() => {
+            setShowWelcomeOverlay(false);
+            setCurrentScreen('lobby');
+            addToast('ftueSkipped');
+          }}
+        />
+      )}
+
       {/* Desktop Side NavBar */}
       <NavBar 
         active={activeNav} 
@@ -799,13 +1898,48 @@ Your entire response MUST be a single, valid JSON object.`;
           isMobile={isMobile}
           onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
           currentScreen={currentScreen}
+          onHelpClick={() => setShowHelp(true)}
         />
         {/* Main Content - Only render the active screen */}
         <div className="flex-1 flex pb-16 lg:pb-0">
-          <div className="flex-1">
+          <div className="flex-1 px-4 lg:px-6">
+            {currentScreen === 'dashboard' && (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center">
+                  <h2 className="text-3xl font-bold text-white mb-4">Dashboard</h2>
+                  <p className="text-blue-200 mb-6">Welcome to MythSeeker RPG!</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl">
+                    <button
+                      onClick={() => handleNavChange('campaigns')}
+                      className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
+                    >
+                      <Book size={32} className="text-blue-400 mx-auto mb-2" />
+                      <h3 className="text-white font-semibold">Campaigns</h3>
+                      <p className="text-blue-200 text-sm">Create or join campaigns</p>
+                    </button>
+                    <button
+                      onClick={() => handleNavChange('characters')}
+                      className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
+                    >
+                      <User size={32} className="text-green-400 mx-auto mb-2" />
+                      <h3 className="text-white font-semibold">Characters</h3>
+                      <p className="text-blue-200 text-sm">Manage your characters</p>
+                    </button>
+                    <button
+                      onClick={() => handleNavChange('party')}
+                      className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
+                    >
+                      <Users size={32} className="text-purple-400 mx-auto mb-2" />
+                      <h3 className="text-white font-semibold">Party</h3>
+                      <p className="text-blue-200 text-sm">View party members</p>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             {currentScreen === 'character' && (
               <CharacterCreation 
-                playerName={playerName}
+                playerName={currentUser?.displayName || ''}
                 classes={classes}
                 onCreateCharacter={createCharacter}
                 joinCode={joinCode}
@@ -817,6 +1951,10 @@ Your entire response MUST be a single, valid JSON object.`;
                 campaignThemes={campaignThemes}
                 onCreateCampaign={createCampaign}
                 character={character}
+                onDeleteCampaign={deleteCampaign}
+                onJoinCampaign={joinCampaign}
+                onResumeCampaign={resumeCampaign}
+                onPauseCampaign={pauseCampaign}
               />
             )}
             {currentScreen === 'waiting' && (
@@ -827,7 +1965,7 @@ Your entire response MUST be a single, valid JSON object.`;
               />
             )}
             {currentScreen === 'game' && (
-              <GameInterface
+              <Gameplay
                 campaign={currentCampaign}
                 messages={messages}
                 inputMessage={inputMessage}
@@ -838,9 +1976,41 @@ Your entire response MUST be a single, valid JSON object.`;
                 messagesEndRef={messagesEndRef}
                 onStartCombat={startCombat}
                 worldState={worldState}
-                character={character}
-                // Remove tab logic from here
+                aiMemory={aiMemory}
+                inputRef={gameInputRef}
               />
+            )}
+            {currentScreen === 'party' && (
+              <div className="h-full p-6">
+                <h2 className="text-2xl font-bold text-white mb-6">Party Management</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {partyState.players.map((player) => (
+                    <div key={player.id} className="bg-white/10 rounded-lg p-4 border border-white/20">
+                      <h3 className="text-white font-semibold">{player.character?.name || player.name}</h3>
+                      <p className="text-blue-200 text-sm">{player.character?.class || 'Unknown Class'}</p>
+                      <p className="text-green-400 text-xs">Level {player.character?.level || 1}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {currentScreen === 'world' && (
+              <div className="h-full p-6">
+                <h2 className="text-2xl font-bold text-white mb-6">World Map & Exploration</h2>
+                <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+                  <p className="text-blue-200 mb-4">Interactive world map coming soon!</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-black/20 rounded-lg p-4">
+                      <h3 className="text-white font-semibold mb-2">Current Location</h3>
+                      <p className="text-blue-200">{worldState?.currentLocation || 'Unknown'}</p>
+                    </div>
+                    <div className="bg-black/20 rounded-lg p-4">
+                      <h3 className="text-white font-semibold mb-2">Discovered Areas</h3>
+                      <p className="text-blue-200">0 locations explored</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
             {currentScreen === 'combat' && combatState && (
               <CombatSystem
@@ -852,6 +2022,33 @@ Your entire response MUST be a single, valid JSON object.`;
                 onEndCombat={endCombat}
                 isPlayerTurn={combatService.isPlayerTurn()}
               />
+            )}
+            {currentScreen === 'magic' && (
+              <div className="h-full p-6">
+                <h2 className="text-2xl font-bold text-white mb-6">Magic & Spells</h2>
+                <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+                  <p className="text-blue-200 mb-4">Spell system coming soon!</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-black/20 rounded-lg p-4">
+                      <h3 className="text-white font-semibold mb-2">Known Spells</h3>
+                      <p className="text-blue-200">No spells learned yet</p>
+                    </div>
+                    <div className="bg-black/20 rounded-lg p-4">
+                      <h3 className="text-white font-semibold mb-2">Spell Slots</h3>
+                      <p className="text-blue-200">0 slots available</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Default case - show dashboard if no screen matches */}
+            {!['dashboard', 'character', 'lobby', 'waiting', 'game', 'party', 'world', 'combat', 'magic'].includes(currentScreen) && (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center">
+                  <h2 className="text-3xl font-bold text-white mb-4">Welcome to MythSeeker</h2>
+                  <p className="text-blue-200">Use the navigation to get started!</p>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -893,6 +2090,11 @@ Your entire response MUST be a single, valid JSON object.`;
         isMobile={true}
         onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
       />
+      {/* Simple Help Overlay */}
+      <SimpleHelp 
+        isOpen={showHelp} 
+        onClose={() => setShowHelp(false)} 
+      />
     </div>
   );
 };
@@ -918,12 +2120,13 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }:
   const previewClass = hoveredClass || selectedClass;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-8">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-8 character-creation">
       <div className="space-y-4 lg:space-y-6">
         <div>
           <label className="block text-white font-semibold mb-2 lg:mb-3 text-sm lg:text-base">Character Name</label>
           <input
             type="text"
+            placeholder="Character Name"
             value={characterName}
             onChange={(e) => setCharacterName(e.target.value)}
             className="w-full px-3 lg:px-4 py-2 lg:py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 text-sm lg:text-base"
@@ -932,16 +2135,16 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }:
 
         <div>
           <label className="block text-white font-semibold mb-2 lg:mb-3 text-sm lg:text-base">Choose Your Class</label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4 class-grid">
             {classes.map((cls) => (
               <div
                 key={cls.name}
                 onClick={() => setSelectedClass(cls)}
                 onMouseEnter={() => setHoveredClass(cls)}
                 onMouseLeave={() => setHoveredClass(null)}
-                className={`p-3 lg:p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                className={`class-card p-3 lg:p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
                   selectedClass?.name === cls.name
-                    ? 'border-green-400 bg-green-500/30 shadow-lg scale-105'
+                    ? 'border-green-400 bg-green-500/30 shadow-lg scale-105 selected'
                     : hoveredClass?.name === cls.name
                     ? 'border-blue-400 bg-blue-500/20 shadow-md scale-102'
                     : 'border-white/30 bg-white/10 hover:border-white/50 hover:scale-102'
@@ -1129,11 +2332,22 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }:
 };
 
 // Campaign Lobby Component
-const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character }: { campaigns: any[], campaignThemes: any[], onCreateCampaign: (theme: any, customPrompt: string, isMultiplayer: boolean) => void, character: any }) => {
+const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character, onDeleteCampaign, onJoinCampaign, onResumeCampaign, onPauseCampaign }: { 
+  campaigns: any[], 
+  campaignThemes: any[], 
+  onCreateCampaign: (theme: any, customPrompt: string, isMultiplayer: boolean) => void, 
+  character: any,
+  onDeleteCampaign?: (campaignId: string) => void,
+  onJoinCampaign?: (campaignCode: string) => void,
+  onResumeCampaign?: (campaignId: string) => void,
+  onPauseCampaign?: (campaignId: string) => void
+}) => {
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<any>(null);
   const [customPrompt, setCustomPrompt] = useState('');
   const [isMultiplayer, setIsMultiplayer] = useState(true);
+  const [joinCode, setJoinCode] = useState('');
+  const [showJoinCampaign, setShowJoinCampaign] = useState(false);
 
   const handleCreateCampaign = () => {
     if (selectedTheme) {
@@ -1142,6 +2356,53 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character 
       setSelectedTheme(null);
       setCustomPrompt('');
     }
+  };
+
+  const handleJoinCampaign = () => {
+    if (joinCode.trim() && onJoinCampaign) {
+      onJoinCampaign(joinCode.trim());
+      setJoinCode('');
+      setShowJoinCampaign(false);
+    }
+  };
+
+  const handleDeleteCampaign = (campaignId: string) => {
+    if (window.confirm('Are you sure you want to delete this campaign? This action cannot be undone.')) {
+      onDeleteCampaign?.(campaignId);
+    }
+  };
+
+  const handleResumeCampaign = (campaignId: string) => {
+    if (onResumeCampaign) {
+      onResumeCampaign(campaignId);
+    }
+  };
+
+  const handlePauseCampaign = (campaignId: string) => {
+    if (onPauseCampaign) {
+      onPauseCampaign(campaignId);
+    }
+  };
+
+  const getCampaignStatusIcon = (campaign: any) => {
+    if (!campaign.started) return '⏸️'; // Not started
+    if (campaign.status === 'active') return '▶️'; // Active
+    if (campaign.status === 'paused') return '⏸️'; // Paused
+    return '⏸️'; // Default
+  };
+
+  const getCampaignStatusText = (campaign: any) => {
+    if (!campaign.started) return 'Not Started';
+    if (campaign.status === 'active') return 'In Progress';
+    if (campaign.status === 'paused') return 'Paused';
+    return 'Unknown';
+  };
+
+  const getCampaignStatusColor = (campaign: any) => {
+    if (!campaign.started) return 'text-gray-400';
+    if (campaign.status === 'active') return 'text-green-400';
+    if (campaign.status === 'paused') return 'text-yellow-400';
+    return 'text-gray-400';
   };
 
   if (showCreateCampaign) {
@@ -1157,7 +2418,7 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character 
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4 theme-grid">
           {campaignThemes.map((theme) => (
             <div
               key={theme.name}
@@ -1213,14 +2474,58 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character 
     );
   }
 
+  if (showJoinCampaign) {
+    return (
+      <div className="space-y-4 lg:space-y-6">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xl lg:text-2xl font-bold text-white">Join Campaign</h3>
+          <button
+            onClick={() => setShowJoinCampaign(false)}
+            className="px-3 lg:px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all text-sm lg:text-base"
+          >
+            ← Back
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-white font-semibold mb-2 text-sm lg:text-base">Campaign Code</label>
+            <input
+              type="text"
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+              placeholder="Enter 6-character campaign code"
+              className="w-full px-3 lg:px-4 py-2 lg:py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 text-center text-lg font-mono"
+              maxLength={6}
+            />
+          </div>
+
+          <button
+            onClick={handleJoinCampaign}
+            disabled={!joinCode.trim() || joinCode.length !== 6}
+            className="w-full px-4 lg:px-6 py-2 lg:py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm lg:text-base"
+          >
+            Join Campaign
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-4 lg:space-y-6">
-      <div className="text-center">
+    <div className="space-y-4 lg:space-y-6 campaign-lobby">
+      <div className="flex flex-col sm:flex-row gap-3 lg:gap-4">
         <button
           onClick={() => setShowCreateCampaign(true)}
-          className="px-6 lg:px-8 py-3 lg:py-4 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all text-base lg:text-lg"
+          className="flex-1 px-6 lg:px-8 py-3 lg:py-4 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all text-base lg:text-lg"
         >
           + Create New Campaign
+        </button>
+        <button
+          onClick={() => setShowJoinCampaign(true)}
+          className="flex-1 px-6 lg:px-8 py-3 lg:py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all text-base lg:text-lg"
+        >
+          Join Campaign
         </button>
       </div>
 
@@ -1230,73 +2535,86 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4">
             {campaigns.map((campaign) => (
               <div key={campaign.id} className="bg-white/10 rounded-xl p-3 lg:p-4 border border-white/20">
-                <h4 className="text-white font-semibold text-sm lg:text-base">{campaign.theme}</h4>
-                <p className="text-blue-200 text-xs lg:text-sm">
-                  {campaign.players.length} player{campaign.players.length !== 1 ? 's' : ''}
-                  {campaign.started ? ' • In Progress' : ' • Waiting'}
-                </p>
-                {!campaign.started && campaign.isMultiplayer && (
-                  <p className="text-yellow-400 text-xs lg:text-sm">Code: {campaign.code}</p>
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <span className="text-lg">{getCampaignStatusIcon(campaign)}</span>
+                      <h4 className="text-white font-semibold text-sm lg:text-base">{campaign.theme}</h4>
+                    </div>
+                    <p className={`text-xs lg:text-sm ${getCampaignStatusColor(campaign)}`}>
+                      {getCampaignStatusText(campaign)} • {(campaign.players?.length || 0)} player{(campaign.players?.length || 0) !== 1 ? 's' : ''}
+                    </p>
+                    {!campaign.started && campaign.isMultiplayer && (
+                      <p className="text-yellow-400 text-xs lg:text-sm">Code: {campaign.code}</p>
+                    )}
+                  </div>
+                  <div className="flex space-x-1">
+                    {/* Play/Resume Button */}
+                    {(!campaign.started || campaign.status === 'paused') && (
+                      <button
+                        onClick={() => handleResumeCampaign(campaign.id)}
+                        className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-all"
+                        title={!campaign.started ? "Start Campaign" : "Resume Campaign"}
+                      >
+                        ▶
+                      </button>
+                    )}
+                    
+                    {/* Pause Button */}
+                    {campaign.started && campaign.status === 'active' && (
+                      <button
+                        onClick={() => handlePauseCampaign(campaign.id)}
+                        className="px-2 py-1 bg-yellow-600 text-white rounded text-xs hover:bg-yellow-700 transition-all"
+                        title="Pause Campaign"
+                      >
+                        ⏸
+                      </button>
+                    )}
+                    
+                    {/* Delete Button */}
+                    {onDeleteCampaign && (
+                      <button
+                        onClick={() => handleDeleteCampaign(campaign.id)}
+                        className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition-all"
+                        title="Delete Campaign"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Campaign progress indicator */}
+                {campaign.started && (
+                  <div className="mt-2">
+                    <div className="flex justify-between text-xs text-white mb-1">
+                      <span>Progress</span>
+                      <span>{campaign.messages?.length || 0} messages</span>
+                    </div>
+                    <div className="w-full bg-white/20 rounded-full h-1">
+                      <div 
+                        className="bg-blue-500 h-1 rounded-full transition-all"
+                        style={{ width: `${Math.min((campaign.messages?.length || 0) * 2, 100)}%` }}
+                      />
+                    </div>
+                  </div>
                 )}
               </div>
             ))}
           </div>
         </div>
       )}
+
+      {campaigns.length === 0 && (
+        <div className="text-center py-8">
+          <div className="text-6xl mb-4 opacity-50">🏰</div>
+          <p className="text-blue-200 text-lg">No campaigns yet</p>
+          <p className="text-blue-300 text-sm mt-2">Create your first campaign or join an existing one to begin your adventure!</p>
+        </div>
+      )}
     </div>
   );
 };
-
-// Game Interface Component
-const Gameplay: React.FC<{ 
-  campaign: any, 
-  messages: any[], 
-  inputMessage: string, 
-  setInputMessage: (msg: string) => void, 
-  sendMessage: () => void, 
-  handleKeyPress: (e: React.KeyboardEvent) => void, 
-  isAIThinking: boolean, 
-  messagesEndRef: React.RefObject<HTMLDivElement>,
-  onStartCombat?: (enemies: any[]) => void
-}> = ({ campaign, messages, inputMessage, setInputMessage, sendMessage, handleKeyPress, isAIThinking, messagesEndRef, onStartCombat }) => (
-  <div className="text-white p-2 lg:p-4">
-    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 lg:mb-4 space-y-2 sm:space-y-0">
-      <h2 className="text-xl lg:text-2xl font-bold">Gameplay</h2>
-      {onStartCombat && (
-        <button
-          onClick={() => onStartCombat([
-            { name: 'Goblin Warrior', health: 25, strength: 12, dexterity: 10, armorClass: 12 },
-            { name: 'Goblin Archer', health: 20, strength: 10, dexterity: 14, armorClass: 13 }
-          ])}
-          className="px-3 lg:px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all flex items-center space-x-2 text-sm lg:text-base"
-        >
-          <Sword size={16} />
-          <span>Start Combat Test</span>
-        </button>
-      )}
-    </div>
-    <div className="space-y-3 lg:space-y-4">
-      {messages.map((msg, index) => (
-        <div key={index} className="bg-black/20 p-3 lg:p-4 rounded text-sm lg:text-base">
-          {msg.content}
-        </div>
-      ))}
-      {isAIThinking && <div className="text-blue-200 text-sm lg:text-base">AI is thinking...</div>}
-      <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-        <input
-          type="text"
-          value={inputMessage}
-          onChange={(e) => setInputMessage(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder="What do you do?"
-          className="flex-1 px-3 py-2 bg-black/20 rounded text-white text-sm lg:text-base"
-        />
-        <button onClick={sendMessage} className="px-4 py-2 bg-blue-600 rounded text-sm lg:text-base hover:bg-blue-700 transition-all">Send</button>
-      </div>
-    </div>
-    <div ref={messagesEndRef} />
-  </div>
-);
 
 
 

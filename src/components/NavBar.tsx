@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Book, Users, Map, Settings, User, Sword, Sparkles, Menu } from 'lucide-react';
+import { Home, Book, Users, Map, User, Sword, Sparkles, Menu } from 'lucide-react';
 
 const navItems = [
   { label: 'Dashboard', icon: <Home size={22} />, key: 'dashboard', description: 'Overview and quick actions' },
@@ -9,7 +9,6 @@ const navItems = [
   { label: 'World', icon: <Map size={22} />, key: 'world', description: 'World map and exploration' },
   { label: 'Combat', icon: <Sword size={22} />, key: 'combat', description: 'Combat system and tactics' },
   { label: 'Magic', icon: <Sparkles size={22} />, key: 'magic', description: 'Spells and magical abilities' },
-  { label: 'Settings', icon: <Settings size={22} />, key: 'settings', description: 'Game and account settings' },
 ];
 
 const NavBar: React.FC<{ 

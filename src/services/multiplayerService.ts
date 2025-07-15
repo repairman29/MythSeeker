@@ -12,7 +12,9 @@ import {
   orderBy,
   limit,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  getDocs,
+  deleteDoc
 } from 'firebase/firestore';
 import { 
   getAuth, 
@@ -22,19 +24,45 @@ import {
 
 
 
-// Firebase config
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+// Firebase config with error handling
+const getFirebaseConfig = () => {
+  const config = {
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID
+  };
+
+  // Check if all required config values are present
+  const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'appId'];
+  const missingKeys = requiredKeys.filter(key => !config[key as keyof typeof config]);
+
+  if (missingKeys.length > 0) {
+    console.warn('Firebase configuration missing:', missingKeys);
+    console.warn('Multiplayer features will be disabled. Please check your environment variables.');
+    return null;
+  }
+
+  return config;
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
+const firebaseConfig = getFirebaseConfig();
+let app: any = null;
+let db: any = null;
+let auth: any = null;
+
+// Only initialize Firebase if config is available
+if (firebaseConfig) {
+  try {
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    auth = getAuth(app);
+  } catch (error) {
+    console.error('Failed to initialize Firebase:', error);
+  }
+}
 
 // Types
 export interface Player {
@@ -93,12 +121,20 @@ class MultiplayerService {
   private currentUser: FirebaseUser | null = null;
   private currentCampaignId: string | null = null;
   private listeners: Map<string, (data: any) => void> = new Map();
+  private isFirebaseAvailable: boolean;
 
   constructor() {
-    this.initializeAuth();
+    this.isFirebaseAvailable = !!(app && db && auth);
+    if (this.isFirebaseAvailable) {
+      this.initializeAuth();
+    } else {
+      console.warn('MultiplayerService: Firebase not available, using demo mode');
+    }
   }
 
   private initializeAuth() {
+    if (!auth) return;
+    
     onAuthStateChanged(auth, (user) => {
       this.currentUser = user;
       if (user) {
@@ -112,7 +148,15 @@ class MultiplayerService {
 
   // Campaign Management
   async createCampaign(campaignData: Omit<MultiplayerGame, 'id' | 'createdAt' | 'lastActivity'>): Promise<string> {
+    if (!this.isFirebaseAvailable) {
+      // Fallback: create a demo campaign ID
+      const demoId = 'demo-' + Date.now();
+      console.log('Creating demo campaign:', demoId);
+      return demoId;
+    }
+
     if (!this.currentUser) throw new Error('User not authenticated');
+    if (!db) throw new Error('Firebase not initialized');
 
     const campaignRef = doc(collection(db, 'campaigns'));
     const campaign: MultiplayerGame = {
@@ -162,8 +206,19 @@ class MultiplayerService {
 
   // Real-time Campaign Subscription
   subscribeToCampaign(campaignId: string, callback: (campaign: MultiplayerGame) => void): () => void {
+    if (!this.isFirebaseAvailable) {
+      // Fallback: return a no-op unsubscribe function
+      console.log('Firebase not available, skipping campaign subscription');
+      return () => {};
+    }
+
     if (this.currentCampaignId === campaignId) {
       return () => {}; // Already subscribed
+    }
+
+    if (!db) {
+      console.error('Firebase not initialized');
+      return () => {};
     }
 
     this.currentCampaignId = campaignId;
@@ -184,7 +239,14 @@ class MultiplayerService {
 
   // Send message to campaign
   async sendMessage(campaignId: string, messageData: Omit<GameMessage, 'id' | 'timestamp' | 'campaignId'>): Promise<void> {
+    if (!this.isFirebaseAvailable) {
+      // Fallback: just log the message
+      console.log('Demo mode - message would be sent:', messageData);
+      return;
+    }
+
     if (!this.currentUser) throw new Error('User not authenticated');
+    if (!db) throw new Error('Firebase not initialized');
 
     const message: GameMessage = {
       ...messageData,
@@ -291,17 +353,111 @@ class MultiplayerService {
 
   // Utility Methods
   isHost(campaign: MultiplayerGame): boolean {
-    if (!this.currentUser) return false;
+    if (!this.currentUser || !campaign.players || !Array.isArray(campaign.players)) return false;
     return campaign.players.find(p => p.id === this.currentUser?.uid)?.isHost || false;
   }
 
   getCurrentPlayer(campaign: MultiplayerGame): Player | undefined {
-    if (!this.currentUser) return undefined;
+    if (!this.currentUser || !campaign.players || !Array.isArray(campaign.players)) return undefined;
     return campaign.players.find(p => p.id === this.currentUser?.uid);
   }
 
   getOnlinePlayers(campaign: MultiplayerGame): Player[] {
+    if (!campaign.players || !Array.isArray(campaign.players)) return [];
     return campaign.players.filter(p => p.isOnline);
+  }
+
+  // Campaign Management
+  async getUserCampaigns(): Promise<MultiplayerGame[]> {
+    if (!this.isFirebaseAvailable || !this.currentUser) {
+      return [];
+    }
+
+    if (!db) {
+      console.error('Firebase not initialized');
+      return [];
+    }
+
+    try {
+      const campaignsRef = collection(db, 'campaigns');
+      const q = query(
+        campaignsRef,
+        where('players', 'array-contains', { id: this.currentUser.uid })
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const campaigns: MultiplayerGame[] = [];
+      
+      querySnapshot.forEach((doc) => {
+        campaigns.push({ id: doc.id, ...doc.data() } as MultiplayerGame);
+      });
+      
+      return campaigns;
+    } catch (error) {
+      console.error('Error getting user campaigns:', error);
+      return [];
+    }
+  }
+
+  async getCampaign(campaignId: string): Promise<MultiplayerGame | null> {
+    if (!this.isFirebaseAvailable) {
+      return null;
+    }
+
+    if (!db) {
+      console.error('Firebase not initialized');
+      return null;
+    }
+
+    try {
+      const campaignRef = doc(db, 'campaigns', campaignId);
+      const campaignDoc = await getDoc(campaignRef);
+      
+      if (campaignDoc.exists()) {
+        return { id: campaignDoc.id, ...campaignDoc.data() } as MultiplayerGame;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error getting campaign:', error);
+      return null;
+    }
+  }
+
+  async deleteCampaign(campaignId: string): Promise<void> {
+    if (!this.isFirebaseAvailable) {
+      console.warn('Firebase not available, skipping Firebase deletion');
+      return; // Don't throw error, just skip Firebase deletion
+    }
+
+    if (!this.currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    if (!db) {
+      console.warn('Firebase not initialized, skipping Firebase deletion');
+      return; // Don't throw error, just skip Firebase deletion
+    }
+
+    try {
+      // Check if user is host of the campaign
+      const campaign = await this.getCampaign(campaignId);
+      if (!campaign) {
+        console.warn('Campaign not found in Firebase, may have been deleted already');
+        return; // Don't throw error if campaign doesn't exist
+      }
+      
+      if (!this.isHost(campaign)) {
+        throw new Error('Only the campaign host can delete the campaign');
+      }
+
+      const campaignRef = doc(db, 'campaigns', campaignId);
+      await deleteDoc(campaignRef);
+      console.log('Campaign deleted from Firebase:', campaignId);
+    } catch (error) {
+      console.error('Error deleting campaign from Firebase:', error);
+      throw error;
+    }
   }
 
   // Cleanup
@@ -314,6 +470,12 @@ class MultiplayerService {
 
   // Heartbeat to keep players online
   startHeartbeat(campaignId: string): () => void {
+    if (!this.isFirebaseAvailable) {
+      // Fallback: return a no-op cleanup function
+      console.log('Firebase not available, skipping heartbeat');
+      return () => {};
+    }
+
     const interval = setInterval(async () => {
       try {
         await this.updatePlayerStatus(campaignId, 'in-game');
