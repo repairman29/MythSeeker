@@ -22,47 +22,10 @@ import {
   User as FirebaseUser 
 } from 'firebase/auth';
 
+// Import Firebase services from existing configuration
+import { auth, db } from '../firebaseService';
 
-
-// Firebase config with error handling
-const getFirebaseConfig = () => {
-  const config = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID
-  };
-
-  // Check if all required config values are present
-  const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'appId'];
-  const missingKeys = requiredKeys.filter(key => !config[key as keyof typeof config]);
-
-  if (missingKeys.length > 0) {
-    console.warn('Firebase configuration missing:', missingKeys);
-    console.warn('Multiplayer features will be disabled. Please check your environment variables.');
-    return null;
-  }
-
-  return config;
-};
-
-const firebaseConfig = getFirebaseConfig();
-let app: any = null;
-let db: any = null;
-let auth: any = null;
-
-// Only initialize Firebase if config is available
-if (firebaseConfig) {
-  try {
-    app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
-    auth = getAuth(app);
-  } catch (error) {
-    console.error('Failed to initialize Firebase:', error);
-  }
-}
+// Firebase is already initialized in firebaseService.ts
 
 // Types
 export interface Player {
@@ -98,6 +61,7 @@ export interface MultiplayerGame {
   messages: GameMessage[];
   systemMessages: any[];
   started: boolean;
+  status?: 'active' | 'paused' | 'completed';
   customPrompt: string;
   isMultiplayer: boolean;
   maxPlayers: number;
@@ -124,7 +88,7 @@ class MultiplayerService {
   private isFirebaseAvailable: boolean;
 
   constructor() {
-    this.isFirebaseAvailable = !!(app && db && auth);
+    this.isFirebaseAvailable = !!(db && auth);
     if (this.isFirebaseAvailable) {
       this.initializeAuth();
     } else {

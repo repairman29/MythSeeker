@@ -27,7 +27,8 @@ import {
   trackDeviceInfo
 } from './services/analytics';
 import { CombatService } from './services/combatService';
-import { Swords, TrendingUp, Globe, HelpCircle, User, Book, Users, Sword, Plus, Edit, Trash2, Copy } from 'lucide-react';
+import { Combatant } from './components/CombatSystem';
+import { Swords, TrendingUp, Globe, HelpCircle, User, Book, Users, Sword, Plus, Edit, Trash2, Copy, ChevronDown, Send } from 'lucide-react';
 
 // Lazy load components
 const NavBar = lazy(() => import('./components/NavBar'));
@@ -44,9 +45,20 @@ const HelpSystem = lazy(() => import('./components/HelpSystem'));
 // Loading component for Suspense fallback
 const LoadingSpinner = () => (
   <div className="min-h-screen bg-gradient-to-br from-blue-950 via-indigo-950 to-purple-950 flex items-center justify-center">
-    <div className="text-center">
-      <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-400 mx-auto mb-4"></div>
-      <p className="text-blue-200 text-lg">Loading MythSeeker...</p>
+    <div className="text-center space-y-4">
+      <div className="relative">
+        <div className="w-16 h-16 border-4 border-blue-300/30 border-t-blue-400 rounded-full animate-spin mx-auto"></div>
+        <div className="w-12 h-12 border-4 border-purple-300/30 border-t-purple-400 rounded-full animate-spin absolute top-2 left-1/2 transform -translate-x-1/2 -rotate-45" style={{ animationDuration: '1.5s' }}></div>
+      </div>
+      <div className="space-y-2">
+        <h3 className="text-white font-semibold text-lg">Loading MythSeeker</h3>
+        <p className="text-blue-200 text-sm">Preparing your adventure...</p>
+      </div>
+      <div className="flex justify-center space-x-1">
+        <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
+        <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+        <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+      </div>
     </div>
   </div>
 );
@@ -263,6 +275,8 @@ const AIDungeonMaster = () => {
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     const unsubscribe = firebaseService.onAuthStateChange(async (firebaseUser) => {
+      console.log('Auth state changed:', firebaseUser ? `User signed in (${firebaseUser.uid})` : 'User signed out');
+      
       if (firebaseUser) {
         try {
           // Track authentication success
@@ -279,6 +293,7 @@ const AIDungeonMaster = () => {
           });
 
           // Get user profile
+          console.log('Loading user profile for:', firebaseUser.uid);
           const userProfile = await firebaseService.getUserProfile(firebaseUser.uid);
           if (userProfile) {
             setCurrentUser(userProfile);
@@ -286,6 +301,7 @@ const AIDungeonMaster = () => {
             setIsAuthenticated(true);
             
             // Load user's characters
+            console.log('Loading characters for user:', firebaseUser.uid);
             const characters = await firebaseService.getUserCharacters(firebaseUser.uid);
             setUserCharacters(characters);
             
@@ -308,7 +324,7 @@ const AIDungeonMaster = () => {
             analyticsService.trackPageView('welcome', 'MythSeeker - Welcome');
           }
         } catch (firebaseError) {
-          console.error('Firebase error loading user data:', firebaseError);
+          console.warn('Firebase error loading user data (falling back to local storage):', firebaseError);
           // If Firebase fails, try to load from local storage
           const localCharacters = JSON.parse(localStorage.getItem('mythseeker_characters') || '[]');
           if (localCharacters.length > 0) {
@@ -329,6 +345,7 @@ const AIDungeonMaster = () => {
         analyticsService.trackUserAction('user_signed_out');
         
         // User not authenticated - try to load from local storage
+        console.log('User not authenticated, loading from local storage');
         const localCharacters = JSON.parse(localStorage.getItem('mythseeker_characters') || '[]');
         if (localCharacters.length > 0) {
           setUserCharacters(localCharacters);
@@ -353,6 +370,22 @@ const AIDungeonMaster = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const handleSignInRedirect = async () => {
+      try {
+        const user = await firebaseService.handleRedirectSignIn();
+        if (user) {
+          // The onAuthStateChanged listener will handle the rest.
+          console.log("Redirect sign in successful for user:", user.uid);
+        }
+      } catch (error) {
+        console.error("Error during redirect sign in handling", error);
+        addToast('error', { message: 'Failed to sign in. Please try again.' });
+      }
+    }
+    handleSignInRedirect();
+  }, []);
+
   // Initialize AI service
   useEffect(() => {
     // Ensure AI service is available
@@ -371,8 +404,9 @@ const AIDungeonMaster = () => {
     if (!currentUser) {
       console.log('No current user found, saving to local storage');
       // Save to local storage for unauthenticated users
-      const localCharacter = {
+      const localCharacter: Character = {
         id: Date.now().toString(),
+        userId: 'local', // Use 'local' as userId for local characters
         name: characterData.name,
         class: characterData.class,
         level: 1,
@@ -396,8 +430,7 @@ const AIDungeonMaster = () => {
         achievements: [],
         createdAt: Date.now(),
         lastPlayed: Date.now(),
-        totalPlayTime: 0,
-        isLocal: true // Flag to indicate this is a local character
+        totalPlayTime: 0
       };
 
       // Save to localStorage
@@ -990,7 +1023,7 @@ const AIDungeonMaster = () => {
   };
 
   // Equipment system
-  const equipmentTypes = {
+  const equipmentTypes: Record<string, Record<string, any>> = {
     weapon: {
       'Iron Sword': { attack: 3, durability: 100, rarity: 'common', price: 50 },
       'Steel Blade': { attack: 5, durability: 120, rarity: 'uncommon', price: 150 },
@@ -1053,7 +1086,7 @@ const AIDungeonMaster = () => {
   const calculateStats = (character: any) => {
     if (!character) return null;
     
-    let totalStats = character.baseStats ? { ...character.baseStats } : { strength: 10, dexterity: 10, intelligence: 10, charisma: 10 };
+    let totalStats: Record<string, number> = character.baseStats ? { ...character.baseStats } : { strength: 10, dexterity: 10, intelligence: 10, charisma: 10 };
     let bonuses = { attack: 0, defense: 0, magic: 0, health: 0, mana: 0, crit: 0 };
     
     // Equipment bonuses
@@ -1063,10 +1096,10 @@ const AIDungeonMaster = () => {
           const itemStats = equipmentTypes[item.type][item.name];
           Object.keys(itemStats).forEach((stat: string) => {
             if (stat !== 'durability' && stat !== 'rarity' && stat !== 'price' && stat !== 'range') {
-              if (totalStats[stat] !== undefined) {
+              if (typeof totalStats[stat] === 'number') {
                 totalStats[stat] += itemStats[stat];
-              } else if (bonuses[stat] !== undefined) {
-                bonuses[stat] += itemStats[stat];
+              } else if (typeof bonuses[stat as keyof typeof bonuses] === 'number') {
+                bonuses[stat as keyof typeof bonuses] += itemStats[stat];
               }
             }
           });
@@ -1315,7 +1348,7 @@ const AIDungeonMaster = () => {
     const campaign = campaigns.find(c => c.id === campaignId);
     if (!campaign) return;
 
-    const pausedCampaign = { ...campaign, status: 'paused' };
+    const pausedCampaign: MultiplayerGame = { ...campaign, status: 'paused' as const };
     setCampaigns(prev => prev.map(c => c.id === campaignId ? pausedCampaign : c));
     
     // If this is the current campaign, update it too
@@ -1326,54 +1359,32 @@ const AIDungeonMaster = () => {
     // Save to Firebase if multiplayer
     if (campaign.isMultiplayer) {
       try {
-        await multiplayerService.updateCampaignState(campaignId, { status: 'paused' });
+        await multiplayerService.updateCampaign(campaignId, { status: 'paused' });
       } catch (error) {
         console.error('Error pausing campaign:', error);
       }
     }
-
-    addToast('campaignPaused', { campaign: pausedCampaign });
   };
 
   const resumeCampaign = async (campaignId: string) => {
-    try {
-      const campaign = campaigns.find(c => c.id === campaignId);
-      if (!campaign) {
-        console.error('Campaign not found:', campaignId);
-        return;
-      }
+    const campaign = campaigns.find(c => c.id === campaignId);
+    if (!campaign) return;
 
-      // Load campaign data from Firebase if multiplayer
-      if (campaign.isMultiplayer) {
-        const updatedCampaign = await multiplayerService.getCampaign(campaignId);
-        if (updatedCampaign) {
-          setCurrentCampaign(updatedCampaign);
-          setMessages(updatedCampaign.messages || []);
-          setCurrentEnvironment(updatedCampaign.currentEnvironment || 'default');
-          
-          // Update local campaigns list
-          setCampaigns(prev => prev.map(c => c.id === campaignId ? updatedCampaign : c));
-        }
-      } else {
-        // For single player, just set as current campaign
-        setCurrentCampaign(campaign);
-        setMessages(campaign.messages || []);
-        setCurrentEnvironment(campaign.currentEnvironment || 'default');
-      }
+    const resumedCampaign: MultiplayerGame = { ...campaign, status: 'active' as const };
+    setCampaigns(prev => prev.map(c => c.id === campaignId ? resumedCampaign : c));
+    
+    // If this is the current campaign, update it too
+    if (currentCampaign?.id === campaignId) {
+      setCurrentCampaign(resumedCampaign);
+    }
 
-      // Update status to active
-      const resumedCampaign = { ...campaign, status: 'active' };
-      setCampaigns(prev => prev.map(c => c.id === campaignId ? resumedCampaign : c));
-      
-      if (currentCampaign?.id === campaignId) {
-        setCurrentCampaign(resumedCampaign);
+    // Save to Firebase if multiplayer
+    if (campaign.isMultiplayer) {
+      try {
+        await multiplayerService.updateCampaign(campaignId, { status: 'active' });
+      } catch (error) {
+        console.error('Error resuming campaign:', error);
       }
-
-      setCurrentScreen('game');
-      addToast('campaignResumed', { campaign: resumedCampaign });
-    } catch (error) {
-      console.error('Error resuming campaign:', error);
-      addToast('error', { message: 'Failed to resume campaign' });
     }
   };
 
@@ -1436,7 +1447,7 @@ const AIDungeonMaster = () => {
 
       // Handle character updates
       if (dmResponse.characterUpdates) {
-        dmResponse.characterUpdates.forEach((update: any) => {
+        dmResponse.characterUpdates.forEach((update: CharacterUpdate) => {
           if (update.playerId === playerId) {
             setCharacter(prev => prev ? {
               ...prev,
@@ -1709,8 +1720,30 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
     return basePrompt;
   };
 
+  // Types for better TypeScript support
+  interface WorldStateUpdate {
+    newLocation?: string;
+    newNPCs?: Array<{name: string; [key: string]: any}>;
+    newEvents?: Array<{[key: string]: any}>;
+    weatherChange?: string;
+    timeChange?: string;
+    [key: string]: any;
+  }
+
+  interface CharacterUpdate {
+    playerId: string;
+    xpGain?: number;
+    statChanges?: {
+      health?: number;
+      mana?: number;
+      [key: string]: any;
+    };
+    newItems?: {[key: string]: any};
+    [key: string]: any;
+  }
+
   // Update world state based on AI response
-  const updateWorldState = (updates: any) => {
+  const updateWorldState = (updates: WorldStateUpdate) => {
     if (!updates) return;
 
     setWorldState(prev => {
@@ -1842,86 +1875,427 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
     inputRef: React.RefObject<HTMLInputElement>
   }> = ({ campaign, messages, inputMessage, setInputMessage, sendMessage, handleKeyPress, isAIThinking, messagesEndRef, onStartCombat, worldState, aiMemory, inputRef }) => {
     
+    const [showQuickActions, setShowQuickActions] = useState(false);
+    const [messageFilter, setMessageFilter] = useState<'all' | 'dm' | 'player' | 'system'>('all');
+    const [isScrolledUp, setIsScrolledUp] = useState(false);
+    const messageContainerRef = useRef<HTMLDivElement>(null);
+
     // Focus management effect
     React.useEffect(() => {
       if (inputRef?.current && !isAIThinking) {
         inputRef.current.focus();
       }
     }, [inputMessage, isAIThinking, inputRef]);
-    
-    return (
-    <div className="text-white p-2 lg:p-4 game-interface">
-      {/* World State Display */}
-      {worldState && aiMemory && (
-        <WorldStateDisplay worldState={worldState} aiMemory={aiMemory} />
-      )}
-      
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 lg:mb-4 space-y-2 sm:space-y-0">
-        <h2 className="text-xl lg:text-2xl font-bold">Gameplay</h2>
-        {onStartCombat && (
-          <button
-            onClick={() => onStartCombat([
-              { name: 'Goblin Warrior', health: 25, strength: 12, dexterity: 10, armorClass: 12 },
-              { name: 'Goblin Archer', health: 20, strength: 10, dexterity: 14, armorClass: 13 }
-            ])}
-            className="px-3 lg:px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all flex items-center space-x-2 text-sm lg:text-base"
-          >
-            <Sword size={16} />
-            <span>Start Combat Test</span>
-          </button>
-        )}
-      </div>
-      
-      <div className="space-y-3 lg:space-y-4">
-        {messages.map((msg, index) => (
-          <div key={index} className={`bg-black/20 p-3 lg:p-4 rounded text-sm lg:text-base ${
-            msg.atmosphere?.mood === 'tense' ? 'border-l-4 border-red-500' :
-            msg.atmosphere?.mood === 'mysterious' ? 'border-l-4 border-purple-500' :
-            msg.atmosphere?.mood === 'peaceful' ? 'border-l-4 border-green-500' : ''
-          }`}>
-          {msg.content}
-          
-          {/* Atmosphere indicator */}
-          {msg.atmosphere && (
-            <div className="mt-2 text-xs text-gray-400">
-              <span className="font-semibold">Mood:</span> {msg.atmosphere.mood} | 
-              <span className="font-semibold ml-2">Tension:</span> {msg.atmosphere.tension}
+
+    // Scroll detection for auto-scroll behavior
+    React.useEffect(() => {
+      const container = messageContainerRef.current;
+      if (!container) return;
+
+      const handleScroll = () => {
+        const { scrollTop, scrollHeight, clientHeight } = container;
+        const isAtBottom = Math.abs(scrollHeight - clientHeight - scrollTop) < 5;
+        setIsScrolledUp(!isAtBottom);
+      };
+
+      container.addEventListener('scroll', handleScroll);
+      return () => container.removeEventListener('scroll', handleScroll);
+    }, []);
+
+    // Filter messages based on current filter
+    const filteredMessages = React.useMemo(() => {
+      if (messageFilter === 'all') return messages;
+      return messages.filter(msg => msg.type === messageFilter);
+    }, [messages, messageFilter]);
+
+    // Quick action suggestions based on context
+    const quickActions = React.useMemo(() => {
+      const actions = [
+        "Look around carefully",
+        "Search for clues",
+        "Talk to nearby NPCs",
+        "Check inventory",
+        "Cast a spell",
+        "Attack with weapon"
+      ];
+
+      // Add context-specific actions based on world state
+      if (worldState?.currentLocation === 'tavern') {
+        actions.unshift("Order a drink", "Ask the bartender for information");
+      }
+      if (worldState?.weather === 'storm') {
+        actions.unshift("Seek shelter", "Wait for the storm to pass");
+      }
+
+      return actions.slice(0, 6); // Limit to 6 actions
+    }, [worldState]);
+
+    const handleQuickAction = (action: string) => {
+      setInputMessage(action);
+      setShowQuickActions(false);
+      setTimeout(() => sendMessage(), 100);
+    };
+
+    const getMessageIcon = (message: any) => {
+      switch (message.type) {
+        case 'player':
+          return (
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg">
+              {character?.name?.charAt(0) || 'P'}
             </div>
-          )}
+          );
+        case 'dm':
+          return (
+            <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm shadow-lg">
+              🎲
+            </div>
+          );
+        case 'system':
+          return (
+            <div className="w-8 h-8 bg-gradient-to-br from-gray-500 to-gray-600 rounded-full flex items-center justify-center text-white text-sm shadow-lg">
+              ⚙️
+            </div>
+          );
+        default:
+          return (
+            <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg">
+              {message.playerName?.charAt(0) || '?'}
+            </div>
+          );
+      }
+    };
+
+    const getMessageStyle = (message: any) => {
+      const baseStyle = "mb-4 p-4 rounded-xl border transition-all duration-300 hover:shadow-lg";
+      
+      switch (message.type) {
+        case 'player':
+          return `${baseStyle} bg-gradient-to-r from-blue-900/40 to-blue-800/40 border-blue-400/30 ml-8`;
+        case 'dm':
+          return `${baseStyle} bg-gradient-to-r from-purple-900/40 to-purple-800/40 border-purple-400/30 mr-8`;
+        case 'system':
+          return `${baseStyle} bg-gradient-to-r from-gray-900/40 to-gray-800/40 border-gray-400/30`;
+        default:
+          return `${baseStyle} bg-gradient-to-r from-green-900/40 to-green-800/40 border-green-400/30`;
+      }
+    };
+
+    const formatMessageContent = (content: string) => {
+      // Add basic markdown-like formatting
+      return content
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code class="bg-white/20 px-1 rounded">$1</code>');
+    };
+
+    return (
+      <div className="h-full flex flex-col bg-gradient-to-br from-slate-900/50 to-slate-800/50 rounded-xl overflow-hidden">
+        {/* Enhanced Header */}
+        <div className="flex items-center justify-between p-4 bg-black/30 border-b border-white/20">
+          <div className="flex items-center space-x-3">
+            <h2 className="text-xl lg:text-2xl font-bold text-white">Adventure Log</h2>
+            <div className="flex items-center space-x-1 text-sm text-blue-300">
+              <span>•</span>
+              <span>{filteredMessages.length} messages</span>
+              {isConnected && (
+                <>
+                  <span>•</span>
+                  <span className="text-green-400">Connected</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            {/* Message Filter */}
+            <select
+              value={messageFilter}
+              onChange={(e) => setMessageFilter(e.target.value as any)}
+              className="bg-white/10 text-white text-sm rounded-lg px-3 py-1 border border-white/20 focus:outline-none focus:border-blue-400"
+            >
+              <option value="all">All Messages</option>
+              <option value="dm">DM Only</option>
+              <option value="player">Player Only</option>
+              <option value="system">System Only</option>
+            </select>
+
+            {/* Quick Actions Toggle */}
+            <button
+              onClick={() => setShowQuickActions(!showQuickActions)}
+              className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
+                showQuickActions 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-white/10 text-blue-200 hover:bg-white/20'
+              }`}
+            >
+              Quick Actions
+            </button>
+
+            {/* Combat Test Button */}
+            {onStartCombat && (
+              <button
+                onClick={() => onStartCombat([
+                  { name: 'Goblin Warrior', health: 25, strength: 12, dexterity: 10, armorClass: 12 },
+                  { name: 'Goblin Archer', health: 20, strength: 10, dexterity: 14, armorClass: 13 }
+                ])}
+                className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all flex items-center space-x-1 text-sm"
+              >
+                <Sword size={14} />
+                <span>Combat</span>
+              </button>
+            )}
+          </div>
         </div>
-        ))}
-        
-        {isAIThinking && (
-          <div className="text-blue-200 text-sm lg:text-base flex items-center space-x-2">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
-            <span>AI Dungeon Master is crafting your story...</span>
+
+        {/* Quick Actions Panel */}
+        {showQuickActions && (
+          <div className="p-4 bg-blue-900/20 border-b border-blue-400/30">
+            <h3 className="text-white font-semibold mb-2 text-sm">Quick Actions</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {quickActions.map((action, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleQuickAction(action)}
+                  className="text-left p-2 bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 transition-all text-sm text-blue-100 hover:text-white"
+                  disabled={isAIThinking}
+                >
+                  {action}
+                </button>
+              ))}
+            </div>
           </div>
         )}
-        
-        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyDown={handleKeyPress}
-            placeholder="What do you do? (Be specific and creative!)"
-            className="flex-1 px-3 py-2 bg-black/20 rounded text-white text-sm lg:text-base"
-            disabled={isAIThinking}
-          />
-          <button 
-            onClick={sendMessage} 
-            className="px-4 py-2 bg-blue-600 rounded text-sm lg:text-base hover:bg-blue-700 transition-all"
-            disabled={isAIThinking}
-          >
-            Send
-          </button>
+
+        {/* World State Display */}
+        {worldState && (
+          <div className="p-3 bg-gradient-to-r from-purple-900/30 to-blue-900/30 border-b border-purple-400/30">
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center space-x-4">
+                {worldState.currentLocation && (
+                  <div className="flex items-center space-x-1 text-purple-300">
+                    <span>📍</span>
+                    <span>{worldState.currentLocation}</span>
+                  </div>
+                )}
+                {worldState.weather && (
+                  <div className="flex items-center space-x-1 text-blue-300">
+                    <span>{worldState.weather === 'clear' ? '☀️' : worldState.weather === 'rain' ? '🌧️' : '⛈️'}</span>
+                    <span>{worldState.weather}</span>
+                  </div>
+                )}
+                {worldState.timeOfDay && (
+                  <div className="flex items-center space-x-1 text-yellow-300">
+                    <span>{worldState.timeOfDay === 'day' ? '🌅' : worldState.timeOfDay === 'night' ? '🌙' : '🌆'}</span>
+                    <span>{worldState.timeOfDay}</span>
+                  </div>
+                )}
+              </div>
+              
+              {character && (
+                <div className="flex items-center space-x-3 text-xs">
+                  <div className="flex items-center space-x-1 text-red-300">
+                    <span>❤️</span>
+                    <span>{character.health}/{character.maxHealth}</span>
+                  </div>
+                  <div className="flex items-center space-x-1 text-blue-300">
+                    <span>✨</span>
+                    <span>{character.mana}/{character.maxMana}</span>
+                  </div>
+                  <div className="flex items-center space-x-1 text-yellow-300">
+                    <span>💰</span>
+                    <span>{character.gold || 0}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Enhanced Messages Area */}
+        <div 
+          ref={messageContainerRef}
+          className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth"
+        >
+          {filteredMessages.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-center">
+              <div className="text-blue-200">
+                <div className="text-4xl mb-4 opacity-50">💬</div>
+                <p className="text-lg">Your adventure begins here!</p>
+                <p className="text-sm opacity-75">Type an action to start your story.</p>
+              </div>
+            </div>
+          ) : (
+            filteredMessages.map((msg, index) => (
+              <div key={msg.id || index} className={getMessageStyle(msg)}>
+                <div className="flex items-start space-x-3">
+                  {getMessageIcon(msg)}
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <span className="font-semibold text-white">
+                        {msg.type === 'player' 
+                          ? character?.name || 'You'
+                          : msg.type === 'dm'
+                          ? 'Dungeon Master'
+                          : msg.playerName || 'System'
+                        }
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {new Date(msg.timestamp).toLocaleTimeString()}
+                      </span>
+                      {msg.atmosphere?.mood && (
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          msg.atmosphere.mood === 'tense' ? 'bg-red-500/20 text-red-300' :
+                          msg.atmosphere.mood === 'mysterious' ? 'bg-purple-500/20 text-purple-300' :
+                          msg.atmosphere.mood === 'peaceful' ? 'bg-green-500/20 text-green-300' :
+                          'bg-blue-500/20 text-blue-300'
+                        }`}>
+                          {msg.atmosphere.mood}
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div 
+                      className="text-blue-100 leading-relaxed"
+                      dangerouslySetInnerHTML={{ __html: formatMessageContent(msg.content) }}
+                    />
+                    
+                    {/* Enhanced Choice System */}
+                    {msg.choices && msg.choices.length > 0 && (
+                      <div className="mt-4 space-y-2">
+                        <div className="text-xs text-gray-400 font-medium">Choose your action:</div>
+                        <div className="grid gap-2">
+                          {msg.choices.map((choice: string, choiceIndex: number) => (
+                            <button
+                              key={choiceIndex}
+                              onClick={() => {
+                                setInputMessage(choice);
+                                setTimeout(() => sendMessage(), 100);
+                              }}
+                              className="text-left p-3 bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 transition-all text-sm group"
+                              disabled={isAIThinking}
+                            >
+                              <div className="flex items-center space-x-2">
+                                <span className="w-6 h-6 bg-blue-500/30 rounded-full flex items-center justify-center text-xs font-bold group-hover:bg-blue-500/50 transition-all">
+                                  {choiceIndex + 1}
+                                </span>
+                                <span className="group-hover:text-white transition-colors">{choice}</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Atmosphere Details */}
+                    {msg.atmosphere && (msg.atmosphere.tension || msg.atmosphere.description) && (
+                      <div className="mt-3 p-2 bg-black/30 rounded-lg border border-white/10">
+                        <div className="text-xs text-gray-400 space-y-1">
+                          {msg.atmosphere.tension && (
+                            <div>
+                              <span className="font-semibold">Tension:</span> {msg.atmosphere.tension}/10
+                            </div>
+                          )}
+                          {msg.atmosphere.description && (
+                            <div className="italic text-gray-300">{msg.atmosphere.description}</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+
+          {/* AI Thinking Enhanced Indicator */}
+          {isAIThinking && (
+            <div className="flex items-center space-x-3 p-4 bg-gradient-to-r from-purple-900/40 to-purple-800/40 border border-purple-400/30 rounded-xl">
+              <div className="relative">
+                <div className="animate-spin rounded-full h-6 w-6 border-2 border-purple-300/30 border-t-purple-400"></div>
+                <div className="animate-ping absolute inset-0 rounded-full h-6 w-6 border-2 border-purple-400/50"></div>
+              </div>
+              <div className="flex-1">
+                <div className="text-purple-200 font-medium">Dungeon Master is thinking...</div>
+                <div className="text-purple-300 text-sm">Crafting your story...</div>
+              </div>
+            </div>
+          )}
+          
+          <div ref={messagesEndRef} />
         </div>
-        {chatError && <div className="text-red-400 text-xs mt-1">{chatError}</div>}
+
+        {/* Auto-scroll button */}
+        {isScrolledUp && (
+          <div className="absolute bottom-20 right-4">
+            <button
+              onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })}
+              className="p-2 bg-blue-600 hover:bg-blue-700 rounded-full text-white shadow-lg transition-all"
+            >
+              <ChevronDown size={20} />
+            </button>
+          </div>
+        )}
+
+        {/* Enhanced Input Area */}
+        <div className="p-4 bg-black/30 border-t border-white/20">
+          <div className="flex space-x-2">
+            <div className="flex-1 relative">
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyDown={handleKeyPress}
+                placeholder="What do you do? (Be specific and creative!)"
+                className="w-full px-4 py-3 bg-white/10 text-white placeholder-blue-200 rounded-xl border border-white/20 focus:outline-none focus:border-blue-400 transition-all pr-12"
+                disabled={isAIThinking}
+                maxLength={500}
+              />
+              {inputMessage.length > 0 && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-gray-400">
+                  {inputMessage.length}/500
+                </div>
+              )}
+            </div>
+            
+            <button 
+              onClick={sendMessage} 
+              disabled={isAIThinking || !inputMessage.trim()}
+              className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center space-x-2 ${
+                isAIThinking || !inputMessage.trim()
+                  ? 'bg-gray-600 text-gray-300 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-lg'
+              }`}
+            >
+              {isAIThinking ? (
+                <>
+                  <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></div>
+                  <span>Wait...</span>
+                </>
+              ) : (
+                <>
+                  <Send size={16} />
+                  <span>Send</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Input Hints */}
+          <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
+            <div className="flex items-center space-x-4">
+              <span>💡 Try: "I carefully examine the door for traps"</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span>Press Enter to send</span>
+              <span>•</span>
+              <span>Shift+Enter for new line</span>
+            </div>
+          </div>
+        </div>
       </div>
-      <div ref={messagesEndRef} />
-    </div>
-  );
+    );
   };
 
   // Welcome Screen
@@ -2169,7 +2543,7 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
 
   // Main App Layout (for all other screens)
   return (
-    <div className={`h-screen flex bg-gradient-to-br ${environments[currentEnvironment]} transition-all duration-1000`}>
+    <div className={`main-container flex flex-col bg-gradient-to-br ${environments[currentEnvironment]} transition-all duration-1000`}>
       {/* Success Feedback */}
       {successFeedback && (
         <SuccessFeedback
@@ -2204,18 +2578,17 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
       )}
 
       {/* Desktop Side NavBar */}
-      <Suspense fallback={<LoadingSpinner />}>
-        <NavBar 
-          active={activeNav} 
-          onNavigate={handleNavChange} 
-          theme={currentEnvironment}
-          isMobile={false}
-        />
-      </Suspense>
-      {/* Main Content + Drawer Row */}
-      <div className="flex-1 flex flex-row h-full">
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col" style={!isMobile ? { marginRight: drawerOpen ? drawerWidth : 0 } : {}}>
+      <div className="flex flex-1 overflow-hidden">
+        <Suspense fallback={<LoadingSpinner />}>
+          <NavBar 
+            active={activeNav} 
+            onNavigate={handleNavChange} 
+            theme={currentEnvironment}
+            isMobile={false}
+          />
+        </Suspense>
+        {/* Main Content + Drawer Row */}
+        <div className="flex-1 flex flex-col h-full">
           {/* Top Bar */}
           <Suspense fallback={<LoadingSpinner />}>
             <TopBar 
@@ -2226,9 +2599,9 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
               onHelpClick={() => setShowHelp(true)}
             />
           </Suspense>
-          {/* Main Content - Only render the active screen */}
-          <div className="flex-1 flex pb-16 lg:pb-0 overflow-hidden">
-            <div className="flex-1 px-6 lg:px-8 py-6 overflow-auto">
+          {/* Main Content */}
+          <main className="flex-1 overflow-auto">
+            <div className="px-6 lg:px-8 py-6">
               {/* Add subtle background pattern for better visual hierarchy */}
               <div className="relative min-h-full">
                 <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-3xl pointer-events-none"></div>
@@ -2389,54 +2762,31 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                 </div>
               </div>
             </div>
-          </div>
+          </main>
         </div>
         {/* Right Drawer - desktop as flex child, mobile as fixed overlay */}
-        {!isMobile && (
-          <Suspense fallback={<LoadingSpinner />}>
-            <RightDrawer
-              isOpen={drawerOpen}
-              onClose={() => setDrawerOpen(false)}
-              activeTab={activeDrawerTab}
-              onTabChange={setActiveDrawerTab}
-              isMobile={isMobile}
-              campaign={currentCampaign}
-              messages={messages}
-              players={partyState.players}
-              worldState={worldState}
-              achievements={achievements}
-              onSendMessage={sendMultiplayerMessage}
-              onUpdateSettings={(settings) => {
-                console.log('Settings updated:', settings);
-              }}
-              drawerWidth={drawerWidth}
-              setDrawerWidth={setDrawerWidth}
-              minWidth={MIN_WIDTH}
-              maxWidth={MAX_WIDTH}
-            />
-          </Suspense>
-        )}
-        {/* Mobile Drawer as overlay */}
-        {isMobile && (
-          <Suspense fallback={<LoadingSpinner />}>
-            <RightDrawer
-              isOpen={drawerOpen}
-              onClose={() => setDrawerOpen(false)}
-              activeTab={activeDrawerTab}
-              onTabChange={setActiveDrawerTab}
-              isMobile={isMobile}
-              campaign={currentCampaign}
-              messages={messages}
-              players={partyState.players}
-              worldState={worldState}
-              achievements={achievements}
-              onSendMessage={sendMultiplayerMessage}
-              onUpdateSettings={(settings) => {
-                console.log('Settings updated:', settings);
-              }}
-            />
-          </Suspense>
-        )}
+        <Suspense fallback={<LoadingSpinner />}>
+          <RightDrawer
+            isOpen={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            activeTab={activeDrawerTab}
+            onTabChange={setActiveDrawerTab}
+            isMobile={isMobile}
+            campaign={currentCampaign}
+            messages={messages}
+            players={partyState.players}
+            worldState={worldState}
+            achievements={achievements}
+            onSendMessage={sendMultiplayerMessage}
+            onUpdateSettings={(settings) => {
+              console.log('Settings updated:', settings);
+            }}
+            drawerWidth={drawerWidth}
+            setDrawerWidth={setDrawerWidth}
+            minWidth={MIN_WIDTH}
+            maxWidth={MAX_WIDTH}
+          />
+        </Suspense>
       </div>
       {/* Floating Action Button - sets drawer tab and opens drawer */}
       <FloatingActionButton
@@ -2481,6 +2831,9 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }:
   const [backstory, setBackstory] = useState('');
   const [hoveredClass, setHoveredClass] = useState<any>(null);
   const [errors, setErrors] = useState<{ name?: string; class?: string; backstory?: string }>({});
+  const [isValidating, setIsValidating] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
+  const [showPreview, setShowPreview] = useState(false);
 
   // Profanity filter (basic)
   const profanityList = ['fuck', 'shit', 'bitch', 'asshole', 'bastard', 'dick', 'cunt', 'piss', 'cock', 'fag', 'slut', 'whore'];
@@ -2491,7 +2844,9 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }:
   };
 
   const validate = () => {
+    setIsValidating(true);
     const newErrors: { name?: string; class?: string; backstory?: string } = {};
+    
     if (!characterName.trim()) {
       newErrors.name = 'Character name is required.';
     } else if (characterName.length > 50) {
@@ -2499,241 +2854,392 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }:
     } else if (containsProfanity(characterName)) {
       newErrors.name = 'Please choose a more appropriate name.';
     }
+    
     if (!selectedClass) {
       newErrors.class = 'Character class is required.';
     }
+    
     if (backstory.length > 0 && containsProfanity(backstory)) {
       newErrors.backstory = 'Please remove inappropriate language from the backstory.';
     } else if (backstory.length > 500) {
       newErrors.backstory = 'Backstory must be 500 characters or less.';
     }
+    
     setErrors(newErrors);
+    setTimeout(() => setIsValidating(false), 500);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = () => {
     if (validate()) {
-      onCreateCharacter({
-        name: characterName.trim(),
-        class: selectedClass.name,
-        backstory: backstory.trim()
-      });
+      setShowPreview(true);
+      setTimeout(() => {
+        onCreateCharacter({
+          name: characterName.trim(),
+          class: selectedClass.name,
+          backstory: backstory.trim()
+        });
+      }, 1500);
     }
+  };
+
+  // Calculate completion percentage
+  const getCompletionPercentage = () => {
+    let completed = 0;
+    if (characterName.trim()) completed += 40;
+    if (selectedClass) completed += 40;
+    if (backstory.trim()) completed += 20;
+    return completed;
   };
 
   // Get the class to display in preview (hovered or selected)
   const previewClass = hoveredClass || selectedClass;
 
+  // Step validation
+  const isStep1Valid = characterName.trim().length > 0 && !errors.name;
+  const isStep2Valid = selectedClass !== null && !errors.class;
+  const isStep3Valid = backstory.length === 0 || (!errors.backstory && backstory.trim().length > 0);
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-8 character-creation">
-      <div className="space-y-4 lg:space-y-6">
-        <div>
-          <label className="block text-white font-semibold mb-2 lg:mb-3 text-sm lg:text-base">Character Name</label>
-          <input
-            type="text"
-            placeholder="Character Name"
-            value={characterName}
-            onChange={(e) => setCharacterName(e.target.value)}
-            className="w-full px-3 lg:px-4 py-2 lg:py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 text-sm lg:text-base"
-          />
-          {errors.name && <div className="text-red-400 text-xs mt-1">{errors.name}</div>}
+    <div className="space-y-6 character-creation">
+      {/* Progress Indicator */}
+      <div className="bg-white/10 rounded-xl p-4 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-white font-semibold">Character Creation Progress</h3>
+          <span className="text-blue-300 text-sm">{getCompletionPercentage()}% Complete</span>
         </div>
-
-        <div>
-          <label className="block text-white font-semibold mb-2 lg:mb-3 text-sm lg:text-base">Choose Your Class</label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4 class-grid">
-            {classes.map((cls) => (
-              <div
-                key={cls.name}
-                onClick={() => setSelectedClass(cls)}
-                onMouseEnter={() => setHoveredClass(cls)}
-                onMouseLeave={() => setHoveredClass(null)}
-                className={`class-card p-3 lg:p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
-                  selectedClass?.name === cls.name
-                    ? 'border-green-400 bg-green-500/30 shadow-lg scale-105 selected'
-                    : hoveredClass?.name === cls.name
-                    ? 'border-blue-400 bg-blue-500/20 shadow-md scale-102'
-                    : 'border-white/30 bg-white/10 hover:border-white/50 hover:scale-102'
-                }`}
-              >
-                <div className="text-center">
-                  <div className="text-2xl lg:text-3xl mb-2">{cls.icon}</div>
-                  <h3 className="text-white font-semibold text-sm lg:text-base mb-2">{cls.name}</h3>
-                  
-                  {/* Quick Stats with Meaningful Context */}
-                  <div className="text-xs text-blue-200 space-y-1 mb-2">
-                    <div className="flex justify-between">
-                      <span>STR: {cls.stats.strength}</span>
-                      <span className="text-yellow-300">Attack Power</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>DEX: {cls.stats.dexterity}</span>
-                      <span className="text-green-300">Agility</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>INT: {cls.stats.intelligence}</span>
-                      <span className="text-purple-300">Magic</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>CHA: {cls.stats.charisma}</span>
-                      <span className="text-pink-300">Social</span>
-                    </div>
-                  </div>
-                  
-                  {/* Visual Confirmation for Selected Class */}
-                  {selectedClass?.name === cls.name && (
-                    <div className="flex items-center justify-center space-x-1 text-green-400 text-xs">
-                      <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                      <span>Selected</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-          {errors.class && <div className="text-red-400 text-xs mt-1">{errors.class}</div>}
+        
+        {/* Progress Bar */}
+        <div className="w-full bg-white/20 rounded-full h-2 mb-4">
+          <div 
+            className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full transition-all duration-500 ease-out"
+            style={{ width: `${getCompletionPercentage()}%` }}
+          ></div>
         </div>
-
-        <div>
-          <label className="block text-white font-semibold mb-2 lg:mb-3 text-sm lg:text-base">
-            Character Backstory <span className="text-blue-300 text-xs">(Optional)</span>
-          </label>
-          
-          {/* Backstory Prompts for Creative Scaffolding */}
-          <div className="mb-3 flex flex-wrap gap-2">
-            {[
-              "What is your character's greatest fear?",
-              "Where did they grow up?",
-              "What brought them to adventure?",
-              "Who is their closest friend?",
-              "What do they value most?"
-            ].map((prompt, index) => (
-              <button
-                key={index}
-                onClick={() => setBackstory(prev => prev ? `${prev}\n\n${prompt}` : prompt)}
-                className="px-2 py-1 bg-blue-600/30 text-blue-200 text-xs rounded hover:bg-blue-600/50 transition-all"
-              >
-                {prompt}
-              </button>
-            ))}
+        
+        {/* Step Indicators */}
+        <div className="flex items-center justify-between text-sm">
+          <div className={`flex items-center space-x-2 ${isStep1Valid ? 'text-green-400' : characterName.trim() ? 'text-yellow-400' : 'text-gray-400'}`}>
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${isStep1Valid ? 'bg-green-500' : characterName.trim() ? 'bg-yellow-500' : 'bg-gray-500'}`}>
+              {isStep1Valid ? '✓' : '1'}
+            </div>
+            <span>Name</span>
           </div>
           
-          <textarea
-            value={backstory}
-            onChange={(e) => setBackstory(e.target.value)}
-            placeholder="Describe your character's background, motivations, and personality... (Click prompts above for inspiration)"
-            className="w-full px-3 lg:px-4 py-2 lg:py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 h-24 lg:h-32 resize-none text-sm lg:text-base"
-          />
-          {errors.backstory && <div className="text-red-400 text-xs mt-1">{errors.backstory}</div>}
+          <div className={`flex items-center space-x-2 ${isStep2Valid ? 'text-green-400' : selectedClass ? 'text-yellow-400' : 'text-gray-400'}`}>
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${isStep2Valid ? 'bg-green-500' : selectedClass ? 'bg-yellow-500' : 'bg-gray-500'}`}>
+              {isStep2Valid ? '✓' : '2'}
+            </div>
+            <span>Class</span>
+          </div>
+          
+          <div className={`flex items-center space-x-2 ${isStep3Valid ? 'text-green-400' : backstory.trim() ? 'text-yellow-400' : 'text-gray-400'}`}>
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${isStep3Valid ? 'bg-green-500' : backstory.trim() ? 'bg-yellow-500' : 'bg-gray-500'}`}>
+              {isStep3Valid ? '✓' : '3'}
+            </div>
+            <span>Story</span>
+          </div>
         </div>
-
-        <button
-          onClick={handleSubmit}
-          disabled={!selectedClass || !characterName.trim()}
-          className={`w-full px-4 lg:px-6 py-3 rounded-xl font-semibold transition-all text-sm lg:text-base ${
-            selectedClass && characterName.trim()
-              ? 'bg-gradient-to-r from-green-600 to-blue-600 text-white hover:from-green-700 hover:to-blue-700 shadow-lg'
-              : 'bg-gray-600 text-gray-300 cursor-not-allowed opacity-50'
-          }`}
-        >
-          {selectedClass && characterName.trim() 
-            ? `Create ${characterName} the ${selectedClass.name}` 
-            : 'Complete required fields to create character'
-          }
-        </button>
       </div>
 
-      {/* Enhanced Class Preview */}
-      <div className="bg-white/10 rounded-xl p-4 lg:p-6">
-        <h3 className="text-xl font-bold text-white mb-4">
-          {previewClass ? `Class Preview: ${previewClass.name}` : 'Select a Class'}
-        </h3>
-        
-        {previewClass ? (
-          <div className="space-y-4">
-            {/* Class Header */}
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="text-4xl">{previewClass.icon}</div>
-              <div>
-                <h4 className="text-lg font-semibold text-white">{previewClass.name}</h4>
-                <p className="text-blue-200 text-sm">Master of tactical combat</p>
+      {/* Character Creation Success Animation */}
+      {showPreview && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-gradient-to-br from-purple-900/90 to-blue-900/90 rounded-2xl p-8 max-w-md mx-4 text-center border border-purple-500/50">
+            <div className="text-6xl mb-4 animate-bounce">{selectedClass?.icon}</div>
+            <h3 className="text-2xl font-bold text-white mb-2">Character Created!</h3>
+            <p className="text-purple-200 mb-4">
+              {characterName} the {selectedClass?.name} is ready for adventure!
+            </p>
+            <div className="animate-spin w-8 h-8 border-4 border-purple-300/30 border-t-purple-400 rounded-full mx-auto"></div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-8">
+        <div className="space-y-4 lg:space-y-6">
+          {/* Step 1: Character Name */}
+          <div className={`transition-all duration-300 ${currentStep === 1 ? 'ring-2 ring-blue-400 rounded-xl p-4' : ''}`}>
+            <label className="block text-white font-semibold mb-2 lg:mb-3 text-sm lg:text-base flex items-center space-x-2">
+              <span className="bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">1</span>
+              <span>Character Name</span>
+              {isStep1Valid && <span className="text-green-400">✓</span>}
+            </label>
+            <input
+              type="text"
+              placeholder="Enter your hero's name..."
+              value={characterName}
+              onChange={(e) => {
+                setCharacterName(e.target.value);
+                if (currentStep === 1 && e.target.value.trim()) {
+                  setTimeout(() => setCurrentStep(2), 500);
+                }
+              }}
+              onFocus={() => setCurrentStep(1)}
+              className={`w-full px-3 lg:px-4 py-2 lg:py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border transition-all duration-300 focus:outline-none text-sm lg:text-base ${
+                errors.name ? 'border-red-400 focus:border-red-400' : 
+                isStep1Valid ? 'border-green-400 focus:border-green-400' : 
+                'border-white/30 focus:border-blue-400'
+              }`}
+            />
+            {errors.name && <div className="text-red-400 text-xs mt-1 animate-pulse">{errors.name}</div>}
+            {isStep1Valid && !errors.name && (
+              <div className="text-green-400 text-xs mt-1 flex items-center space-x-1">
+                <span>✓</span>
+                <span>Great name choice!</span>
               </div>
+            )}
+          </div>
+
+          {/* Step 2: Choose Class */}
+          <div className={`transition-all duration-300 ${currentStep === 2 ? 'ring-2 ring-blue-400 rounded-xl p-4' : ''}`}>
+            <label className="block text-white font-semibold mb-2 lg:mb-3 text-sm lg:text-base flex items-center space-x-2">
+              <span className="bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">2</span>
+              <span>Choose Your Class</span>
+              {isStep2Valid && <span className="text-green-400">✓</span>}
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4 class-grid">
+              {classes.map((cls) => (
+                <div
+                  key={cls.name}
+                  onClick={() => {
+                    setSelectedClass(cls);
+                    if (currentStep === 2) {
+                      setTimeout(() => setCurrentStep(3), 500);
+                    }
+                  }}
+                  onFocus={() => setCurrentStep(2)}
+                  onMouseEnter={() => setHoveredClass(cls)}
+                  onMouseLeave={() => setHoveredClass(null)}
+                  className={`class-card p-3 lg:p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 transform ${
+                    selectedClass?.name === cls.name
+                      ? 'border-green-400 bg-green-500/30 shadow-lg scale-105 selected'
+                      : hoveredClass?.name === cls.name
+                      ? 'border-blue-400 bg-blue-500/20 shadow-md scale-102'
+                      : 'border-white/30 bg-white/10 hover:border-white/50 hover:scale-102'
+                  }`}
+                >
+                  <div className="text-center">
+                    <div className="text-2xl lg:text-3xl mb-2 transition-transform duration-300 hover:scale-110">{cls.icon}</div>
+                    <h3 className="text-white font-semibold text-sm lg:text-base mb-2">{cls.name}</h3>
+                    
+                    {/* Quick Stats with Meaningful Context */}
+                    <div className="text-xs text-blue-200 space-y-1 mb-2">
+                      <div className="flex justify-between">
+                        <span>STR: {cls.stats.strength}</span>
+                        <span className="text-yellow-300">Attack Power</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>DEX: {cls.stats.dexterity}</span>
+                        <span className="text-green-300">Agility</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>INT: {cls.stats.intelligence}</span>
+                        <span className="text-purple-300">Magic</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>CHA: {cls.stats.charisma}</span>
+                        <span className="text-pink-300">Social</span>
+                      </div>
+                    </div>
+                    
+                    {/* Visual Confirmation for Selected Class */}
+                    {selectedClass?.name === cls.name && (
+                      <div className="flex items-center justify-center space-x-1 text-green-400 text-xs animate-pulse">
+                        <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                        <span>Selected</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {errors.class && <div className="text-red-400 text-xs mt-1 animate-pulse">{errors.class}</div>}
+            {isStep2Valid && !errors.class && (
+              <div className="text-green-400 text-xs mt-1 flex items-center space-x-1">
+                <span>✓</span>
+                <span>Excellent choice! {selectedClass.name} is a powerful class.</span>
+              </div>
+            )}
+          </div>
+
+          {/* Step 3: Character Backstory */}
+          <div className={`transition-all duration-300 ${currentStep === 3 ? 'ring-2 ring-blue-400 rounded-xl p-4' : ''}`}>
+            <label className="block text-white font-semibold mb-2 lg:mb-3 text-sm lg:text-base flex items-center space-x-2">
+              <span className="bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">3</span>
+              <span>Character Backstory</span>
+              <span className="text-blue-300 text-xs">(Optional)</span>
+              {isStep3Valid && <span className="text-green-400">✓</span>}
+            </label>
+            
+            {/* Backstory Prompts for Creative Scaffolding */}
+            <div className="mb-3 flex flex-wrap gap-2">
+              {[
+                "What is your character's greatest fear?",
+                "Where did they grow up?",
+                "What brought them to adventure?",
+                "Who is their closest friend?",
+                "What do they value most?"
+              ].map((prompt, index) => (
+                <button
+                  key={index}
+                  onClick={() => {
+                    setBackstory(prev => prev ? `${prev}\n\n${prompt}` : prompt);
+                    setCurrentStep(3);
+                  }}
+                  className="px-2 py-1 bg-blue-600/30 text-blue-200 text-xs rounded hover:bg-blue-600/50 transition-all transform hover:scale-105"
+                >
+                  {prompt}
+                </button>
+              ))}
             </div>
             
-            {/* Class Description */}
-            <div className="bg-black/20 rounded-lg p-3">
-              <h5 className="text-white font-semibold mb-2">Class Description</h5>
-              <p className="text-blue-200 text-sm leading-relaxed">
-                {previewClass.name === 'Warrior' && "A mighty warrior skilled in close combat, wielding powerful weapons and wearing heavy armor. Your strength and endurance make you the frontline defender of your party."}
-                {previewClass.name === 'Rogue' && "A stealthy rogue who excels at sneaking, lockpicking, and dealing devastating sneak attacks. Your agility and cunning allow you to strike from the shadows."}
-                {previewClass.name === 'Mage' && "A powerful spellcaster who harnesses the arcane arts to cast devastating spells. Your intelligence and magical prowess make you a force to be reckoned with."}
-                {previewClass.name === 'Cleric' && "A divine spellcaster who channels the power of the gods to heal allies and smite enemies. Your faith and charisma make you an invaluable support."}
-                {previewClass.name === 'Ranger' && "A skilled hunter and tracker who excels at ranged combat and wilderness survival. Your dexterity and knowledge of nature make you a versatile adventurer."}
-                {previewClass.name === 'Bard' && "A charismatic performer who uses music and magic to inspire allies and charm enemies. Your creativity and social skills make you the heart of any party."}
-              </p>
-            </div>
-            
-            {/* Enhanced Stats with Context */}
-            <div>
-              <h5 className="text-white font-semibold mb-2">Base Stats & Meaning</h5>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="bg-black/20 rounded p-2">
-                  <div className="text-yellow-400 font-semibold">Strength: {previewClass.stats.strength}</div>
-                  <div className="text-blue-200 text-xs">Melee damage, carrying capacity</div>
-                </div>
-                <div className="bg-black/20 rounded p-2">
-                  <div className="text-green-400 font-semibold">Dexterity: {previewClass.stats.dexterity}</div>
-                  <div className="text-blue-200 text-xs">Ranged attacks, stealth, reflexes</div>
-                </div>
-                <div className="bg-black/20 rounded p-2">
-                  <div className="text-purple-400 font-semibold">Intelligence: {previewClass.stats.intelligence}</div>
-                  <div className="text-blue-200 text-xs">Spell power, knowledge, problem-solving</div>
-                </div>
-                <div className="bg-black/20 rounded p-2">
-                  <div className="text-pink-400 font-semibold">Charisma: {previewClass.stats.charisma}</div>
-                  <div className="text-blue-200 text-xs">Social skills, spell casting, leadership</div>
+            <textarea
+              value={backstory}
+              onChange={(e) => {
+                setBackstory(e.target.value);
+                setCurrentStep(3);
+              }}
+              onFocus={() => setCurrentStep(3)}
+              placeholder="Describe your character's background, motivations, and personality... (Click prompts above for inspiration)"
+              className={`w-full px-3 lg:px-4 py-2 lg:py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border transition-all duration-300 focus:outline-none h-24 lg:h-32 resize-none text-sm lg:text-base ${
+                errors.backstory ? 'border-red-400 focus:border-red-400' : 
+                isStep3Valid && backstory.trim() ? 'border-green-400 focus:border-green-400' : 
+                'border-white/30 focus:border-blue-400'
+              }`}
+            />
+            {errors.backstory && <div className="text-red-400 text-xs mt-1 animate-pulse">{errors.backstory}</div>}
+            {isStep3Valid && backstory.trim() && !errors.backstory && (
+              <div className="text-green-400 text-xs mt-1 flex items-center space-x-1">
+                <span>✓</span>
+                <span>Great backstory! This will enhance your roleplay experience.</span>
+              </div>
+            )}
+          </div>
+
+          {/* Create Character Button */}
+          <button
+            onClick={handleSubmit}
+            disabled={!selectedClass || !characterName.trim() || isValidating}
+            className={`w-full px-4 lg:px-6 py-3 rounded-xl font-semibold transition-all duration-300 text-sm lg:text-base transform ${
+              selectedClass && characterName.trim() && !isValidating
+                ? 'bg-gradient-to-r from-green-600 to-blue-600 text-white hover:from-green-700 hover:to-blue-700 shadow-lg hover:scale-105 hover:shadow-xl'
+                : 'bg-gray-600 text-gray-300 cursor-not-allowed opacity-50'
+            }`}
+          >
+            {isValidating ? (
+              <div className="flex items-center justify-center space-x-2">
+                <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></div>
+                <span>Validating...</span>
+              </div>
+            ) : selectedClass && characterName.trim() ? (
+              `Create ${characterName} the ${selectedClass.name}`
+            ) : (
+              'Complete required fields to create character'
+            )}
+          </button>
+        </div>
+
+        {/* Enhanced Class Preview */}
+        <div className="bg-white/10 rounded-xl p-4 lg:p-6 transition-all duration-300">
+          <h3 className="text-xl font-bold text-white mb-4">
+            {previewClass ? `Class Preview: ${previewClass.name}` : 'Select a Class'}
+          </h3>
+          
+          {previewClass ? (
+            <div className="space-y-4">
+              {/* Class Header */}
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="text-4xl animate-pulse">{previewClass.icon}</div>
+                <div>
+                  <h4 className="text-lg font-semibold text-white">{previewClass.name}</h4>
+                  <p className="text-blue-200 text-sm">Master of tactical combat</p>
                 </div>
               </div>
-            </div>
-            
-            {/* Class Abilities Preview */}
-            <div>
-              <h5 className="text-white font-semibold mb-2">Signature Abilities</h5>
-              <div className="space-y-2">
-                {Object.entries(previewClass.skills).slice(0, 3).map(([level, skill]: [string, any]) => (
-                  <div key={level} className="bg-black/20 rounded-lg p-2">
-                    <div className="text-yellow-400 text-sm font-semibold">Level {level}: {skill.name}</div>
-                    <div className="text-blue-200 text-xs">{skill.description}</div>
-                    <div className="text-green-400 text-xs mt-1">
-                      Cost: {skill.cost} | Range: {skill.range || 1} tiles
-                      {skill.aoe && ` | AOE: ${skill.radius || 2} tiles`}
+              
+              {/* Character Preview with Live Name */}
+              {characterName.trim() && (
+                <div className="bg-gradient-to-r from-purple-900/50 to-blue-900/50 rounded-lg p-4 border border-purple-500/30">
+                  <h5 className="text-white font-semibold mb-2 flex items-center space-x-2">
+                    <span>✨</span>
+                    <span>Character Preview</span>
+                  </h5>
+                  <div className="text-center">
+                    <div className="text-3xl mb-2">{previewClass.icon}</div>
+                    <p className="text-lg font-bold text-white">{characterName}</p>
+                    <p className="text-blue-300">Level 1 {previewClass.name}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-red-500/20 rounded px-2 py-1">
+                        <span className="text-red-300">❤️ Health: 100</span>
+                      </div>
+                      <div className="bg-blue-500/20 rounded px-2 py-1">
+                        <span className="text-blue-300">✨ Mana: 50</span>
+                      </div>
                     </div>
                   </div>
-                ))}
-                <div className="text-blue-200 text-xs text-center">+ More abilities as you level up!</div>
+                </div>
+              )}
+              
+              {/* Class Description */}
+              <div className="bg-black/20 rounded-lg p-3">
+                <h5 className="text-white font-semibold mb-2">Class Description</h5>
+                <p className="text-blue-200 text-sm leading-relaxed">
+                  {previewClass.name === 'Warrior' && "A mighty warrior skilled in close combat, wielding powerful weapons and wearing heavy armor. Your strength and endurance make you the frontline defender of your party."}
+                  {previewClass.name === 'Rogue' && "A stealthy rogue who excels at sneaking, lockpicking, and dealing devastating sneak attacks. Your agility and cunning allow you to strike from the shadows."}
+                  {previewClass.name === 'Mage' && "A powerful spellcaster who harnesses the arcane arts to cast devastating spells. Your intelligence and magical prowess make you a force to be reckoned with."}
+                  {previewClass.name === 'Cleric' && "A divine spellcaster who channels the power of the gods to heal allies and smite enemies. Your faith and charisma make you an invaluable support."}
+                  {previewClass.name === 'Ranger' && "A skilled hunter and tracker who excels at ranged combat and wilderness survival. Your dexterity and knowledge of nature make you a versatile adventurer."}
+                  {previewClass.name === 'Bard' && "A charismatic performer who uses music and magic to inspire allies and charm enemies. Your creativity and social skills make you the heart of any party."}
+                </p>
+              </div>
+
+              {/* Starting Equipment Preview */}
+              <div className="bg-black/20 rounded-lg p-3">
+                <h5 className="text-white font-semibold mb-2">Starting Equipment</h5>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-yellow-400">⚔️</span>
+                    <span className="text-blue-200">Iron Sword</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-brown-400">🛡️</span>
+                    <span className="text-blue-200">Leather Armor</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-red-400">🧪</span>
+                    <span className="text-blue-200">3x Healing Potions</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-yellow-400">💰</span>
+                    <span className="text-blue-200">100 Gold Pieces</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Class Abilities Preview */}
+              <div className="bg-black/20 rounded-lg p-3">
+                <h5 className="text-white font-semibold mb-2">Class Abilities</h5>
+                <div className="space-y-2 text-sm">
+                  {previewClass.skills && Object.entries(previewClass.skills).slice(0, 3).map(([skill, level]: [string, any]) => (
+                    <div key={skill} className="flex justify-between items-center">
+                      <span className="text-blue-200 capitalize">{skill.replace(/([A-Z])/g, ' $1').trim()}</span>
+                      <div className="flex items-center space-x-1">
+                        {[...Array(5)].map((_, i) => (
+                          <div key={i} className={`w-2 h-2 rounded-full ${i < level ? 'bg-yellow-400' : 'bg-gray-600'}`}></div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-            
-            {/* Playstyle Recommendation */}
-            <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-lg p-3 border border-blue-400/30">
-              <h5 className="text-white font-semibold mb-2">Recommended Playstyle</h5>
-              <p className="text-blue-200 text-sm">
-                {previewClass.name === 'Warrior' && "Lead from the front! Use your high health and armor to protect allies while dealing heavy melee damage."}
-                {previewClass.name === 'Rogue' && "Strike from the shadows! Use stealth and positioning to get advantage on your attacks and avoid damage."}
-                {previewClass.name === 'Mage' && "Control the battlefield! Use your spells to damage enemies, buff allies, and control the flow of combat."}
-                {previewClass.name === 'Cleric' && "Support your party! Heal allies, buff them with divine magic, and turn undead when needed."}
-                {previewClass.name === 'Ranger' && "Master the wilderness! Use your ranged attacks and animal companions to control the battlefield from a distance."}
-                {previewClass.name === 'Bard' && "Inspire greatness! Use your music and magic to buff allies, debuff enemies, and solve problems creatively."}
-              </p>
+          ) : (
+            <div className="text-center text-blue-200 py-8">
+              <div className="text-4xl mb-4 opacity-50">🎭</div>
+              <p>Select a class to see detailed information</p>
             </div>
-          </div>
-        ) : (
-          <div className="text-center py-8">
-            <div className="text-6xl mb-4 opacity-50">⚔️</div>
-            <p className="text-blue-200 text-lg">Hover over or click a class to see detailed information</p>
-            <p className="text-blue-300 text-sm mt-2">Each class offers unique abilities and playstyles</p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -2757,6 +3263,10 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
   const [joinCode, setJoinCode] = useState('');
   const [isMultiplayer, setIsMultiplayer] = useState(true);
   const [errors, setErrors] = useState<{ theme?: string; customPrompt?: string }>({});
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'not-started'>('all');
+  const [sortBy, setSortBy] = useState<'date' | 'name' | 'status' | 'players'>('date');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Profanity filter (reuse from above)
   const profanityList = ['fuck', 'shit', 'bitch', 'asshole', 'bastard', 'dick', 'cunt', 'piss', 'cock', 'fag', 'slut', 'whore'];
@@ -2815,6 +3325,50 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
     }
   };
 
+  // Enhanced campaign filtering and sorting
+  const filteredAndSortedCampaigns = React.useMemo(() => {
+    let filtered = campaigns.filter(campaign => {
+      // Search filter
+      const matchesSearch = campaign.theme.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           campaign.customPrompt?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // Status filter
+      let matchesStatus = true;
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'not-started') {
+          matchesStatus = !campaign.started;
+        } else {
+          matchesStatus = campaign.status === statusFilter;
+        }
+      }
+      
+      return matchesSearch && matchesStatus;
+    });
+
+    // Sort campaigns
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return a.theme.localeCompare(b.theme);
+        case 'status':
+          const getStatusPriority = (campaign: any) => {
+            if (!campaign.started) return 3;
+            if (campaign.status === 'active') return 1;
+            if (campaign.status === 'paused') return 2;
+            return 4;
+          };
+          return getStatusPriority(a) - getStatusPriority(b);
+        case 'players':
+          return (b.players?.length || 0) - (a.players?.length || 0);
+        case 'date':
+        default:
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      }
+    });
+
+    return filtered;
+  }, [campaigns, searchTerm, statusFilter, sortBy]);
+
   const getCampaignStatusIcon = (campaign: any) => {
     if (!campaign.started) return '⏸️'; // Not started
     if (campaign.status === 'active') return '▶️'; // Active
@@ -2836,68 +3390,116 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
     return 'text-gray-400';
   };
 
+  const getThemeIcon = (themeName: string) => {
+    const theme = campaignThemes.find(t => t.name === themeName);
+    return theme?.icon || '🎲';
+  };
+
+  const getThemeGradient = (themeName: string) => {
+    const gradients: Record<string, string> = {
+      'Fantasy': 'from-emerald-600 to-teal-600',
+      'Sci-Fi': 'from-blue-600 to-cyan-600',
+      'Horror': 'from-red-600 to-orange-600',
+      'Mystery': 'from-purple-600 to-indigo-600',
+      'Western': 'from-yellow-600 to-orange-600',
+      'Modern': 'from-gray-600 to-blue-600',
+      'Post-Apocalyptic': 'from-orange-600 to-red-600',
+      'Steampunk': 'from-amber-600 to-yellow-600'
+    };
+    return gradients[themeName] || 'from-blue-600 to-purple-600';
+  };
+
   if (showCreateCampaign) {
     return (
-      <div className="space-y-4 lg:space-y-6">
+      <div className="space-y-6 animate-slide-up">
         <div className="flex justify-between items-center">
-          <h3 className="text-xl lg:text-2xl font-bold text-white">Create New Campaign</h3>
+          <div>
+            <h3 className="text-2xl lg:text-3xl font-bold text-white">Create New Campaign</h3>
+            <p className="text-blue-200 mt-1">Choose a theme and customize your adventure</p>
+          </div>
           <button
             onClick={() => setShowCreateCampaign(false)}
-            className="px-3 lg:px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all text-sm lg:text-base"
+            className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all flex items-center space-x-2"
           >
-            ← Back
+            <span>←</span>
+            <span>Back</span>
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4 theme-grid">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 theme-grid">
           {campaignThemes.map((theme) => (
             <div
               key={theme.name}
               onClick={() => setSelectedTheme(theme)}
-              className={`p-4 lg:p-6 rounded-xl border-2 cursor-pointer transition-all ${
+              className={`group p-6 rounded-xl border-2 cursor-pointer transition-all duration-300 transform hover:scale-105 ${
                 selectedTheme?.name === theme.name
-                  ? 'border-blue-400 bg-blue-500/30'
-                  : 'border-white/30 bg-white/10 hover:border-white/50'
+                  ? 'border-blue-400 bg-gradient-to-br from-blue-500/30 to-purple-500/30 shadow-xl scale-105'
+                  : 'border-white/30 bg-white/10 hover:border-white/50 hover:bg-white/20'
               }`}
             >
               <div className="text-center">
-                <div className="text-2xl lg:text-4xl mb-2 lg:mb-3">{theme.icon}</div>
-                <h4 className="text-white font-semibold mb-1 lg:mb-2 text-sm lg:text-base">{theme.name}</h4>
-                <p className="text-blue-200 text-xs lg:text-sm">{theme.description}</p>
+                <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">{theme.icon}</div>
+                <h4 className="text-white font-bold mb-2 text-lg">{theme.name}</h4>
+                <p className="text-blue-200 text-sm leading-relaxed">{theme.description}</p>
+                {selectedTheme?.name === theme.name && (
+                  <div className="mt-3 flex items-center justify-center space-x-1 text-blue-400 text-sm animate-pulse">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                    <span>Selected</span>
+                  </div>
+                )}
               </div>
             </div>
           ))}
         </div>
-        {errors.theme && <div className="text-red-400 text-xs mt-1">{errors.theme}</div>}
+        {errors.theme && <div className="text-red-400 text-sm animate-pulse">{errors.theme}</div>}
 
-        <div>
-          <label className="block text-white font-semibold mb-2">Custom Campaign Prompt (Optional)</label>
+        <div className="bg-white/10 rounded-xl p-6 border border-white/20">
+          <label className="block text-white font-semibold mb-3">Custom Campaign Prompt (Optional)</label>
           <textarea
             value={customPrompt}
             onChange={(e) => setCustomPrompt(e.target.value)}
-            placeholder="Add any specific details, themes, or story elements you want the AI to include..."
-            className="w-full px-4 py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 h-24 resize-none"
+            placeholder="Add specific details, themes, or story elements you want the AI to include in your campaign..."
+            className="w-full px-4 py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 h-32 resize-none"
           />
-          {errors.customPrompt && <div className="text-red-400 text-xs mt-1">{errors.customPrompt}</div>}
+          <div className="flex justify-between items-center mt-2">
+            {errors.customPrompt && <div className="text-red-400 text-sm animate-pulse">{errors.customPrompt}</div>}
+            <div className="text-xs text-gray-400 ml-auto">
+              {customPrompt.length}/1000 characters
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center space-x-3 lg:space-x-4">
-          <label className="flex items-center space-x-2 text-white text-sm lg:text-base">
+        <div className="bg-white/10 rounded-xl p-6 border border-white/20">
+          <div className="flex items-center space-x-3">
             <input
               type="checkbox"
+              id="multiplayer"
               checked={isMultiplayer}
               onChange={(e) => setIsMultiplayer(e.target.checked)}
-              className="rounded"
+              className="w-5 h-5 text-blue-600 bg-white/20 border-white/30 rounded focus:ring-blue-500"
             />
-            <span>Multiplayer Campaign (up to 6 players)</span>
-          </label>
+            <label htmlFor="multiplayer" className="text-white font-medium">
+              Multiplayer Campaign (up to 6 players)
+            </label>
+          </div>
+          <p className="text-blue-200 text-sm mt-2 ml-8">
+            {isMultiplayer ? 'Others can join using the campaign code' : 'Solo adventure - just you and the AI'}
+          </p>
         </div>
 
         <button
           onClick={handleCreateCampaign}
-          className="w-full px-4 lg:px-6 py-2 lg:py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all text-sm lg:text-base"
+          disabled={!selectedTheme}
+          className={`w-full px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 transform ${
+            selectedTheme
+              ? `bg-gradient-to-r ${getThemeGradient(selectedTheme.name)} text-white hover:shadow-xl hover:scale-105`
+              : 'bg-gray-600 text-gray-300 cursor-not-allowed opacity-50'
+          }`}
         >
-          Create {selectedTheme?.name || 'Campaign'}
+          {selectedTheme 
+            ? `Create ${selectedTheme.name} Campaign ${isMultiplayer ? '(Multiplayer)' : '(Solo)'}`
+            : 'Select a theme to continue'
+          }
         </button>
       </div>
     );
@@ -2905,37 +3507,55 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
 
   if (showJoinCampaign) {
     return (
-      <div className="space-y-4 lg:space-y-6">
+      <div className="space-y-6 animate-slide-up">
         <div className="flex justify-between items-center">
-          <h3 className="text-xl lg:text-2xl font-bold text-white">Join Campaign</h3>
+          <div>
+            <h3 className="text-2xl lg:text-3xl font-bold text-white">Join Campaign</h3>
+            <p className="text-blue-200 mt-1">Enter a campaign code to join an existing adventure</p>
+          </div>
           <button
             onClick={() => setShowJoinCampaign(false)}
-            className="px-3 lg:px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all text-sm lg:text-base"
+            className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all flex items-center space-x-2"
           >
-            ← Back
+            <span>←</span>
+            <span>Back</span>
           </button>
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-white font-semibold mb-2 text-sm lg:text-base">Campaign Code</label>
-            <input
-              type="text"
-              value={joinCode}
-              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              placeholder="Enter 6-character campaign code"
-              className="w-full px-3 lg:px-4 py-2 lg:py-3 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 text-center text-lg font-mono"
-              maxLength={6}
-            />
-          </div>
+        <div className="max-w-md mx-auto">
+          <div className="bg-white/10 rounded-xl p-8 border border-white/20 text-center">
+            <div className="text-6xl mb-4">🎯</div>
+            <h4 className="text-xl font-bold text-white mb-4">Join Adventure</h4>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-white font-semibold mb-3">Campaign Code</label>
+                <input
+                  type="text"
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                  placeholder="ABC123"
+                  className="w-full px-4 py-4 rounded-xl bg-white/20 text-white placeholder-blue-200 border border-white/30 focus:outline-none focus:border-blue-400 text-center text-2xl font-mono tracking-wider"
+                  maxLength={6}
+                />
+                <p className="text-blue-200 text-sm mt-2">
+                  Ask your Game Master for the 6-character code
+                </p>
+              </div>
 
-          <button
-            onClick={handleJoinCampaign}
-            disabled={!joinCode.trim() || joinCode.length !== 6}
-            className="w-full px-4 lg:px-6 py-2 lg:py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm lg:text-base"
-          >
-            Join Campaign
-          </button>
+              <button
+                onClick={handleJoinCampaign}
+                disabled={!joinCode.trim() || joinCode.length !== 6}
+                className={`w-full px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 transform ${
+                  joinCode.trim() && joinCode.length === 6
+                    ? 'bg-gradient-to-r from-green-600 to-blue-600 text-white hover:shadow-xl hover:scale-105'
+                    : 'bg-gray-600 text-gray-300 cursor-not-allowed opacity-50'
+                }`}
+              >
+                {joinCode.length === 6 ? `Join Campaign ${joinCode}` : 'Enter Campaign Code'}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -2943,187 +3563,288 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
 
   return (
     <div className="space-y-6 campaign-lobby">
-      {/* Header with improved contrast and spacing */}
+      {/* Enhanced Header */}
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-white mb-2 drop-shadow-lg">Campaign Lobby</h2>
-        <p className="text-blue-100 text-lg">Welcome, {character.name} the Level {character.level} {character.class}!</p>
+        <h2 className="text-4xl font-bold text-white mb-3 drop-shadow-lg">Campaign Lobby</h2>
+        <div className="flex items-center justify-center space-x-3 text-blue-100">
+          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold">
+            {character?.name?.charAt(0) || 'A'}
+          </div>
+          <p className="text-lg">Welcome, <span className="font-semibold text-white">{character?.name}</span> the Level {character?.level} {character?.class}!</p>
+        </div>
       </div>
 
-      {/* Main action buttons with improved design */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-8">
-        <Tooltip content="Create a new campaign with custom themes and settings">
-          <button
-            onClick={() => setShowCreateCampaign(true)}
-            className="flex-1 px-8 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-semibold hover:from-emerald-700 hover:to-teal-700 transition-all text-lg shadow-lg hover:shadow-xl transform hover:scale-105"
-          >
-            <div className="flex items-center justify-center space-x-3">
+      {/* Enhanced action buttons */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        <button
+          onClick={() => setShowCreateCampaign(true)}
+          className="group p-6 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+        >
+          <div className="flex items-center justify-center space-x-3">
+            <div className="p-2 bg-white/20 rounded-full group-hover:scale-110 transition-transform duration-300">
               <Plus size={24} />
-              <span>Create New Campaign</span>
             </div>
-          </button>
-        </Tooltip>
-        <Tooltip content="Join an existing campaign using a 6-character code">
-          <button
-            onClick={() => setShowJoinCampaign(true)}
-            className="flex-1 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all text-lg shadow-lg hover:shadow-xl transform hover:scale-105"
-          >
-            <div className="flex items-center justify-center space-x-3">
+            <div className="text-left">
+              <div>Create New Campaign</div>
+              <div className="text-emerald-100 text-sm font-normal">Start a fresh adventure</div>
+            </div>
+          </div>
+        </button>
+        
+        <button
+          onClick={() => setShowJoinCampaign(true)}
+          className="group p-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+        >
+          <div className="flex items-center justify-center space-x-3">
+            <div className="p-2 bg-white/20 rounded-full group-hover:scale-110 transition-transform duration-300">
               <Users size={24} />
-              <span>Join Campaign</span>
             </div>
-          </button>
-        </Tooltip>
+            <div className="text-left">
+              <div>Join Campaign</div>
+              <div className="text-blue-100 text-sm font-normal">Use a campaign code</div>
+            </div>
+          </div>
+        </button>
       </div>
 
-      {/* Campaigns section with improved design */}
+      {/* Enhanced campaigns section */}
       {campaigns.length > 0 && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-bold text-white">Your Campaigns</h3>
-            <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                placeholder="Search campaigns..."
-                className="px-4 py-2 bg-white/10 text-white placeholder-gray-300 rounded-lg border border-white/20 focus:outline-none focus:border-blue-400"
-              />
-              <select className="px-4 py-2 bg-white/10 text-white rounded-lg border border-white/20 focus:outline-none focus:border-blue-400">
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="paused">Paused</option>
-                <option value="not-started">Not Started</option>
-              </select>
+          {/* Filters and search */}
+          <div className="bg-white/10 rounded-xl p-4 border border-white/20">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+              <div className="flex items-center space-x-4">
+                <h3 className="text-xl font-bold text-white">Your Campaigns</h3>
+                <span className="px-3 py-1 bg-blue-600/30 text-blue-200 rounded-full text-sm font-medium">
+                  {filteredAndSortedCampaigns.length} of {campaigns.length}
+                </span>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                <input
+                  type="text"
+                  placeholder="Search campaigns..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="px-4 py-2 bg-white/10 text-white placeholder-gray-300 rounded-lg border border-white/20 focus:outline-none focus:border-blue-400"
+                />
+                
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as any)}
+                  className="px-4 py-2 bg-white/10 text-white rounded-lg border border-white/20 focus:outline-none focus:border-blue-400"
+                >
+                  <option value="all">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                  <option value="not-started">Not Started</option>
+                </select>
+                
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="px-4 py-2 bg-white/10 text-white rounded-lg border border-white/20 focus:outline-none focus:border-blue-400"
+                >
+                  <option value="date">Sort by Date</option>
+                  <option value="name">Sort by Name</option>
+                  <option value="status">Sort by Status</option>
+                  <option value="players">Sort by Players</option>
+                </select>
+
+                <div className="flex border border-white/20 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={`px-3 py-2 ${viewMode === 'grid' ? 'bg-blue-600 text-white' : 'bg-white/10 text-blue-200'} transition-colors`}
+                  >
+                    ⊞
+                  </button>
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`px-3 py-2 ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white/10 text-blue-200'} transition-colors`}
+                  >
+                    ☰
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {campaigns.map((campaign) => (
-              <div key={campaign.id} className="group relative bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:border-blue-400/50 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105">
-                {/* Status indicator */}
-                <div className={`absolute top-4 right-4 w-3 h-3 rounded-full ${
-                  !campaign.started ? 'bg-yellow-400' : 
-                  campaign.status === 'active' ? 'bg-green-400' : 
-                  campaign.status === 'paused' ? 'bg-orange-400' : 'bg-gray-400'
-                }`}></div>
+          {/* Campaign grid/list */}
+          <div className={`${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-4'}`}>
+            {filteredAndSortedCampaigns.map((campaign) => (
+              <div 
+                key={campaign.id} 
+                className={`group relative bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 hover:border-blue-400/50 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 ${
+                  viewMode === 'list' ? 'p-4 flex items-center space-x-4' : 'p-6'
+                }`}
+              >
+                {/* Enhanced status indicator */}
+                <div className={`absolute ${viewMode === 'list' ? 'left-2 top-1/2 transform -translate-y-1/2' : 'top-4 right-4'} flex items-center space-x-2`}>
+                  <div className={`w-3 h-3 rounded-full ${
+                    !campaign.started ? 'bg-yellow-400 animate-pulse' : 
+                    campaign.status === 'active' ? 'bg-green-400' : 
+                    campaign.status === 'paused' ? 'bg-orange-400' : 'bg-gray-400'
+                  }`}></div>
+                  {viewMode === 'list' && (
+                    <span className={`text-xs font-medium ${getCampaignStatusColor(campaign)}`}>
+                      {getCampaignStatusText(campaign)}
+                    </span>
+                  )}
+                </div>
                 
-                {/* Campaign header */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <span className="text-2xl">{getCampaignStatusIcon(campaign)}</span>
-                      <h4 className="text-xl font-bold text-white">{campaign.theme}</h4>
+                <div className={`${viewMode === 'list' ? 'flex-1' : ''}`}>
+                  {/* Campaign header */}
+                  <div className={`${viewMode === 'list' ? 'flex items-center space-x-4' : 'mb-4'}`}>
+                    <div className={`${viewMode === 'list' ? 'flex items-center space-x-3' : 'flex items-center space-x-3 mb-2'}`}>
+                      <div className={`p-2 bg-gradient-to-r ${getThemeGradient(campaign.theme)} rounded-lg`}>
+                        <span className="text-xl">{getThemeIcon(campaign.theme)}</span>
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-bold text-white">{campaign.theme}</h4>
+                        {viewMode === 'grid' && (
+                          <p className={`text-sm font-medium ${getCampaignStatusColor(campaign)}`}>
+                            {getCampaignStatusText(campaign)} • {(campaign.players?.length || 0)} player{(campaign.players?.length || 0) !== 1 ? 's' : ''}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <p className={`text-sm font-medium ${getCampaignStatusColor(campaign)}`}>
-                      {getCampaignStatusText(campaign)} • {(campaign.players?.length || 0)} player{(campaign.players?.length || 0) !== 1 ? 's' : ''}
-                    </p>
-                    {!campaign.started && campaign.isMultiplayer && (
-                      <div className="mt-2 flex items-center space-x-2">
-                        <span className="text-yellow-300 text-sm">Code:</span>
-                        <code className="bg-yellow-900/50 text-yellow-200 px-2 py-1 rounded text-sm font-mono">
-                          {campaign.code}
-                        </code>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(campaign.code);
-                            // Show toast notification
-                          }}
-                          className="text-yellow-300 hover:text-yellow-100 transition-colors"
-                          title="Copy campaign code"
-                        >
-                          <Copy size={14} />
-                        </button>
+                    
+                    {viewMode === 'list' && (
+                      <div className="text-right">
+                        <div className="text-blue-200 text-sm">{(campaign.players?.length || 0)} players</div>
+                        <div className="text-gray-400 text-xs">{campaign.messages?.length || 0} messages</div>
                       </div>
                     )}
                   </div>
+                  
+                  {/* Campaign code for unstarted multiplayer campaigns */}
+                  {!campaign.started && campaign.isMultiplayer && viewMode === 'grid' && (
+                    <div className="mb-4 p-3 bg-yellow-900/30 rounded-lg border border-yellow-500/30">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-yellow-300 text-sm font-medium">Campaign Code:</span>
+                          <code className="ml-2 bg-yellow-900/50 text-yellow-200 px-2 py-1 rounded text-sm font-mono">
+                            {campaign.code}
+                          </code>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(campaign.code);
+                          }}
+                          className="text-yellow-300 hover:text-yellow-100 transition-colors p-1"
+                          title="Copy campaign code"
+                        >
+                          <Copy size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Campaign progress */}
+                  {campaign.started && viewMode === 'grid' && (
+                    <div className="mb-4">
+                      <div className="flex justify-between text-sm text-white mb-2">
+                        <span>Adventure Progress</span>
+                        <span>{campaign.messages?.length || 0} messages</span>
+                      </div>
+                      <div className="w-full bg-white/20 rounded-full h-2">
+                        <div 
+                          className={`bg-gradient-to-r ${getThemeGradient(campaign.theme)} h-2 rounded-full transition-all duration-500`}
+                          style={{ width: `${Math.min((campaign.messages?.length || 0) * 2, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
                 
-                {/* Campaign progress */}
-                {campaign.started && (
-                  <div className="mb-4">
-                    <div className="flex justify-between text-sm text-white mb-2">
-                      <span>Progress</span>
-                      <span>{campaign.messages?.length || 0} messages</span>
-                    </div>
-                    <div className="w-full bg-white/20 rounded-full h-2">
-                      <div 
-                        className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min((campaign.messages?.length || 0) * 2, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-                
                 {/* Quick actions */}
-                <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className={`${viewMode === 'list' ? 'flex space-x-2' : 'flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity'}`}>
                   {/* Play/Resume Button */}
                   {(!campaign.started || campaign.status === 'paused') && (
-                    <Tooltip content={!campaign.started ? "Start Campaign" : "Resume Campaign"}>
-                      <button
-                        onClick={() => handleResumeCampaign(campaign.id)}
-                        className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all text-sm font-medium"
-                      >
-                        {!campaign.started ? '▶ Start' : '▶ Resume'}
-                      </button>
-                    </Tooltip>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleResumeCampaign(campaign.id);
+                      }}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all text-sm font-medium flex items-center space-x-1"
+                      title={!campaign.started ? "Start Campaign" : "Resume Campaign"}
+                    >
+                      <span>▶</span>
+                      <span>{!campaign.started ? 'Start' : 'Resume'}</span>
+                    </button>
                   )}
                   
                   {/* Pause Button */}
                   {campaign.started && campaign.status === 'active' && (
-                    <Tooltip content="Pause Campaign">
-                      <button
-                        onClick={() => handlePauseCampaign(campaign.id)}
-                        className="flex-1 px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-all text-sm font-medium"
-                      >
-                        ⏸ Pause
-                      </button>
-                    </Tooltip>
-                  )}
-                  
-                  {/* Edit Button */}
-                  <Tooltip content="Edit Campaign">
                     <button
-                      onClick={() => {/* Edit functionality */}}
-                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePauseCampaign(campaign.id);
+                      }}
+                      className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-all text-sm font-medium"
+                      title="Pause Campaign"
                     >
-                      <Edit size={14} />
+                      ⏸
                     </button>
-                  </Tooltip>
+                  )}
                   
                   {/* Delete Button */}
-                  {onDeleteCampaign && (
-                    <Tooltip content="Delete Campaign (cannot be undone)">
-                      <button
-                        onClick={() => handleDeleteCampaign(campaign.id)}
-                        className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </Tooltip>
-                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteCampaign(campaign.id);
+                    }}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all text-sm font-medium"
+                    title="Delete Campaign"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
               </div>
             ))}
           </div>
+
+          {/* No results message */}
+          {filteredAndSortedCampaigns.length === 0 && campaigns.length > 0 && (
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4 opacity-50">🔍</div>
+              <h3 className="text-xl font-bold text-white mb-2">No campaigns match your filters</h3>
+              <p className="text-blue-200">Try adjusting your search or filter settings</p>
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setStatusFilter('all');
+                }}
+                className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all"
+              >
+                Clear Filters
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Improved empty state */}
+      {/* Empty state */}
       {campaigns.length === 0 && (
         <div className="text-center py-12">
           <div className="text-8xl mb-6 opacity-50">🏰</div>
-          <h3 className="text-2xl font-bold text-white mb-4">No campaigns yet</h3>
-          <p className="text-blue-200 text-lg mb-6">Create your first campaign or join an existing one to begin your adventure!</p>
-          <div className="flex justify-center space-x-4">
+          <h3 className="text-3xl font-bold text-white mb-4">Ready for Adventure?</h3>
+          <p className="text-blue-200 text-lg mb-8 max-w-md mx-auto">
+            Your epic journey awaits! Create your first campaign or join an existing one to begin your adventure in the realms of MythSeeker.
+          </p>
+          <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
             <button
               onClick={() => setShowCreateCampaign(true)}
-              className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-700 hover:to-teal-700 transition-all font-semibold"
+              className="px-8 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl hover:from-emerald-700 hover:to-teal-700 transition-all font-bold text-lg shadow-lg transform hover:scale-105"
             >
-              Create Your First Campaign
+              🎲 Create Your First Campaign
             </button>
             <button
               onClick={() => setShowJoinCampaign(true)}
-              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-semibold"
+              className="px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all font-bold text-lg shadow-lg transform hover:scale-105"
             >
-              Join Existing Campaign
+              🤝 Join Existing Campaign
             </button>
           </div>
         </div>
@@ -3131,8 +3852,6 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
     </div>
   );
 };
-
-
 
 const WaitingRoom: React.FC<{ campaign: any, onStart: () => void, onBack: () => void }> = ({ campaign, onStart, onBack }) => (
   <div className="text-white p-3 lg:p-4">

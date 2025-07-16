@@ -5,7 +5,9 @@ import {
   GoogleAuthProvider, 
   signOut, 
   onAuthStateChanged,
-  User
+  User,
+  signInWithRedirect,
+  getRedirectResult
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -125,20 +127,40 @@ class FirebaseService {
   private listeners: { [key: string]: () => void } = {};
 
   // Authentication
-  async signInWithGoogle(): Promise<User> {
+  async signInWithGoogle(): Promise<void> {
     try {
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      // Create user profile in Firestore if not exists
-      const user = result.user;
-      const userProfile = await this.getUserProfile(user.uid);
-      if (!userProfile) {
-        await this.createUserProfile(user);
-      }
-      return user;
+      
+      // Configure provider to reduce popup issues
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
+
+      await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error('Error signing in with Google:', error);
       throw error;
+    }
+  }
+
+  async handleRedirectSignIn(): Promise<User | null> {
+    try {
+      const result = await getRedirectResult(auth);
+      if (result) {
+        // This gives you a Google Access Token. You can use it to access the Google API.
+        // const credential = GoogleAuthProvider.credentialFromResult(result);
+        // const token = credential.accessToken;
+        const user = result.user;
+        const userProfile = await this.getUserProfile(user.uid);
+        if (!userProfile) {
+          await this.createUserProfile(user);
+        }
+        return user;
+      }
+      return null;
+    } catch(error) {
+      console.error("Error handling redirect sign in", error);
+      return null;
     }
   }
 

@@ -2,6 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Global reset and full-screen setup */
+@layer base {
+  html, body, #root {
+    @apply h-full w-full m-0 p-0;
+  }
+  
+  body {
+    @apply font-sans antialiased;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* Ensure all main containers take full height with proper overflow */
+  .main-container {
+    @apply h-screen w-screen overflow-hidden;
+  }
+  
+  /* Content areas that should scroll */
+  .scrollable-content {
+    @apply overflow-auto;
+  }
+}
+
 /* Custom CSS for improved UI/UX */
 @layer components {
   /* Improved card design with better shadows and hover effects */
@@ -123,19 +146,6 @@
     @apply bg-gray-400 shadow-lg shadow-gray-400/50;
   }
 
-  /* Improved animations */
-  .fade-in {
-    animation: fadeIn 0.3s ease-in-out;
-  }
-
-  .slide-up {
-    animation: slideUp 0.3s ease-out;
-  }
-
-  .bounce-in {
-    animation: bounceIn 0.5s ease-out;
-  }
-
   /* Responsive improvements */
   .responsive-grid {
     @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6;
@@ -148,9 +158,125 @@
   .responsive-padding {
     @apply px-4 sm:px-6 lg:px-8;
   }
+
+  /* Responsive utilities */
+  .mobile-only {
+    @apply block sm:hidden;
+  }
+  
+  .tablet-up {
+    @apply hidden sm:block;
+  }
+  
+  .desktop-only {
+    @apply hidden lg:block;
+  }
+  
+  /* Responsive spacing */
+  .mobile-padding {
+    @apply p-4 sm:p-6 lg:p-8;
+  }
+  
+  .mobile-margin {
+    @apply m-4 sm:m-6 lg:m-8;
+  }
+  
+  /* Responsive text sizing */
+  .responsive-heading {
+    @apply text-xl sm:text-2xl lg:text-3xl;
+  }
+  
+  .responsive-subheading {
+    @apply text-lg sm:text-xl lg:text-2xl;
+  }
+  
+  .responsive-body {
+    @apply text-sm sm:text-base lg:text-lg;
+  }
+
+  /* Typography system */
+  .heading-primary {
+    @apply text-2xl sm:text-3xl lg:text-4xl font-bold text-white leading-tight tracking-tight;
+  }
+  
+  .heading-secondary {
+    @apply text-xl sm:text-2xl lg:text-3xl font-semibold text-white leading-tight;
+  }
+  
+  .heading-tertiary {
+    @apply text-lg sm:text-xl lg:text-2xl font-semibold text-white;
+  }
+  
+  .text-body {
+    @apply text-sm sm:text-base text-blue-100 leading-relaxed;
+  }
+  
+  .text-caption {
+    @apply text-xs sm:text-sm text-blue-200;
+  }
+  
+  .text-highlight {
+    @apply text-yellow-300 font-medium;
+  }
+  
+  /* Consistent spacing system */
+  .section-spacing {
+    @apply space-y-4 sm:space-y-6 lg:space-y-8;
+  }
+  
+  .card-spacing {
+    @apply p-4 sm:p-6 lg:p-8;
+  }
+  
+  .grid-spacing {
+    @apply gap-4 sm:gap-6 lg:gap-8;
+  }
+  
+  /* Content containers */
+  .content-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  .narrow-container {
+    @apply max-w-2xl mx-auto px-4 sm:px-6;
+  }
+  
+  /* Visual hierarchy helpers */
+  .surface-elevated {
+    @apply bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 shadow-lg;
+  }
+  
+  .surface-interactive {
+    @apply bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 hover:border-blue-400/50 transition-all duration-300 cursor-pointer hover:shadow-xl;
+  }
+  
+  .divider {
+    @apply border-t border-white/20 my-4 sm:my-6;
+  }
 }
 
-/* Custom animations */
+/* Animation utilities */
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+.slide-down {
+  animation: slideDown 0.3s ease-out;
+}
+
+.scale-in {
+  animation: scaleIn 0.2s ease-out;
+}
+
+.bounce-in {
+  animation: bounceIn 0.4s ease-out;
+}
+
+/* Custom keyframes */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -158,31 +284,65 @@
 
 @keyframes slideUp {
   from { 
-    opacity: 0; 
-    transform: translateY(20px); 
+    opacity: 0;
+    transform: translateY(20px);
   }
   to { 
-    opacity: 1; 
-    transform: translateY(0); 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from { 
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from { 
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to { 
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
 @keyframes bounceIn {
   0% { 
-    opacity: 0; 
-    transform: scale(0.3); 
+    opacity: 0;
+    transform: scale(0.3);
   }
   50% { 
-    opacity: 1; 
-    transform: scale(1.05); 
+    opacity: 1;
+    transform: scale(1.05);
   }
   70% { 
-    transform: scale(0.9); 
+    transform: scale(0.9);
   }
   100% { 
-    opacity: 1; 
-    transform: scale(1); 
+    transform: scale(1);
   }
+}
+
+/* Hover effects */
+.hover-lift {
+  @apply transition-all duration-300 hover:transform hover:scale-105 hover:shadow-xl;
+}
+
+.hover-glow {
+  @apply transition-all duration-300 hover:shadow-lg hover:shadow-blue-400/25;
+}
+
+.hover-slide {
+  @apply transition-all duration-300 hover:translate-x-1;
 }
 
 /* Improved focus states for accessibility */
@@ -229,4 +389,49 @@
     0 10px 15px -3px rgba(0, 0, 0, 0.1),
     0 4px 6px -2px rgba(0, 0, 0, 0.05),
     0 0 0 1px rgba(255, 255, 255, 0.1);
+} 
+
+/* Accessibility utilities */
+.sr-only {
+  @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+  clip: rect(0, 0, 0, 0);
+}
+
+.focus-visible-ring {
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-blue-900;
+}
+
+.keyboard-nav {
+  @apply focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-blue-900;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .surface-elevated {
+    @apply border-2 border-white/40;
+  }
+  
+  .btn-primary {
+    @apply border-2 border-blue-300;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .fade-in,
+  .slide-up,
+  .slide-down,
+  .scale-in,
+  .bounce-in {
+    animation: none;
+  }
+  
+  .hover-lift {
+    @apply hover:transform-none hover:scale-100;
+  }
+}
+
+/* Skip link for keyboard navigation */
+.skip-link {
+  @apply absolute top-2 left-2 bg-blue-700 text-white px-4 py-2 rounded z-50 transform -translate-y-16 focus:translate-y-0 transition-transform duration-200;
 } 

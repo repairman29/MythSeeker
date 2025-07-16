@@ -62,42 +62,59 @@ service cloud.firestore {
         request.resource.data.displayName.size() <= 50 &&
         request.resource.data.email is string &&
         request.resource.data.createdAt is timestamp;
+      
+      // Allow users to list their own user document, needed for some queries
+      allow list: if isAuthenticated() && request.query.resource.data.userId == request.auth.uid;
     }
 
     // Characters - users can only access their own characters
     match /characters/{characterId} {
-      allow read, write: if isAuthenticated() && 
-        resource.data.playerId == request.auth.uid;
+      allow get, update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      
+      // A user can list characters if they are authenticated. 
+      // The query in the app must filter by the user's ID.
+      allow list: if isAuthenticated();
+
       allow create: if isAuthenticated() && 
-        request.resource.data.playerId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid &&
         isValidCharacter();
-      allow delete: if isAuthenticated() && 
-        resource.data.playerId == request.auth.uid;
+    }
+
+    match /collections/{collectionId} {
+      allow read, write: if isAuthenticated();
     }
 
     // Campaigns - users can read campaigns they're part of, hosts can modify
     match /campaigns/{campaignId} {
       allow read: if isAuthenticated() && 
-        request.auth.uid in resource.data.players;
+        (request.auth.uid in resource.data.get('playerIds', []) ||
+         resource.data.players.hasAny([{'id': request.auth.uid}]));
+      
+      allow list: if isAuthenticated();
+      
       allow create: if isAuthenticated() && 
-        request.resource.data.players[0] == request.auth.uid &&
+        request.resource.data.players[0].id == request.auth.uid &&
         isValidCampaign();
+      
       allow update: if isAuthenticated() && 
-        request.auth.uid in resource.data.players &&
-        (resource.data.players[request.auth.uid].isHost == true || 
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastActivity']));
+        (request.auth.uid in resource.data.get('playerIds', []) ||
+         resource.data.players.hasAny([{'id': request.auth.uid}]));
+         
       allow delete: if isAuthenticated() && 
-        resource.data.players[request.auth.uid].isHost == true;
+        (resource.data.players.hasAny([{'id': request.auth.uid, 'isHost': true}]) ||
+         request.auth.uid in resource.data.get('hostIds', []));
     }
 
     // Campaign messages - users can read/write messages in campaigns they're part of
     match /campaigns/{campaignId}/messages/{messageId} {
       allow read, write: if isAuthenticated() && 
         exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
-        request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players;
+        (request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.get('playerIds', []) ||
+         get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players.hasAny([{'id': request.auth.uid}]));
       allow create: if isAuthenticated() && 
         exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
-        request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players &&
+        (request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.get('playerIds', []) ||
+         get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players.hasAny([{'id': request.auth.uid}])) &&
         isValidMessage() &&
         (request.resource.data.type == 'player' ? 
           request.resource.data.playerId == request.auth.uid : true);
@@ -107,18 +124,21 @@ service cloud.firestore {
     match /campaigns/{campaignId}/players/{playerId} {
       allow read: if isAuthenticated() && 
         exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
-        request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players;
+        (request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.get('playerIds', []) ||
+         get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players.hasAny([{'id': request.auth.uid}]));
       allow write: if isAuthenticated() && 
         request.auth.uid == playerId &&
         exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
-        request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players;
+        (request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.get('playerIds', []) ||
+         get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players.hasAny([{'id': request.auth.uid}]));
     }
 
     // World state - users can read/write world state for campaigns they're part of
     match /campaigns/{campaignId}/worldState/{stateId} {
       allow read, write: if isAuthenticated() && 
         exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
-        request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players;
+        (request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.get('playerIds', []) ||
+         get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players.hasAny([{'id': request.auth.uid}]));
     }
 
     // Combat state - users can read/write combat state for campaigns they're part of

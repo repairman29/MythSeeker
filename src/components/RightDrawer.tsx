@@ -90,6 +90,8 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [isResizing, setIsResizing] = useState(false);
+  const [chatMessage, setChatMessage] = useState('');
+  const [logSearchTerm, setLogSearchTerm] = useState('');
   const drawerRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -243,15 +245,25 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
             ref={chatInputRef}
             type="text"
             placeholder="Type your message..."
+            value={chatMessage}
+            onChange={(e) => setChatMessage(e.target.value)}
             className="flex-1 px-3 py-2 bg-white/10 text-white placeholder-gray-300 rounded-lg border border-white/20 focus:outline-none focus:border-blue-400"
             onKeyPress={(e) => {
-              if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                onSendMessage?.(e.currentTarget.value);
-                e.currentTarget.value = '';
+              if (e.key === 'Enter' && chatMessage.trim()) {
+                onSendMessage?.(chatMessage);
+                setChatMessage('');
               }
             }}
           />
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <button 
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            onClick={() => {
+              if (chatMessage.trim()) {
+                onSendMessage?.(chatMessage);
+                setChatMessage('');
+              }
+            }}
+          >
             Send
           </button>
         </div>
@@ -268,6 +280,8 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
             ref={searchInputRef}
             type="text"
             placeholder="Search log entries..."
+            value={logSearchTerm}
+            onChange={(e) => setLogSearchTerm(e.target.value)}
             className="flex-1 px-3 py-2 bg-white/10 text-white placeholder-gray-300 rounded-lg border border-white/20 focus:outline-none focus:border-blue-400"
           />
           <button className="px-3 py-2 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 transition-colors">

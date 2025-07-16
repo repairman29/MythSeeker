@@ -396,7 +396,7 @@ class AdvancedAIService {
         atmosphere: {
           mood: 'analytical',
           tension: 'medium',
-          environmentalDetails: "The captain's assessment seems to carry the weight of experience and the urgency of someone who has seen too much"
+          environmentalDetails: 'The captain\'s assessment seems to carry the weight of experience and the urgency of someone who has seen too much'
         }
       };
     }
