@@ -988,6 +988,92 @@ const AIDungeonMaster = () => {
     }
   };
 
+  const handleTutorialStart = async () => {
+    console.log('📚 Tutorial Start initiated...');
+    
+    try {
+      // Create tutorial character
+      const tutorialCharacter = {
+        id: `tutorial_${Date.now()}`,
+        name: 'Apprentice',
+        class: 'Mage',
+        level: 1,
+        health: 16,
+        maxHealth: 16,
+        mana: 20,
+        maxMana: 20,
+        experience: 0,
+        gold: 25,
+        inventory: {
+          'Staff': 1,
+          'Spellbook': 1,
+          'Mana Potion': 2
+        },
+        baseStats: {
+          strength: 8,
+          dexterity: 12,
+          intelligence: 16,
+          charisma: 14
+        },
+        skills: ['Arcana', 'Investigation'],
+        backstory: 'A young apprentice learning the ways of magic and adventure.',
+        totalPlayTime: 0,
+        lastPlayed: new Date(),
+        achievements: []
+      };
+
+      // Set the character
+      setCharacter(tutorialCharacter);
+      
+      // Create tutorial campaign with guided prompts
+      const tutorialCampaign = {
+        id: `tutorial_campaign_${Date.now()}`,
+        name: 'Learning Adventure',
+        theme: 'Fantasy',
+        description: 'A guided tutorial to learn MythSeeker mechanics',
+        isMultiplayer: false,
+        started: false,
+        status: 'active',
+        isTutorial: true,
+        players: [{
+          id: playerId,
+          name: currentUser?.displayName || 'Player',
+          character: tutorialCharacter
+        }],
+        customPrompt: `You are a patient, educational DM teaching a new player. This is a tutorial campaign designed to teach MythSeeker mechanics through play.
+
+TUTORIAL OBJECTIVES:
+1. Teach basic movement and exploration
+2. Introduce NPC interaction and dialogue
+3. Demonstrate simple combat mechanics
+4. Show inventory and character management
+5. Explain quest and objective systems
+
+GUIDELINES:
+- Be encouraging and supportive
+- Explain mechanics naturally through story
+- Provide clear choices that teach different systems
+- Keep challenges easy and educational
+- Celebrate player successes
+- Use simple, clear language
+- Reference the tutorial nature when helpful
+
+Start with a welcoming scene that introduces the magical academy setting and the player's role as an apprentice.`,
+        createdAt: new Date(),
+        lastActivity: new Date()
+      };
+
+      // Start the tutorial campaign
+      await startCampaign(tutorialCampaign);
+      
+      addToast('success', { message: 'Tutorial started! Learn the ropes of MythSeeker!' });
+      
+    } catch (error) {
+      console.error('Tutorial start error:', error);
+      addToast('error', { message: 'Failed to start tutorial. Please try again.' });
+    }
+  };
+
   const sendMultiplayerMessage = async (message: string) => {
     if (!message.trim() || !currentCampaign?.id) return;
 
@@ -1798,14 +1884,14 @@ const AIDungeonMaster = () => {
       // Handle character updates
       if (dmResponse.characterUpdates) {
         dmResponse.characterUpdates.forEach((update: CharacterUpdate) => {
-          if (update.playerId === playerId) {
-            setCharacter(prev => prev ? {
-              ...prev,
-              experience: prev.experience + (update.xpGain || 0),
-              health: Math.max(1, Math.min(prev.maxHealth, prev.health + (update.statChanges?.health || 0))),
-              mana: Math.max(0, Math.min(prev.maxMana, prev.mana + (update.statChanges?.mana || 0))),
-              inventory: { ...prev.inventory, ...update.newItems }
-            } : null);
+                      if (update.playerId === playerId) {
+              setCharacter((prev: any) => prev ? {
+                ...prev,
+                experience: prev.experience + (update.xpGain || 0),
+                health: Math.max(1, Math.min(prev.maxHealth, prev.health + (update.statChanges?.health || 0))),
+                mana: Math.max(0, Math.min(prev.maxMana, prev.mana + (update.statChanges?.mana || 0))),
+                inventory: { ...prev.inventory, ...update.newItems }
+              } : null);
 
             // Update reputation
             if (update.reputationChanges) {
@@ -1976,9 +2062,13 @@ const AIDungeonMaster = () => {
       worldReactivity: 8
     };
     
-    // Build context from recent actions
-    const recentActions = aiMemory.playerActions.slice(-5);
-    const recentConsequences = aiMemory.consequences.slice(-3);
+    // Build context from recent actions - Enhanced memory context
+    const recentActions = aiMemory.playerActions.slice(-10); // Increased from 5 to 10
+    const recentConsequences = aiMemory.consequences.slice(-5); // Increased from 3 to 5
+    
+    // Add long-term memory summary for campaigns with many actions
+    const longTermMemory = aiMemory.playerActions.length > 20 ? 
+      `LONG-TERM MEMORY: This player has taken ${aiMemory.playerActions.length} actions. Key patterns: ${aiMemory.playerActions.slice(-20).filter((a: any) => a.type === 'combat').length} combat actions, ${aiMemory.playerActions.slice(-20).filter((a: any) => a.type === 'social').length} social interactions, ${aiMemory.playerActions.slice(-20).filter((a: any) => a.type === 'exploration').length} exploration actions.` : '';
     
     // Build NPC context
     const activeNPCs = Object.entries(worldState.npcs)
@@ -2062,6 +2152,8 @@ ${recentActions.map((action: any) => `- ${action.description} (${action.timestam
 
 **RECENT CONSEQUENCES:**
 ${recentConsequences.map((consequence: any) => `- ${consequence.description}`).join('\n') || 'No recent consequences'}
+
+${longTermMemory}
 
 **PLAYER REPUTATION:**
 ${Object.entries(worldState.playerReputation).map(([faction, rep]: [string, any]) => `${faction}: ${rep}`).join(', ') || 'No reputation established'}
@@ -2150,17 +2242,40 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
         newState.currentLocation = updates.newLocation;
       }
 
-      // Add new NPCs
+      // Add new NPCs with enhanced persistence
       if (updates.newNPCs) {
         updates.newNPCs.forEach((npc: any) => {
-          newState.npcs[npc.name] = {
-            ...npc,
-            id: Date.now().toString(),
-            firstEncounter: new Date(),
-            relationship: 'neutral',
-            knownSecrets: [],
-            currentLocation: newState.currentLocation
-          };
+          const existingNPC = newState.npcs[npc.name];
+          if (existingNPC) {
+            // Update existing NPC with new information
+            newState.npcs[npc.name] = {
+              ...existingNPC,
+              ...npc,
+              lastSeen: new Date(),
+              interactionCount: (existingNPC.interactionCount || 0) + 1,
+              knownSecrets: [...(existingNPC.knownSecrets || []), ...(npc.knownSecrets || [])],
+              relationship: npc.relationship || existingNPC.relationship,
+              currentLocation: newState.currentLocation
+            };
+          } else {
+            // Create new NPC with full memory system
+            newState.npcs[npc.name] = {
+              ...npc,
+              id: Date.now().toString(),
+              firstEncounter: new Date(),
+              lastSeen: new Date(),
+              interactionCount: 1,
+              relationship: 'neutral',
+              knownSecrets: [],
+              memory: {
+                playerActions: [],
+                conversations: [],
+                sharedSecrets: [],
+                emotionalState: 'neutral'
+              },
+              currentLocation: newState.currentLocation
+            };
+          }
         });
       }
 
@@ -2200,7 +2315,7 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
     });
 
     // Update AI memory
-    setAiMemory(prev => ({
+    setAiMemory((prev: any) => ({
       ...prev,
       playerActions: [...prev.playerActions, {
         description: `Player action: ${inputMessage}`,
@@ -3141,6 +3256,17 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                               <div className="text-3xl mb-2">⚡</div>
                               <h3 className="text-white font-semibold">Quick Start</h3>
                               <p className="text-green-200 text-sm">Play in 30 seconds</p>
+                            </button>
+                          </Tooltip>
+                          {/* Tutorial Button */}
+                          <Tooltip content="Learn MythSeeker mechanics through guided gameplay">
+                            <button
+                              onClick={() => handleTutorialStart()}
+                              className="p-6 bg-gradient-to-br from-purple-600/20 to-blue-600/20 rounded-lg border-2 border-purple-400/30 hover:border-purple-400 hover:from-purple-600/30 hover:to-blue-600/30 transition-all"
+                            >
+                              <div className="text-3xl mb-2">📚</div>
+                              <h3 className="text-white font-semibold">Tutorial</h3>
+                              <p className="text-purple-200 text-sm">Learn the ropes</p>
                             </button>
                           </Tooltip>
                           <Tooltip content="Create new campaigns or join existing ones">
