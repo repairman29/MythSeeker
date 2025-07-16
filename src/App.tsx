@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth, firebaseService, UserProfile, Character } from './firebaseService';
+import { auth, firebaseService, Character, UserProfile as UserProfileType } from './firebaseService';
+import UserProfileComponent from './UserProfile';
 import { aiService } from './services/aiService';
+import { DynamicDMService } from './services/dynamicDMService';
 import { MultiplayerGame, Player } from './services/multiplayerService';
 import Tooltip from './components/Tooltip';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -59,7 +61,7 @@ const Breadcrumb: React.FC<{
         break;
       case 'character':
         breadcrumbs.push({ label: 'Characters', path: '/characters', icon: <User size={16} /> });
-        breadcrumbs.push({ label: 'Create Character', path: '/characters/create', icon: null });
+        breadcrumbs.push({ label: 'Create Character', path: '/characters/create', icon: <Plus size={16} /> });
         break;
       case 'lobby':
         breadcrumbs.push({ label: 'Campaigns', path: '/campaigns', icon: <Book size={16} /> });
@@ -67,13 +69,13 @@ const Breadcrumb: React.FC<{
       case 'waiting':
         breadcrumbs.push({ label: 'Campaigns', path: '/campaigns', icon: <Book size={16} /> });
         if (currentCampaign) {
-          breadcrumbs.push({ label: currentCampaign.theme, path: `/campaigns/${currentCampaign.id}/waiting`, icon: null });
+          breadcrumbs.push({ label: currentCampaign.theme, path: `/campaigns/${currentCampaign.id}/waiting`, icon: <Users size={16} /> });
         }
         break;
       case 'game':
         breadcrumbs.push({ label: 'Campaigns', path: '/campaigns', icon: <Book size={16} /> });
         if (currentCampaign) {
-          breadcrumbs.push({ label: currentCampaign.theme, path: `/campaigns/${currentCampaign.id}`, icon: null });
+          breadcrumbs.push({ label: currentCampaign.theme, path: `/campaigns/${currentCampaign.id}`, icon: <Globe size={16} /> });
         }
         break;
       case 'party':
@@ -90,6 +92,9 @@ const Breadcrumb: React.FC<{
         break;
       case 'dm-center':
         breadcrumbs.push({ label: 'DM Center', path: '/dm-center', icon: <User size={16} /> });
+        break;
+      case 'profile':
+        breadcrumbs.push({ label: 'Profile', path: '/profile', icon: <User size={16} /> });
         break;
     }
 
@@ -200,7 +205,8 @@ const NavigationManager: React.FC<{
     '/world': 'world',
     '/combat': 'combat',
     '/magic': 'magic',
-    '/dm-center': 'dm-center'
+    '/dm-center': 'dm-center',
+    '/profile': 'profile'
   };
 
   // Screen to URL mapping
@@ -271,7 +277,7 @@ const AIDungeonMaster = () => {
   const [helpScreen, setHelpScreen] = useState('welcome');
   
   // Firebase authentication state
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfileType | null>(null);
   const [userCharacters, setUserCharacters] = useState<Character[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -1659,109 +1665,42 @@ Start with a welcoming scene that introduces the magical academy setting and the
       return;
     }
     
-    console.log('Setting AI thinking to true...');
     setIsAIThinking(true);
-    
-    // Build the initial prompt based on campaign theme
-    const theme = campaignThemes.find(t => t.name === campaign.theme) || campaignThemes[0];
-    const partyMembers = campaign.players?.map((p: any) => `${p.character.name} the ${p.character.class}`).join(', ') || 'the party';
-    
-    console.log('Found theme:', theme?.name);
-    console.log('Party members:', partyMembers);
-    
-    const initPrompt = `Create an immersive opening for a ${campaign.theme} adventure. 
-    
-    The party consists of: ${partyMembers}
-    
-    Setting: ${theme.description}
-    
-    Rules:
-    - Create an atmospheric opening scene
-    - Present 3 specific action choices
-    - Include environmental details
-    - Set up immediate adventure hooks
-    - Response must be valid JSON in this format:
-    {
-      "narrative": "Opening story text",
-      "choices": ["Choice 1", "Choice 2", "Choice 3"],
-      "atmosphere": "mood description",
-      "environment": "${theme.bg}",
-      "worldStateUpdates": {
-        "location": "starting location",
-        "timeOfDay": "current time",
-        "weather": "current weather"
-      }
-    }`;
-
     try {
-      console.log('About to call AI service...');
-      console.log('Prompt length:', initPrompt.length);
-      console.log('Campaign passed to AI:', { id: campaign.id, isMultiplayer: campaign.isMultiplayer });
-      
-      const response = await aiService.complete(initPrompt, campaign);
-      
-      console.log('AI service returned successfully!');
-      console.log('Response preview:', response.substring(0, 100) + '...');
-      
-      const dmResponse = JSON.parse(response);
-      
-      // Update world state based on AI response
-      if (dmResponse.worldStateUpdates) {
-        console.log('Updating world state...');
-        updateWorldState(dmResponse.worldStateUpdates);
-      }
-      
-      if (dmResponse.environment) {
-        console.log('Setting environment:', dmResponse.environment);
-        setCurrentEnvironment(dmResponse.environment);
-      }
-      
+      // Use DynamicDMService for immersive campaign opening
+      const theme = campaignThemes.find(t => t.name === campaign.theme) || campaignThemes[0];
+      const partyMembers = campaign.players?.map((p: any) => `${p.character.name} the ${p.character.class}`).join(', ') || 'the party';
+      const openingInput = `Begin the adventure. The party consists of: ${partyMembers}. Setting: ${theme.description}. Present an immersive opening scene with 3 action choices.`;
+      const dynamicResponse = await dynamicDMService.processPlayerInput({
+        message: openingInput,
+        playerId: playerId,
+        campaignId: campaign.id,
+        character: character,
+        timestamp: new Date()
+      });
+      // Build the opening message
       const openingMessage = {
         id: Date.now(),
         type: 'dm',
-        content: dmResponse.narrative,
-        choices: dmResponse.choices,
+        content: dynamicResponse.narrative_text + (dynamicResponse.npc_dialogue ? `\n\n${dynamicResponse.npc_dialogue}` : ''),
+        choices: dynamicResponse.choices || ['Explore', 'Investigate', 'Ask questions'],
         timestamp: new Date(),
-        atmosphere: dmResponse.atmosphere
+        atmosphere: dynamicResponse.mood_adjustment || { mood: 'dynamic', tension: 'medium' }
       };
-      
-      console.log('Setting messages...');
+      // Update world state if present
+      if (dynamicResponse.game_state_updates) {
+        updateWorldState(dynamicResponse.game_state_updates);
+      }
       setMessages([openingMessage]);
-      
       const startedCampaign = { ...campaign, started: true, status: 'active' };
-      console.log('Updating campaign state...');
       setCurrentCampaign(startedCampaign);
       setCampaigns(prev => prev.map(c => c.id === campaign.id ? startedCampaign : c));
-      
-      console.log('Setting screen to game...');
       setCurrentScreen('game');
-      console.log('Navigating to campaign:', campaign.id);
       navigate(`/campaigns/${campaign.id}`);
-      
-      console.log('Campaign started successfully!');
     } catch (error) {
-      console.error('Error starting campaign:', error);
-      console.log('Using fallback message...');
-      
-      const fallbackMessage = {
-        id: Date.now(),
-        type: 'dm',
-        content: `Welcome, brave adventurers, to your ${campaign.theme} journey! Your party stands at the threshold of an epic quest. What will you do?`,
-        choices: ['Explore ahead', 'Gather information', 'Prepare equipment'],
-        timestamp: new Date()
-      };
-      setMessages([fallbackMessage]);
-      
-      const startedCampaign = { ...campaign, started: true, status: 'active' };
-      setCurrentCampaign(startedCampaign);
-      setCampaigns(prev => prev.map(c => c.id === campaign.id ? startedCampaign : c));
-      
-      setCurrentScreen('game');
-      console.log('Navigating to campaign (fallback):', campaign.id);
-      navigate(`/campaigns/${campaign.id}`);
+      console.error('Error starting campaign with DynamicDMService:', error);
+      addToast('error', { message: 'Failed to start campaign. Please try again.' });
     }
-    
-    console.log('Setting AI thinking to false...');
     setIsAIThinking(false);
     console.log('=== END CAMPAIGN DEBUG ===');
   };
@@ -1864,13 +1803,41 @@ Start with a welcoming scene that introduces the magical academy setting and the
     setInputMessage('');
     setIsAIThinking(true);
 
-    // Generate enhanced AI prompt with full context
-    const dmPrompt = generateAIPrompt(sanitizedMessage, false);
-
     try {
-      // Call AI service directly
-      const response = await aiService.complete(dmPrompt, currentCampaign);
-      const dmResponse = JSON.parse(response);
+      // Use Advanced Dynamic DM Service for enhanced AI processing
+      const dynamicResponse = await dynamicDMService.processPlayerInput({
+        message: sanitizedMessage,
+        playerId: playerId,
+        campaignId: currentCampaign?.id || 'single-player',
+        character: character,
+        timestamp: new Date()
+      });
+
+      // Process the enhanced response
+      const dmResponse = {
+        narrative: dynamicResponse.narrative_text,
+        choices: ['Continue', 'Investigate', 'Ask questions', 'Take action'],
+        atmosphere: {
+          mood: 'dynamic',
+          tension: 'medium',
+          environmentalDetails: 'The world responds to your actions'
+        }
+      };
+
+      // Add NPC dialogue if present
+      if (dynamicResponse.npc_dialogue) {
+        dmResponse.narrative += `\n\n${dynamicResponse.npc_dialogue}`;
+      }
+
+      // Process system actions (dice rolls, stat changes, etc.)
+      if (dynamicResponse.system_actions && dynamicResponse.system_actions.length > 0) {
+        dynamicResponse.system_actions.forEach((action: any) => {
+          if (action.type === 'dice_roll') {
+            const roll = rollDice(20);
+            dmResponse.narrative += `\n\n[Roll: ${roll}]`;
+          }
+        });
+      }
       
       // Update world state based on AI response
       if (dmResponse.worldStateUpdates) {
@@ -2545,6 +2512,40 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
             )}
           </div>
         );
+      case 'profile':
+        if (!isAuthenticated) {
+          return (
+            <div className="h-full flex items-center justify-center p-4">
+              <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 max-w-md w-full border border-white/20 text-center">
+                <h2 className="text-2xl font-bold text-white mb-4">Authentication Required</h2>
+                <p className="text-blue-200 mb-6">Please sign in to view your profile</p>
+                <button
+                  onClick={signInWithGoogle}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all"
+                >
+                  Sign in with Google
+                </button>
+              </div>
+            </div>
+          );
+        }
+        
+        return (
+          <div className="h-full p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-bold text-white">Player Profile</h2>
+              <button
+                onClick={() => setCurrentScreen('dashboard')}
+                className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
+              >
+                ← Back to Dashboard
+              </button>
+            </div>
+            <div className="h-[calc(100vh-200px)]">
+              <UserProfileComponent />
+            </div>
+          </div>
+        );
       default:
         return null;
     }
@@ -3187,7 +3188,13 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
               <Suspense fallback={<LoadingSpinner />}>
                 <DMCenter 
                   dmCenterData={dmCenterData}
-                  onUpdateDMCenter={setDmCenterData}
+                  onUpdateDMCenter={(data) => {
+                    setDmCenterData(data);
+                    if (currentScreen === 'game' || currentScreen === 'waiting') {
+                      setLastPersonaUpdate(Date.now());
+                      addToast('Persona updated', { message: 'AI DM persona/settings updated!' });
+                    }
+                  }}
                   currentCampaign={currentCampaign}
                 />
               </Suspense>
@@ -3488,6 +3495,11 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
           onAction={handleHelpAction}
         />
       </Suspense>
+      {lastPersonaUpdate > 0 && Date.now() - lastPersonaUpdate < 5000 && (
+        <div className="fixed top-4 right-4 z-50 bg-blue-700 text-white px-4 py-2 rounded shadow-lg animate-pulse">
+          AI DM Persona Updated!
+        </div>
+      )}
     </div>
   );
 };
@@ -4680,6 +4692,7 @@ export default function AppWrapper() {
           <Route path="/combat" element={<AIDungeonMaster />} />
           <Route path="/magic" element={<AIDungeonMaster />} />
           <Route path="/dm-center" element={<AIDungeonMaster />} />
+          <Route path="/profile" element={<AIDungeonMaster />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </ErrorBoundary>

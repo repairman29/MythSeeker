@@ -518,6 +518,48 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
           </div>
         </div>
 
+        {/* Advanced AI Toggle */}
+        <div className="bg-gradient-to-r from-green-600/20 to-blue-600/20 rounded-lg p-6 border border-green-400/30">
+          <h3 className="text-lg font-semibold text-white mb-4">Advanced AI Features</h3>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-white font-medium">Dynamic DM System</h4>
+                <p className="text-blue-200 text-sm">Advanced NLP, sentiment analysis, and intent recognition</p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-green-400 text-sm font-medium">ENABLED</span>
+                <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-white font-medium">Enhanced Memory</h4>
+                <p className="text-blue-200 text-sm">Long-term memory and context awareness</p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-green-400 text-sm font-medium">ENABLED</span>
+                <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-white font-medium">Tactical Combat AI</h4>
+                <p className="text-blue-200 text-sm">Advanced enemy decision making and positioning</p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-green-400 text-sm font-medium">ENABLED</span>
+                <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 p-3 bg-white/10 rounded border border-white/20">
+            <p className="text-xs text-gray-300 italic">
+              "Advanced AI features are now active! Experience enhanced NPC interactions, smarter combat, and deeper world persistence."
+            </p>
+          </div>
+        </div>
+
         {/* AI Settings Preview */}
         <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-lg p-6 border border-blue-400/30">
           <h3 className="text-lg font-semibold text-white mb-4">AI Behavior Preview</h3>

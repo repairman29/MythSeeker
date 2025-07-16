@@ -558,6 +558,85 @@ class FirebaseService {
     await updateDoc(userDoc, updates);
   }
 
+  // Achievement management
+  async getUserAchievements(uid: string): Promise<any[]> {
+    try {
+      const achievementsRef = collection(db, 'achievements');
+      const q = query(achievementsRef, where('userId', '==', uid));
+      const querySnapshot = await getDocs(q);
+      
+      const achievements: any[] = [];
+      querySnapshot.forEach((doc) => {
+        achievements.push({ id: doc.id, ...doc.data() });
+      });
+      
+      return achievements;
+    } catch (error) {
+      console.warn('Error getting user achievements:', error);
+      return [];
+    }
+  }
+
+  // Player statistics
+  async getPlayerStats(uid: string): Promise<any> {
+    try {
+      const userProfile = await this.getUserProfile(uid);
+      if (!userProfile) {
+        return {
+          totalPlayTime: 0,
+          campaignsHosted: 0,
+          campaignsJoined: 0,
+          charactersCreated: 0,
+          totalXP: 0,
+          combatWins: 0,
+          questsCompleted: 0,
+          npcsInteracted: 0,
+          locationsDiscovered: 0,
+          achievementsUnlocked: 0,
+          lastActive: new Date(),
+          joinDate: new Date()
+        };
+      }
+
+      // Get character count
+      const characters = await this.getUserCharacters(uid);
+      
+      // Get achievements count
+      const achievements = await this.getUserAchievements(uid);
+
+      return {
+        totalPlayTime: userProfile.totalPlayTime || 0,
+        campaignsHosted: userProfile.campaignsHosted || 0,
+        campaignsJoined: userProfile.campaignsJoined || 0,
+        charactersCreated: characters.length,
+        totalXP: characters.reduce((sum, char) => sum + (char.experience || 0), 0),
+        combatWins: 0, // TODO: Implement combat tracking
+        questsCompleted: 0, // TODO: Implement quest tracking
+        npcsInteracted: 0, // TODO: Implement NPC tracking
+        locationsDiscovered: 0, // TODO: Implement location tracking
+        achievementsUnlocked: achievements.length,
+        lastActive: new Date(userProfile.lastSeen),
+        joinDate: new Date(userProfile.createdAt)
+      };
+    } catch (error) {
+      console.warn('Error getting player stats:', error);
+      return {
+        totalPlayTime: 0,
+        campaignsHosted: 0,
+        campaignsJoined: 0,
+        charactersCreated: 0,
+        totalXP: 0,
+        combatWins: 0,
+        questsCompleted: 0,
+        npcsInteracted: 0,
+        locationsDiscovered: 0,
+        achievementsUnlocked: 0,
+        lastActive: new Date(),
+        joinDate: new Date()
+      };
+    }
+  }
+
   // Helper functions
   private generateGameCode(): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
