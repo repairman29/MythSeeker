@@ -2142,6 +2142,141 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
     </div>
   );
 
+  // Render full-width content for screens that need unrestricted space
+  const renderFullWidthContent = () => {
+    switch (currentScreen) {
+      case 'character':
+        return (
+          <CharacterCreation 
+            playerName={currentUser?.displayName || ''}
+            classes={classes}
+            onCreateCharacter={createCharacter}
+            joinCode={joinCode}
+          />
+        );
+      case 'waiting':
+        return (
+          <WaitingRoom 
+            campaign={currentCampaign}
+            onStart={startCampaign}
+            onBack={() => setCurrentScreen('lobby')}
+          />
+        );
+      case 'game':
+        return (
+          <Gameplay
+            campaign={currentCampaign}
+            messages={messages}
+            inputMessage={inputMessage}
+            setInputMessage={setInputMessage}
+            sendMessage={sendMessage}
+            handleKeyPress={handleKeyPress}
+            isAIThinking={isAIThinking}
+            messagesEndRef={messagesEndRef}
+            onStartCombat={startCombat}
+            worldState={worldState}
+            aiMemory={aiMemory}
+            inputRef={gameInputRef}
+          />
+        );
+      case 'combat':
+        return combatState && (
+          <Suspense fallback={<LoadingSpinner />}>
+            <CombatSystem
+              combatants={combatState.combatants}
+              battleMap={combatState.battleMap}
+              currentTurn={combatState.currentTurn}
+              activeCombatantId={combatState.turnOrder[combatState.currentCombatantIndex]}
+              onAction={handleCombatAction}
+              onEndCombat={endCombat}
+              isPlayerTurn={combatService.isPlayerTurn()}
+            />
+          </Suspense>
+        );
+      case 'world':
+        return (
+          <div className="h-full p-6">
+            <h2 className="text-2xl font-bold text-white mb-6">World Map & Exploration</h2>
+            <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+              <p className="text-blue-200 mb-4">Interactive world map coming soon!</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-black/20 rounded-lg p-4">
+                  <h3 className="text-white font-semibold mb-2">Current Location</h3>
+                  <p className="text-blue-200">{worldState?.currentLocation || 'Unknown'}</p>
+                </div>
+                <div className="bg-black/20 rounded-lg p-4">
+                  <h3 className="text-white font-semibold mb-2">Weather</h3>
+                  <p className="text-blue-200">{worldState?.weather || 'Clear'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case 'characters':
+      case 'character-select':
+        return (
+          <div className="h-full p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-bold text-white">Your Characters</h2>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setCurrentScreen('welcome')}
+                  className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
+                >
+                  ← Back to Welcome
+                </button>
+                <button
+                  onClick={() => setCurrentScreen('character')}
+                  className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all"
+                >
+                  Create New Character
+                </button>
+              </div>
+            </div>
+            
+            {userCharacters.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="text-6xl mb-4">🏰</div>
+                <h3 className="text-xl font-semibold text-white mb-2">No Characters Yet</h3>
+                <p className="text-blue-200 mb-6">Create your first character to begin your adventure!</p>
+                <button
+                  onClick={() => setCurrentScreen('character')}
+                  className="px-6 py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all"
+                >
+                  Create Your First Character
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {userCharacters.map((char: any) => (
+                  <div
+                    key={char.id}
+                    className="bg-white/10 rounded-lg p-6 border border-white/20 hover:bg-white/15 transition-all cursor-pointer"
+                    onClick={() => {
+                      setCharacter(char);
+                      setCurrentScreen('lobby');
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-xl font-bold text-white">{char.name}</h3>
+                      <span className="text-sm text-blue-200">Level {char.level}</span>
+                    </div>
+                    <p className="text-blue-200 mb-2">{char.class}</p>
+                    <div className="flex justify-between text-sm text-gray-300">
+                      <span>HP: {char.health}/{char.maxHealth}</span>
+                      <span>XP: {char.experience}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   // Enhanced Gameplay Component with immersive design
   const Gameplay: React.FC<{ 
     campaign: any, 
@@ -2821,7 +2956,7 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
 
   // Main App Layout (for all other screens)
   return (
-    <div className={`main-container flex flex-col bg-gradient-to-br ${environments[currentEnvironment]} transition-all duration-1000`}>
+    <div className={`main-container flex flex-col min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} transition-all duration-1000 ${isMobile ? 'pb-16' : ''}`}>
       {/* Success Feedback */}
       {successFeedback && (
         <SuccessFeedback
@@ -2907,40 +3042,50 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
 
         {/* Regular layout with drawer for all other screens */}
         {currentScreen !== 'dm-center' && (
-          <div className="flex-1 flex flex-col h-full">
-            {/* Top Bar */}
-            <Suspense fallback={<LoadingSpinner />}>
-              <TopBar 
-                onNewCampaign={handleNewCampaign}
-                isMobile={isMobile}
-                onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
-                currentScreen={currentScreen}
-                onHelpClick={() => setShowHelp(true)}
-              />
-            </Suspense>
-            {/* Main Content */}
-            <main className="flex-1 overflow-auto">
-              {/* Navigation Manager for URL routing */}
-              <NavigationManager 
-                onScreenChange={setCurrentScreen}
-                currentScreen={currentScreen}
-              />
+          <div className="flex flex-1 h-full">
+            {/* Main Content Container */}
+            <div className="flex-1 flex flex-col h-full">
+              {/* Top Bar */}
+              <Suspense fallback={<LoadingSpinner />}>
+                <TopBar 
+                  onNewCampaign={handleNewCampaign}
+                  isMobile={isMobile}
+                  onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
+                  currentScreen={currentScreen}
+                  onHelpClick={() => setShowHelp(true)}
+                />
+              </Suspense>
               
-              {/* Breadcrumb Navigation */}
-              <Breadcrumb 
-                currentScreen={currentScreen}
-                currentCampaign={currentCampaign}
-                character={character}
-                onNavigate={handleBreadcrumbNavigate}
-              />
-              
-              {/* Constrained width screens */}
-              {['dashboard', 'lobby', 'party', 'magic'].includes(currentScreen) && (
-                <div className="px-4 lg:px-6 py-2">
-                  {/* Add subtle background pattern for better visual hierarchy */}
-                  <div className="relative min-h-full">
-                    <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-3xl pointer-events-none"></div>
-                    <div className="relative z-10">
+              {/* Main Content */}
+              <main className="flex-1 overflow-auto">
+                {/* Navigation Manager for URL routing */}
+                <NavigationManager 
+                  onScreenChange={setCurrentScreen}
+                  currentScreen={currentScreen}
+                />
+                
+                {/* Breadcrumb Navigation */}
+                <Breadcrumb 
+                  currentScreen={currentScreen}
+                  currentCampaign={currentCampaign}
+                  character={character}
+                  onNavigate={handleBreadcrumbNavigate}
+                />
+                
+                {/* Full-width screens that break out of constraints */}
+                {['character', 'waiting', 'game', 'combat', 'world', 'characters', 'character-select'].includes(currentScreen) && (
+                  <div className="w-full h-full">
+                    {renderFullWidthContent()}
+                  </div>
+                )}
+                
+                {/* Constrained width screens */}
+                {['dashboard', 'lobby', 'party', 'magic'].includes(currentScreen) && (
+                  <div className="px-4 lg:px-6 py-2">
+                    {/* Add subtle background pattern for better visual hierarchy */}
+                    <div className="relative min-h-full">
+                      <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-3xl pointer-events-none"></div>
+                      <div className="relative z-10">
                     {currentScreen === 'dashboard' && (
                     <div className="h-full flex items-center justify-center">
                       <div className="text-center">
@@ -3038,37 +3183,7 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                       </div>
                     </div>
                   )}
-                  {currentScreen === 'world' && (
-                    <div className="h-full p-6">
-                      <h2 className="text-2xl font-bold text-white mb-6">World Map & Exploration</h2>
-                      <div className="bg-white/10 rounded-lg p-6 border border-white/20">
-                        <p className="text-blue-200 mb-4">Interactive world map coming soon!</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="bg-black/20 rounded-lg p-4">
-                            <h3 className="text-white font-semibold mb-2">Current Location</h3>
-                            <p className="text-blue-200">{worldState?.currentLocation || 'Unknown'}</p>
-                          </div>
-                          <div className="bg-black/20 rounded-lg p-4">
-                            <h3 className="text-white font-semibold mb-2">Discovered Areas</h3>
-                            <p className="text-blue-200">0 locations explored</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {currentScreen === 'combat' && combatState && (
-                    <Suspense fallback={<LoadingSpinner />}>
-                      <CombatSystem
-                        combatants={combatState.combatants}
-                        battleMap={combatState.battleMap}
-                        currentTurn={combatState.currentTurn}
-                        activeCombatantId={combatState.turnOrder[combatState.currentCombatantIndex]}
-                        onAction={handleCombatAction}
-                        onEndCombat={endCombat}
-                        isPlayerTurn={combatService.isPlayerTurn()}
-                      />
-                    </Suspense>
-                  )}
+
                   {currentScreen === 'magic' && (
                     <div className="h-full p-6">
                       <h2 className="text-2xl font-bold text-white mb-6">Magic & Spells</h2>
@@ -3101,7 +3216,10 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                   </div>
                 </div>
               )}
-            </main>
+              </main>
+            </div>
+            
+
           </div>
         )}
 
@@ -3131,6 +3249,30 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
           </Suspense>
         )}
       </div>
+      {/* Right Drawer - Fixed positioning for both mobile and desktop */}
+      <Suspense fallback={<LoadingSpinner />}>
+        <RightDrawer
+          isOpen={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          activeTab={activeDrawerTab}
+          onTabChange={setActiveDrawerTab}
+          isMobile={isMobile}
+          campaign={currentCampaign}
+          messages={messages}
+          players={partyState.players}
+          worldState={worldState}
+          achievements={achievements}
+          onSendMessage={sendMultiplayerMessage}
+          onUpdateSettings={(settings) => {
+            console.log('Settings updated:', settings);
+          }}
+          drawerWidth={drawerWidth}
+          setDrawerWidth={setDrawerWidth}
+          minWidth={MIN_WIDTH}
+          maxWidth={MAX_WIDTH}
+        />
+      </Suspense>
+
       {/* Floating Action Button - sets drawer tab and opens drawer */}
       <FloatingActionButton
         onToggleDrawer={() => setDrawerOpen(!drawerOpen)}
@@ -3144,25 +3286,31 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
         notificationCount={messages.filter(m => m.type === 'system').length}
       />
       {/* Mobile Navigation - Bottom */}
-      <NavBar 
-        active={activeNav} 
-        onNavigate={handleNavChange} 
-        theme={currentEnvironment}
-        isMobile={true}
-        onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
-      />
+      <Suspense fallback={<LoadingSpinner />}>
+        <NavBar 
+          active={activeNav} 
+          onNavigate={handleNavChange} 
+          theme={currentEnvironment}
+          isMobile={true}
+          onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
+        />
+      </Suspense>
       {/* Simple Help Overlay */}
-      <SimpleHelp 
-        isOpen={showHelp} 
-        onClose={() => setShowHelp(false)} 
-      />
+      <Suspense fallback={<LoadingSpinner />}>
+        <SimpleHelp 
+          isOpen={showHelp} 
+          onClose={() => setShowHelp(false)} 
+        />
+      </Suspense>
       {/* Help System */}
-      <HelpSystem 
-        isOpen={showHelp}
-        onClose={() => setShowHelp(false)}
-        currentScreen={helpScreen}
-        onAction={handleHelpAction}
-      />
+      <Suspense fallback={<LoadingSpinner />}>
+        <HelpSystem 
+          isOpen={showHelp}
+          onClose={() => setShowHelp(false)}
+          currentScreen={helpScreen}
+          onAction={handleHelpAction}
+        />
+      </Suspense>
     </div>
   );
 };

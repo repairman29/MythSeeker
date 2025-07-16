@@ -126,29 +126,42 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
           <div>
             <div className="flex justify-between text-blue-200 mb-2">
               <span>Phase 1: Foundation Infrastructure</span>
-              <span>65%</span>
+              <span>85%</span>
             </div>
             <div className="w-full bg-gray-700 rounded-full h-2">
-              <div className="bg-blue-600 h-2 rounded-full" style={{ width: '65%' }}></div>
+              <div className="bg-blue-600 h-2 rounded-full" style={{ width: '85%' }}></div>
             </div>
+            <p className="text-xs text-gray-400 mt-1">✅ Auth, Multiplayer, Firebase, UI Components, Character System</p>
           </div>
           <div>
             <div className="flex justify-between text-blue-200 mb-2">
               <span>Phase 2: AI Intelligence Layer</span>
-              <span>25%</span>
+              <span>70%</span>
             </div>
             <div className="w-full bg-gray-700 rounded-full h-2">
-              <div className="bg-green-600 h-2 rounded-full" style={{ width: '25%' }}></div>
+              <div className="bg-green-600 h-2 rounded-full" style={{ width: '70%' }}></div>
             </div>
+            <p className="text-xs text-gray-400 mt-1">✅ Core AI DM, Memory System, Context Awareness, Dynamic Responses</p>
           </div>
           <div>
             <div className="flex justify-between text-blue-200 mb-2">
               <span>Phase 3: DM Mastery Features</span>
-              <span>5%</span>
+              <span>35%</span>
             </div>
             <div className="w-full bg-gray-700 rounded-full h-2">
-              <div className="bg-purple-600 h-2 rounded-full" style={{ width: '5%' }}></div>
+              <div className="bg-purple-600 h-2 rounded-full" style={{ width: '35%' }}></div>
             </div>
+            <p className="text-xs text-gray-400 mt-1">✅ DM Center, Combat System, NPC Framework, World Persistence</p>
+          </div>
+          <div>
+            <div className="flex justify-between text-blue-200 mb-2">
+              <span>User Story Completion (FTUE)</span>
+              <span>78%</span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-2">
+              <div className="bg-yellow-600 h-2 rounded-full" style={{ width: '78%' }}></div>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">✅ 5/6 Core User Stories Implemented, Needs Connection Polish</p>
           </div>
         </div>
       </div>
@@ -573,7 +586,7 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
   };
 
   return (
-    <div className="h-full w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex flex-col">
+    <div className="h-full w-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-900/50 to-blue-900/50 backdrop-blur-sm border-b border-purple-500/30 p-6">
         <div className="flex items-center justify-between">
@@ -599,12 +612,12 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
 
       {/* Navigation Tabs */}
       <div className="bg-white/5 backdrop-blur-sm border-b border-white/10">
-        <div className="flex overflow-x-auto">
+        <div className="flex overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-shrink-0 px-6 py-4 flex items-center space-x-2 transition-all border-b-2 ${
+              className={`flex-shrink-0 px-3 sm:px-6 py-3 sm:py-4 flex items-center space-x-1 sm:space-x-2 transition-all border-b-2 ${
                 activeTab === tab.id
                   ? 'bg-blue-600/20 text-white border-blue-400'
                   : 'text-blue-200 hover:text-white hover:bg-white/5 border-transparent'
@@ -612,7 +625,8 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
               title={tab.description}
             >
               {tab.icon}
-              <span className="font-medium">{tab.name}</span>
+              <span className="font-medium text-sm sm:text-base hidden sm:inline">{tab.name}</span>
+              <span className="font-medium text-xs sm:hidden">{tab.name.split(' ')[0]}</span>
             </button>
           ))}
         </div>

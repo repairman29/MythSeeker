@@ -711,7 +711,7 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
       )}
       {/* Drawer */}
       <div
-        className={`$(!isMobile ? '' : 'fixed top-0 right-0 h-full') bg-gradient-to-b from-blue-900 via-indigo-900 to-purple-900 border-l border-white/20 shadow-2xl z-50 transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 right-0 h-full bg-gradient-to-b from-blue-900 via-indigo-900 to-purple-900 border-l border-white/20 shadow-2xl z-50 transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         } ${isMobile ? 'w-full sm:w-96' : ''}`}
         style={drawerStyle}
