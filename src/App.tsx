@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, firebaseService, UserProfile, Character } from './firebaseService';
 import { aiService } from './services/aiService';
@@ -28,7 +28,7 @@ import {
 } from './services/analytics';
 import { CombatService } from './services/combatService';
 import { Combatant } from './components/CombatSystem';
-import { Swords, TrendingUp, Globe, HelpCircle, User, Book, Users, Sword, Plus, Edit, Trash2, Copy, ChevronDown, Send } from 'lucide-react';
+import { Swords, TrendingUp, Globe, HelpCircle, User, Book, Users, Sword, Plus, Edit, Trash2, Copy, ChevronDown, Send, ChevronRight, Home } from 'lucide-react';
 
 // Lazy load components
 const NavBar = lazy(() => import('./components/NavBar'));
@@ -39,6 +39,85 @@ const RightDrawer = lazy(() => import('./components/RightDrawer'));
 const FloatingActionButton = lazy(() => import('./components/FloatingActionButton'));
 const SimpleHelp = lazy(() => import('./components/SimpleHelp'));
 const HelpSystem = lazy(() => import('./components/HelpSystem'));
+const DMCenter = lazy(() => import('./components/DMCenter'));
+
+// Breadcrumb Component
+const Breadcrumb: React.FC<{ 
+  currentScreen: string, 
+  currentCampaign?: any, 
+  character?: any,
+  onNavigate: (path: string) => void 
+}> = ({ currentScreen, currentCampaign, character, onNavigate }) => {
+  const getBreadcrumbs = () => {
+    const breadcrumbs = [
+      { label: 'Home', path: '/dashboard', icon: <Home size={16} /> }
+    ];
+
+    switch (currentScreen) {
+      case 'character-select':
+        breadcrumbs.push({ label: 'Characters', path: '/characters', icon: <User size={16} /> });
+        break;
+      case 'character':
+        breadcrumbs.push({ label: 'Characters', path: '/characters', icon: <User size={16} /> });
+        breadcrumbs.push({ label: 'Create Character', path: '/characters/create', icon: null });
+        break;
+      case 'lobby':
+        breadcrumbs.push({ label: 'Campaigns', path: '/campaigns', icon: <Book size={16} /> });
+        break;
+      case 'waiting':
+        breadcrumbs.push({ label: 'Campaigns', path: '/campaigns', icon: <Book size={16} /> });
+        if (currentCampaign) {
+          breadcrumbs.push({ label: currentCampaign.theme, path: `/campaigns/${currentCampaign.id}/waiting`, icon: null });
+        }
+        break;
+      case 'game':
+        breadcrumbs.push({ label: 'Campaigns', path: '/campaigns', icon: <Book size={16} /> });
+        if (currentCampaign) {
+          breadcrumbs.push({ label: currentCampaign.theme, path: `/campaigns/${currentCampaign.id}`, icon: null });
+        }
+        break;
+      case 'party':
+        breadcrumbs.push({ label: 'Party', path: '/party', icon: <Users size={16} /> });
+        break;
+      case 'world':
+        breadcrumbs.push({ label: 'World', path: '/world', icon: <Globe size={16} /> });
+        break;
+      case 'combat':
+        breadcrumbs.push({ label: 'Combat', path: '/combat', icon: <Sword size={16} /> });
+        break;
+      case 'magic':
+        breadcrumbs.push({ label: 'Magic', path: '/magic', icon: <Swords size={16} /> });
+        break;
+      case 'dm-center':
+        breadcrumbs.push({ label: 'DM Center', path: '/dm-center', icon: <User size={16} /> });
+        break;
+    }
+
+    return breadcrumbs;
+  };
+
+  const breadcrumbs = getBreadcrumbs();
+
+  return (
+    <nav className="flex items-center space-x-1 text-sm text-blue-200 mb-4 px-6 pt-4">
+      {breadcrumbs.map((crumb, index) => (
+        <React.Fragment key={crumb.path}>
+          {index > 0 && <ChevronRight size={14} className="text-blue-400" />}
+          <button
+            onClick={() => onNavigate(crumb.path)}
+            className={`flex items-center space-x-1 hover:text-white transition-colors ${
+              index === breadcrumbs.length - 1 ? 'text-white font-medium' : 'hover:underline'
+            }`}
+            disabled={index === breadcrumbs.length - 1}
+          >
+            {crumb.icon}
+            <span>{crumb.label}</span>
+          </button>
+        </React.Fragment>
+      ))}
+    </nav>
+  );
+};
 
 // Components will be defined inline in this file
 
@@ -100,6 +179,76 @@ const generateToastMessage = (action: string, context?: any): ToastMessage => {
   };
 };
 
+// Navigation Hook Component
+const NavigationManager: React.FC<{ 
+  onScreenChange: (screen: string) => void,
+  currentScreen: string
+}> = ({ onScreenChange, currentScreen }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // URL to screen mapping
+  const pathToScreen: Record<string, string> = {
+    '/': 'welcome',
+    '/dashboard': 'dashboard',
+    '/characters': 'character-select',
+    '/characters/create': 'character',
+    '/campaigns': 'lobby',
+    '/campaigns/:id': 'game',
+    '/campaigns/:id/waiting': 'waiting',
+    '/party': 'party',
+    '/world': 'world',
+    '/combat': 'combat',
+    '/magic': 'magic',
+    '/dm-center': 'dm-center'
+  };
+
+  // Screen to URL mapping
+  const screenToPath: Record<string, string> = {
+    'welcome': '/',
+    'dashboard': '/dashboard',
+    'character-select': '/characters',
+    'character': '/characters/create',
+    'lobby': '/campaigns',
+    'game': '/campaigns',
+    'waiting': '/campaigns',
+    'party': '/party',
+    'world': '/world',
+    'combat': '/combat',
+    'magic': '/magic',
+    'dm-center': '/dm-center'
+  };
+
+  // Handle URL changes
+  useEffect(() => {
+    const path = location.pathname;
+    let screen = 'dashboard';
+
+    // Match exact paths first
+    if (pathToScreen[path]) {
+      screen = pathToScreen[path];
+    } else {
+      // Match dynamic paths
+      if (path.includes('/campaigns/') && path.endsWith('/waiting')) {
+        screen = 'waiting';
+      } else if (path.includes('/campaigns/') && path !== '/campaigns') {
+        screen = 'game';
+      }
+    }
+
+    if (screen !== currentScreen) {
+      onScreenChange(screen);
+    }
+  }, [location.pathname, currentScreen, onScreenChange]);
+
+  // Navigation handler
+  const handleNavigate = (path: string) => {
+    navigate(path);
+  };
+
+  return null; // This component doesn't render anything
+};
+
 const AIDungeonMaster = () => {
   // Combat service instance
   const combatService = React.useMemo(() => new CombatService(), []);
@@ -126,6 +275,7 @@ const AIDungeonMaster = () => {
   const [userCharacters, setUserCharacters] = useState<Character[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [firestoreReady, setFirestoreReady] = useState(false);
   
   // Navigation state
   const [activeNav, setActiveNav] = useState('dashboard');
@@ -170,6 +320,25 @@ const AIDungeonMaster = () => {
     completedQuests: [],
     worldEvents: []
   });
+  
+  // DM Center state
+  const [dmCenterData, setDmCenterData] = useState<any>({
+    ruleSystem: 'dnd5e',
+    contentLibrary: {
+      encounters: [],
+      npcs: [],
+      locations: [],
+      plotHooks: [],
+      customRules: []
+    },
+    campaignTemplates: [],
+    dmTools: {
+      initiativeTracker: [],
+      sessionNotes: '',
+      playerAnalytics: {}
+    }
+  });
+  
   const [showWorldEvents, setShowWorldEvents] = useState(false);
   const [pendingChoices, setPendingChoices] = useState<any[]>([]);
   const [achievements, setAchievements] = useState<any[]>([]);
@@ -279,6 +448,9 @@ const AIDungeonMaster = () => {
       
       if (firebaseUser) {
         try {
+          // Add a small delay to ensure Firestore connection is ready
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
           // Track authentication success
           analyticsService.trackUserAction('user_authenticated', {
             user_id: firebaseUser.uid,
@@ -292,17 +464,47 @@ const AIDungeonMaster = () => {
             account_created: firebaseUser.metadata?.creationTime || 'unknown'
           });
 
-          // Get user profile
+          // Get user profile with retry logic
           console.log('Loading user profile for:', firebaseUser.uid);
-          const userProfile = await firebaseService.getUserProfile(firebaseUser.uid);
+          let retryCount = 0;
+          let userProfile = null;
+          
+          while (retryCount < 3 && !userProfile) {
+            try {
+              userProfile = await firebaseService.getUserProfile(firebaseUser.uid);
+              break;
+            } catch (error) {
+              retryCount++;
+              console.log(`Profile load attempt ${retryCount} failed:`, error);
+              if (retryCount < 3) {
+                await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+              }
+            }
+          }
+          
           if (userProfile) {
             setCurrentUser(userProfile);
             setPlayerName(userProfile.displayName);
             setIsAuthenticated(true);
             
-            // Load user's characters
+            // Load user's characters with retry logic
             console.log('Loading characters for user:', firebaseUser.uid);
-            const characters = await firebaseService.getUserCharacters(firebaseUser.uid);
+            let characters = [];
+            retryCount = 0;
+            
+            while (retryCount < 3) {
+              try {
+                characters = await firebaseService.getUserCharacters(firebaseUser.uid);
+                break;
+              } catch (error) {
+                retryCount++;
+                console.log(`Characters load attempt ${retryCount} failed:`, error);
+                if (retryCount < 3) {
+                  await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+                }
+              }
+            }
+            
             setUserCharacters(characters);
             
             // Track user profile loaded
@@ -314,9 +516,11 @@ const AIDungeonMaster = () => {
             // If user has characters, show character selection or resume game
             if (characters.length > 0) {
               setCurrentScreen('character-select');
+              navigate('/characters');
               analyticsService.trackPageView('character-select', 'MythSeeker - Character Selection');
             } else {
               setCurrentScreen('welcome');
+              navigate('/');
               analyticsService.trackPageView('welcome', 'MythSeeker - Welcome');
             }
           } else {
@@ -449,81 +653,120 @@ const AIDungeonMaster = () => {
       return;
     }
 
-    try {
-      const firebaseCharacter: Character = {
-        userId: currentUser.uid,
-        name: characterData.name,
-        class: characterData.class,
-        level: 1,
-        experience: 0,
-        health: 100,
-        maxHealth: 100,
-        mana: 50,
-        maxMana: 50,
-        gold: 100,
-        inventory: {
-          'Healing Potion': 3,
-          'Iron Ore': 2,
-          'Herb': 5
-        },
-        equipment: {
-          weapon: { name: 'Iron Sword', type: 'weapon' },
-          armor: { name: 'Leather Armor', type: 'armor' }
-        },
-        stats: characterData.baseStats,
-        skills: characterData.skills || {},
-        achievements: [],
-        createdAt: Date.now(),
-        lastPlayed: Date.now(),
-        totalPlayTime: 0
-      };
+    const firebaseCharacter: Character = {
+      userId: currentUser.uid,
+      name: characterData.name,
+      class: characterData.class,
+      level: 1,
+      experience: 0,
+      health: 100,
+      maxHealth: 100,
+      mana: 50,
+      maxMana: 50,
+      gold: 100,
+      inventory: {
+        'Healing Potion': 3,
+        'Iron Ore': 2,
+        'Herb': 5
+      },
+      equipment: {
+        weapon: { name: 'Iron Sword', type: 'weapon' },
+        armor: { name: 'Leather Armor', type: 'armor' }
+      },
+      stats: characterData.baseStats,
+      skills: characterData.skills || {},
+      achievements: [],
+      createdAt: Date.now(),
+      lastPlayed: Date.now(),
+      totalPlayTime: 0
+    };
 
-      console.log('Saving character to Firebase:', firebaseCharacter);
+    try {
+      console.log('Attempting to save character to Firebase:', firebaseCharacter);
       const characterId = await firebaseService.saveCharacter(firebaseCharacter);
-      console.log('Character saved with ID:', characterId);
+      console.log('Character saved to Firebase with ID:', characterId);
       
-      addToast('characterCreated', { character: characterData });
-      
-      // Update local state
+      // Update local state with Firebase ID
       const savedCharacter = { ...firebaseCharacter, id: characterId };
       setUserCharacters(prev => [savedCharacter, ...prev]);
       setCharacter(savedCharacter);
+      
+      addToast('characterCreated', { character: characterData });
       setCurrentScreen('lobby');
       
       console.log('Character state updated, navigating to lobby');
     } catch (error) {
-      console.error('Error saving character:', error);
-      addToast('error', { message: 'Failed to save character. Please try signing in again.' });
+      console.error('Error saving character to Firebase, falling back to local storage:', error);
+      
+      // Fallback: Save to local storage with generated ID
+      const localCharacter = { 
+        ...firebaseCharacter, 
+        id: Date.now().toString(),
+        userId: currentUser.uid // Keep the user ID for when Firebase works again
+      };
+      
+      // Save to localStorage as backup
+      const localCharacters = JSON.parse(localStorage.getItem('mythseeker_characters') || '[]');
+      localCharacters.push(localCharacter);
+      localStorage.setItem('mythseeker_characters', JSON.stringify(localCharacters));
+      
+      // Update local state
+      setUserCharacters(prev => [localCharacter, ...prev]);
+      setCharacter(localCharacter);
+      
+      addToast('characterCreated', { character: characterData });
+      addToast('warning', { message: 'Character saved locally. Will sync when connection is restored.' });
+      setCurrentScreen('lobby');
+      
+      console.log('Character saved to local storage as fallback');
     }
   };
 
   const loadCharacter = async (characterId: string) => {
+    console.log('loadCharacter called with ID:', characterId);
+    console.log('Current user:', currentUser);
+    console.log('Is authenticated:', isAuthenticated);
+    
     try {
       // First try to load from local storage
       const localCharacters = JSON.parse(localStorage.getItem('mythseeker_characters') || '[]');
+      console.log('Local characters found:', localCharacters.length);
       const localCharacter = localCharacters.find((c: any) => c.id === characterId);
       
       if (localCharacter) {
+        console.log('Found character in local storage:', localCharacter.name);
         setCharacter(localCharacter);
         setCurrentScreen('lobby');
+        navigate('/campaigns');
         addToast('characterLoaded', { character: localCharacter.name });
         return;
       }
       
+      console.log('Character not found in local storage, trying Firebase...');
+      
       // If not found locally and user is authenticated, try Firebase
       if (currentUser) {
+        console.log('Loading character from Firebase with ID:', characterId);
         const character = await firebaseService.getCharacter(characterId);
+        console.log('Firebase getCharacter result:', character);
+        
         if (character) {
+          console.log('Successfully loaded character from Firebase:', character.name);
           setCharacter(character);
           setCurrentScreen('lobby');
+          navigate('/campaigns');
           addToast('characterLoaded', { character: character.name });
+        } else {
+          console.log('Character not found in Firebase');
+          addToast('error', { message: 'Character not found in database' });
         }
       } else {
+        console.log('User not authenticated, cannot load from Firebase');
         addToast('error', { message: 'Character not found' });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading character:', error);
-      addToast('error', { message: 'Failed to load character' });
+      addToast('error', { message: `Failed to load character: ${error.message || 'Unknown error'}` });
     }
   };
 
@@ -531,11 +774,24 @@ const AIDungeonMaster = () => {
     try {
       setIsLoading(true);
       await firebaseService.signInWithGoogle();
+      // Don't set loading to false here - it might be using redirect
+      // The onAuthStateChanged listener will handle loading state
       addToast('welcome', { message: 'Welcome to MythSeeker!' });
     } catch (error) {
       console.error('Error signing in:', error);
-      addToast('error', { message: 'Failed to sign in' });
-      setIsLoading(false);
+      // Handle specific authentication errors
+      if (error.code === 'auth/popup-blocked') {
+        addToast('error', { message: 'Popup was blocked. Trying alternative sign-in method...' });
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        addToast('info', { message: 'Sign-in was cancelled.' });
+        setIsLoading(false);
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        // Don't show error for cancelled popup requests (user might have closed it)
+        setIsLoading(false);
+      } else {
+        addToast('error', { message: 'Failed to sign in. Please try again.' });
+        setIsLoading(false);
+      }
     }
   };
 
@@ -608,36 +864,35 @@ const AIDungeonMaster = () => {
     }
   }, [isAIThinking]);
 
-  // Navigation handlers
+  const navigate = useNavigate();
+
+  // Enhanced navigation handler with URL routing
   const handleNavChange = (navKey: string) => {
     setActiveNav(navKey);
     
-    // Map navigation keys to screens
-    switch (navKey) {
-      case 'dashboard':
-        setCurrentScreen('dashboard');
-        break;
-      case 'campaigns':
-        setCurrentScreen('lobby');
-        break;
-      case 'characters':
-        setCurrentScreen('character');
-        break;
-      case 'party':
-        setCurrentScreen('party');
-        break;
-      case 'world':
-        setCurrentScreen('world');
-        break;
-      case 'combat':
-        setCurrentScreen('combat');
-        break;
-      case 'magic':
-        setCurrentScreen('magic');
-        break;
-      default:
-        setCurrentScreen('dashboard');
-    }
+    // Map navigation keys to screens and URLs
+    const navMappings: Record<string, { screen: string; path: string }> = {
+      'dashboard': { screen: 'dashboard', path: '/dashboard' },
+      'campaigns': { screen: 'lobby', path: '/campaigns' },
+      'characters': { screen: 'character-select', path: '/characters' },
+      'party': { screen: 'party', path: '/party' },
+      'world': { screen: 'world', path: '/world' },
+      'combat': { screen: 'combat', path: '/combat' },
+      'magic': { screen: 'magic', path: '/magic' },
+      'dm-center': { screen: 'dm-center', path: '/dm-center' }
+    };
+
+    const mapping = navMappings[navKey] || navMappings['dashboard'];
+    setCurrentScreen(mapping.screen);
+    navigate(mapping.path);
+    
+    // Track navigation
+    analyticsService.trackUserAction('navigation', { from: currentScreen, to: mapping.screen });
+  };
+
+  // Breadcrumb navigation handler
+  const handleBreadcrumbNavigate = (path: string) => {
+    navigate(path);
   };
 
   const handleTabChange = (tabKey: string) => {
@@ -757,8 +1012,14 @@ const AIDungeonMaster = () => {
       const savedCampaigns = JSON.parse(localStorage.getItem('mythseeker_campaigns') || '[]');
       console.log('Found campaigns in localStorage:', savedCampaigns.length);
       
+      // Ensure campaigns have proper status (fix legacy campaigns)
+      const normalizedCampaigns = savedCampaigns.map((campaign: any) => ({
+        ...campaign,
+        status: campaign.status || (campaign.started ? 'active' : undefined)
+      }));
+      
       // Set campaigns immediately from localStorage
-      setCampaigns(savedCampaigns);
+      setCampaigns(normalizedCampaigns);
       
       // Try to load from Firebase for multiplayer campaigns (if authenticated)
       if (isAuthenticated && currentUser) {
@@ -798,47 +1059,36 @@ const AIDungeonMaster = () => {
 
   const deleteCampaign = async (campaignId: string) => {
     try {
-      console.log('Deleting campaign:', campaignId);
-      
-      // Find the campaign to delete
-      const campaign = campaigns.find(c => c.id === campaignId);
-      if (!campaign) {
-        console.error('Campaign not found:', campaignId);
-        addToast('error', { message: 'Campaign not found' });
-        return;
-      }
-      
-      // Try to remove from Firebase if multiplayer and authenticated
-      if (campaign.isMultiplayer && isAuthenticated && currentUser) {
-        try {
-          await multiplayerService.deleteCampaign(campaignId);
-          console.log('Campaign deleted from Firebase:', campaignId);
-        } catch (firebaseError) {
-          console.warn('Failed to delete from Firebase, but will continue with localStorage:', firebaseError);
-          // Continue with localStorage deletion even if Firebase fails
-        }
-      }
-      
-      // Always remove from local storage (primary storage)
+      // Remove from local storage
       const savedCampaigns = JSON.parse(localStorage.getItem('mythseeker_campaigns') || '[]');
       const filteredCampaigns = savedCampaigns.filter((c: any) => c.id !== campaignId);
       localStorage.setItem('mythseeker_campaigns', JSON.stringify(filteredCampaigns));
-      console.log('Campaign deleted from localStorage:', campaignId);
       
-      // Update local state
-      setCampaigns(prev => prev.filter(c => c.id !== campaignId));
-      
-      // Clear current campaign if it's the one being deleted
-      if (currentCampaign?.id === campaignId) {
-        setCurrentCampaign(null);
-        setCurrentScreen('lobby');
+      // Remove from Firebase if multiplayer and authenticated
+      const campaign = campaigns.find(c => c.id === campaignId);
+      if (campaign?.isMultiplayer && isAuthenticated) {
+        try {
+          await multiplayerService.deleteCampaign(campaignId);
+        } catch (firebaseError) {
+          console.error('Error deleting from Firebase, but local deletion succeeded:', firebaseError);
+        }
       }
       
-      addToast('campaignDeleted', { campaign });
-      console.log('Campaign deleted successfully:', campaignId);
+      // Update state
+      setCampaigns(filteredCampaigns);
+      
+      // If this was the current campaign, clear it
+      if (currentCampaign?.id === campaignId) {
+        setCurrentCampaign(null);
+        setMessages([]);
+        setCurrentScreen('lobby');
+        navigate('/campaigns');
+      }
+      
+      addToast('campaignDeleted', { message: 'Campaign deleted successfully' });
     } catch (error) {
       console.error('Error deleting campaign:', error);
-      addToast('error', { message: 'Failed to delete campaign. Please try again.' });
+      addToast('error', { message: 'Failed to delete campaign' });
     }
   };
 
@@ -865,8 +1115,10 @@ const AIDungeonMaster = () => {
         
         if (joinedCampaign.started) {
           setCurrentScreen('game');
+          navigate(`/campaigns/${joinedCampaign.id}`);
         } else {
           setCurrentScreen('waiting');
+          navigate(`/campaigns/${joinedCampaign.id}/waiting`);
         }
         
         addToast('campaignJoined', { campaign: joinedCampaign });
@@ -1231,10 +1483,10 @@ const AIDungeonMaster = () => {
       
       if (isMultiplayer) {
         setCurrentScreen('waiting');
+        navigate(`/campaigns/${createdCampaign.id}/waiting`);
       } else {
         await startCampaign(createdCampaign);
       }
-      // handleFTUEStepComplete('create-campaign'); // Removed as per edit hint
     } catch (error) {
       console.error('Error creating campaign:', error);
       alert('Failed to create campaign. Please try again.');
@@ -1242,73 +1494,72 @@ const AIDungeonMaster = () => {
   };
 
   const startCampaign = async (campaign: any) => {
-    setIsAIThinking(true);
+    console.log('=== START CAMPAIGN DEBUG ===');
+    console.log('startCampaign called with campaign:', campaign);
+    console.log('Campaign ID:', campaign?.id);
+    console.log('Campaign isMultiplayer:', campaign?.isMultiplayer);
+    console.log('Current AI thinking state:', isAIThinking);
     
-    // Add null checks and fallbacks
-    if (!campaign) {
-      console.error('Campaign is undefined');
-      setIsAIThinking(false);
+    if (!campaign || !campaign.id) {
+      console.error('Campaign or campaign ID is missing!', campaign);
+      addToast('error', { message: 'Campaign data is invalid' });
       return;
     }
     
-    // Ensure campaign.players is always a valid array
-    if (!campaign.players || !Array.isArray(campaign.players)) {
-      console.warn('Campaign players is undefined or not an array, creating fallback:', campaign.players);
-      
-      // Handle case where players might be stored as an object
-      let playersArray: any[] = [];
-      if (campaign.players && typeof campaign.players === 'object' && !Array.isArray(campaign.players)) {
-        // Convert object to array if needed
-        playersArray = Object.values(campaign.players).filter((p: any) => p !== null);
+    console.log('Setting AI thinking to true...');
+    setIsAIThinking(true);
+    
+    // Build the initial prompt based on campaign theme
+    const theme = campaignThemes.find(t => t.name === campaign.theme) || campaignThemes[0];
+    const partyMembers = campaign.players?.map((p: any) => `${p.character.name} the ${p.character.class}`).join(', ') || 'the party';
+    
+    console.log('Found theme:', theme?.name);
+    console.log('Party members:', partyMembers);
+    
+    const initPrompt = `Create an immersive opening for a ${campaign.theme} adventure. 
+    
+    The party consists of: ${partyMembers}
+    
+    Setting: ${theme.description}
+    
+    Rules:
+    - Create an atmospheric opening scene
+    - Present 3 specific action choices
+    - Include environmental details
+    - Set up immediate adventure hooks
+    - Response must be valid JSON in this format:
+    {
+      "narrative": "Opening story text",
+      "choices": ["Choice 1", "Choice 2", "Choice 3"],
+      "atmosphere": "mood description",
+      "environment": "${theme.bg}",
+      "worldStateUpdates": {
+        "location": "starting location",
+        "timeOfDay": "current time",
+        "weather": "current weather"
       }
-      
-      // If still no valid players, create fallback
-      if (playersArray.length === 0) {
-        playersArray = [{
-          id: playerId || 'unknown',
-          name: playerName || 'Unknown Player',
-          character: character || { name: 'Unknown', level: 1, class: 'Adventurer' },
-          isHost: true,
-          isOnline: true,
-          status: 'ready' as const
-        }];
-      }
-      
-      campaign.players = playersArray;
-    }
-
-    // Initialize world state for the campaign
-    const initialWorldState = {
-      ...worldState,
-      currentLocation: 'tavern', // Start in a tavern
-      weather: 'clear',
-      timeOfDay: 'evening',
-      locations: {
-        tavern: {
-          name: 'The Prancing Pony',
-          description: 'A cozy tavern with warm firelight and the sound of laughter',
-          npcs: [],
-          connections: ['market', 'inn', 'streets']
-        }
-      }
-    };
-    setWorldState(initialWorldState);
-
-    // Generate enhanced initial prompt
-    const initPrompt = generateAIPrompt('', true);
+    }`;
 
     try {
-      console.log('Calling AI service with prompt:', initPrompt.substring(0, 200) + '...');
+      console.log('About to call AI service...');
+      console.log('Prompt length:', initPrompt.length);
+      console.log('Campaign passed to AI:', { id: campaign.id, isMultiplayer: campaign.isMultiplayer });
+      
       const response = await aiService.complete(initPrompt, campaign);
-      console.log('AI service response received:', response.substring(0, 200) + '...');
+      
+      console.log('AI service returned successfully!');
+      console.log('Response preview:', response.substring(0, 100) + '...');
+      
       const dmResponse = JSON.parse(response);
       
       // Update world state based on AI response
       if (dmResponse.worldStateUpdates) {
+        console.log('Updating world state...');
         updateWorldState(dmResponse.worldStateUpdates);
       }
       
       if (dmResponse.environment) {
+        console.log('Setting environment:', dmResponse.environment);
         setCurrentEnvironment(dmResponse.environment);
       }
       
@@ -1321,15 +1572,24 @@ const AIDungeonMaster = () => {
         atmosphere: dmResponse.atmosphere
       };
       
+      console.log('Setting messages...');
       setMessages([openingMessage]);
       
       const startedCampaign = { ...campaign, started: true, status: 'active' };
+      console.log('Updating campaign state...');
       setCurrentCampaign(startedCampaign);
       setCampaigns(prev => prev.map(c => c.id === campaign.id ? startedCampaign : c));
       
+      console.log('Setting screen to game...');
       setCurrentScreen('game');
+      console.log('Navigating to campaign:', campaign.id);
+      navigate(`/campaigns/${campaign.id}`);
+      
+      console.log('Campaign started successfully!');
     } catch (error) {
       console.error('Error starting campaign:', error);
+      console.log('Using fallback message...');
+      
       const fallbackMessage = {
         id: Date.now(),
         type: 'dm',
@@ -1338,10 +1598,19 @@ const AIDungeonMaster = () => {
         timestamp: new Date()
       };
       setMessages([fallbackMessage]);
+      
+      const startedCampaign = { ...campaign, started: true, status: 'active' };
+      setCurrentCampaign(startedCampaign);
+      setCampaigns(prev => prev.map(c => c.id === campaign.id ? startedCampaign : c));
+      
       setCurrentScreen('game');
+      console.log('Navigating to campaign (fallback):', campaign.id);
+      navigate(`/campaigns/${campaign.id}`);
     }
     
+    console.log('Setting AI thinking to false...');
     setIsAIThinking(false);
+    console.log('=== END CAMPAIGN DEBUG ===');
   };
 
   const pauseCampaign = async (campaignId: string) => {
@@ -1359,7 +1628,7 @@ const AIDungeonMaster = () => {
     // Save to Firebase if multiplayer
     if (campaign.isMultiplayer) {
       try {
-        await multiplayerService.updateCampaign(campaignId, { status: 'paused' });
+        await multiplayerService.updateCampaignState(campaignId, { status: 'paused' });
       } catch (error) {
         console.error('Error pausing campaign:', error);
       }
@@ -1370,20 +1639,34 @@ const AIDungeonMaster = () => {
     const campaign = campaigns.find(c => c.id === campaignId);
     if (!campaign) return;
 
-    const resumedCampaign: MultiplayerGame = { ...campaign, status: 'active' as const };
+    // Set the campaign as current and load its state
+    setCurrentCampaign(campaign);
+    setMessages(campaign.messages || []);
+    
+    // Update campaign status to active (ensure started campaigns have proper status)
+    const resumedCampaign: MultiplayerGame = { 
+      ...campaign, 
+      status: campaign.started ? 'active' as const : campaign.status 
+    };
     setCampaigns(prev => prev.map(c => c.id === campaignId ? resumedCampaign : c));
     
-    // If this is the current campaign, update it too
-    if (currentCampaign?.id === campaignId) {
-      setCurrentCampaign(resumedCampaign);
+    // Transition to appropriate screen with URL routing
+    if (campaign.started) {
+      setCurrentScreen('game');
+      navigate(`/campaigns/${campaign.id}`);
+      addToast('campaignResumed', { campaign: campaign });
+    } else {
+      // If campaign hasn't started yet, go to waiting room
+      setCurrentScreen('waiting');
+      navigate(`/campaigns/${campaign.id}/waiting`);
     }
 
-    // Save to Firebase if multiplayer
-    if (campaign.isMultiplayer) {
+    // Save to Firebase if multiplayer and update status
+    if (campaign.isMultiplayer && campaign.started) {
       try {
-        await multiplayerService.updateCampaign(campaignId, { status: 'active' });
+        await multiplayerService.updateCampaignState(campaignId, { status: 'active' });
       } catch (error) {
-        console.error('Error resuming campaign:', error);
+        console.error('Error updating campaign status:', error);
       }
     }
   };
@@ -1859,7 +2142,7 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
     </div>
   );
 
-  // Enhanced Gameplay Component
+  // Enhanced Gameplay Component with immersive design
   const Gameplay: React.FC<{ 
     campaign: any, 
     messages: any[], 
@@ -1874,372 +2157,352 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
     aiMemory?: any,
     inputRef: React.RefObject<HTMLInputElement>
   }> = ({ campaign, messages, inputMessage, setInputMessage, sendMessage, handleKeyPress, isAIThinking, messagesEndRef, onStartCombat, worldState, aiMemory, inputRef }) => {
-    
     const [showQuickActions, setShowQuickActions] = useState(false);
-    const [messageFilter, setMessageFilter] = useState<'all' | 'dm' | 'player' | 'system'>('all');
     const [isScrolledUp, setIsScrolledUp] = useState(false);
-    const messageContainerRef = useRef<HTMLDivElement>(null);
+    const [showDiceRoller, setShowDiceRoller] = useState(false);
+    const [diceResult, setDiceResult] = useState<number | null>(null);
+    const [messageFilter, setMessageFilter] = useState<'all' | 'dm' | 'player' | 'system'>('all');
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [atmosphericSound, setAtmosphericSound] = useState(true);
 
-    // Focus management effect
-    React.useEffect(() => {
-      if (inputRef?.current && !isAIThinking) {
-        inputRef.current.focus();
-      }
-    }, [inputMessage, isAIThinking, inputRef]);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-    // Scroll detection for auto-scroll behavior
-    React.useEffect(() => {
-      const container = messageContainerRef.current;
+    // Enhanced quick actions with context awareness
+    const quickActions = [
+      "I examine my surroundings carefully for clues",
+      "I search for hidden passages or secret doors", 
+      "I listen carefully for any sounds or voices",
+      "I check my equipment and inventory",
+      "I try to communicate with any nearby NPCs",
+      "I cast a detection spell",
+      "I move stealthily forward",
+      "I prepare for combat"
+    ];
+
+    // Dice rolling functionality
+    const rollDice = (sides: number) => {
+      const result = Math.floor(Math.random() * sides) + 1;
+      setDiceResult(result);
+      setInputMessage(`I roll a d${sides} and get ${result}`);
+      setTimeout(() => setDiceResult(null), 3000);
+    };
+
+    // Enhanced message filtering
+    const filteredMessages = messages.filter(msg => {
+      if (messageFilter === 'all') return true;
+      return msg.type === messageFilter;
+    });
+
+    // Scroll detection
+    useEffect(() => {
+      const container = messagesContainerRef.current;
       if (!container) return;
 
       const handleScroll = () => {
         const { scrollTop, scrollHeight, clientHeight } = container;
-        const isAtBottom = Math.abs(scrollHeight - clientHeight - scrollTop) < 5;
-        setIsScrolledUp(!isAtBottom);
+        const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+        setIsScrolledUp(!isNearBottom);
       };
 
       container.addEventListener('scroll', handleScroll);
       return () => container.removeEventListener('scroll', handleScroll);
     }, []);
 
-    // Filter messages based on current filter
-    const filteredMessages = React.useMemo(() => {
-      if (messageFilter === 'all') return messages;
-      return messages.filter(msg => msg.type === messageFilter);
-    }, [messages, messageFilter]);
+    // Format message content with enhanced styling
+    const formatMessageContent = (content: string) => {
+      if (!content) return '';
+      
+      // Add emphasis for important terms
+      return content
+        .replace(/\*\*(.*?)\*\*/g, '<strong class="text-yellow-300">$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em class="text-blue-300">$1</em>')
+        .replace(/"(.*?)"/g, '<span class="text-green-300">"$1"</span>');
+    };
 
-    // Quick action suggestions based on context
-    const quickActions = React.useMemo(() => {
-      const actions = [
-        "Look around carefully",
-        "Search for clues",
-        "Talk to nearby NPCs",
-        "Check inventory",
-        "Cast a spell",
-        "Attack with weapon"
-      ];
-
-      // Add context-specific actions based on world state
-      if (worldState?.currentLocation === 'tavern') {
-        actions.unshift("Order a drink", "Ask the bartender for information");
-      }
-      if (worldState?.weather === 'storm') {
-        actions.unshift("Seek shelter", "Wait for the storm to pass");
-      }
-
-      return actions.slice(0, 6); // Limit to 6 actions
-    }, [worldState]);
-
+    // Enhanced choice selection with animation
     const handleQuickAction = (action: string) => {
       setInputMessage(action);
       setShowQuickActions(false);
       setTimeout(() => sendMessage(), 100);
     };
 
-    const getMessageIcon = (message: any) => {
-      switch (message.type) {
-        case 'player':
-          return (
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg">
-              {character?.name?.charAt(0) || 'P'}
-            </div>
-          );
-        case 'dm':
-          return (
-            <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm shadow-lg">
-              🎲
-            </div>
-          );
-        case 'system':
-          return (
-            <div className="w-8 h-8 bg-gradient-to-br from-gray-500 to-gray-600 rounded-full flex items-center justify-center text-white text-sm shadow-lg">
-              ⚙️
-            </div>
-          );
-        default:
-          return (
-            <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg">
-              {message.playerName?.charAt(0) || '?'}
-            </div>
-          );
-      }
-    };
-
-    const getMessageStyle = (message: any) => {
-      const baseStyle = "mb-4 p-4 rounded-xl border transition-all duration-300 hover:shadow-lg";
-      
-      switch (message.type) {
-        case 'player':
-          return `${baseStyle} bg-gradient-to-r from-blue-900/40 to-blue-800/40 border-blue-400/30 ml-8`;
-        case 'dm':
-          return `${baseStyle} bg-gradient-to-r from-purple-900/40 to-purple-800/40 border-purple-400/30 mr-8`;
-        case 'system':
-          return `${baseStyle} bg-gradient-to-r from-gray-900/40 to-gray-800/40 border-gray-400/30`;
-        default:
-          return `${baseStyle} bg-gradient-to-r from-green-900/40 to-green-800/40 border-green-400/30`;
-      }
-    };
-
-    const formatMessageContent = (content: string) => {
-      // Add basic markdown-like formatting
-      return content
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`(.*?)`/g, '<code class="bg-white/20 px-1 rounded">$1</code>');
-    };
-
     return (
-      <div className="h-full flex flex-col bg-gradient-to-br from-slate-900/50 to-slate-800/50 rounded-xl overflow-hidden">
-        {/* Enhanced Header */}
-        <div className="flex items-center justify-between p-4 bg-black/30 border-b border-white/20">
-          <div className="flex items-center space-x-3">
-            <h2 className="text-xl lg:text-2xl font-bold text-white">Adventure Log</h2>
-            <div className="flex items-center space-x-1 text-sm text-blue-300">
-              <span>•</span>
-              <span>{filteredMessages.length} messages</span>
-              {isConnected && (
-                <>
+      <div className={`h-full flex flex-col transition-all duration-500 ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
+        {/* Immersive Header with Campaign Info */}
+        <div className="relative bg-gradient-to-r from-slate-900/95 via-purple-900/95 to-slate-900/95 backdrop-blur-lg border-b border-purple-500/30">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-purple-900/20 via-transparent to-transparent"></div>
+          <div className="relative flex items-center justify-between p-4">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg">
+                🗺️
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-white">{campaign?.theme || 'Adventure'}</h2>
+                <div className="flex items-center space-x-4 text-sm text-purple-200">
                   <span>•</span>
-                  <span className="text-green-400">Connected</span>
-                </>
-              )}
+                  <span>{filteredMessages.length} messages</span>
+                  <span>•</span>
+                  <span className="text-green-400">Active Campaign</span>
+                  {worldState?.currentLocation && (
+                    <>
+                      <span>•</span>
+                      <span className="text-yellow-400">{worldState.currentLocation}</span>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            {/* Message Filter */}
-            <select
-              value={messageFilter}
-              onChange={(e) => setMessageFilter(e.target.value as any)}
-              className="bg-white/10 text-white text-sm rounded-lg px-3 py-1 border border-white/20 focus:outline-none focus:border-blue-400"
-            >
-              <option value="all">All Messages</option>
-              <option value="dm">DM Only</option>
-              <option value="player">Player Only</option>
-              <option value="system">System Only</option>
-            </select>
-
-            {/* Quick Actions Toggle */}
-            <button
-              onClick={() => setShowQuickActions(!showQuickActions)}
-              className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
-                showQuickActions 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-white/10 text-blue-200 hover:bg-white/20'
-              }`}
-            >
-              Quick Actions
-            </button>
-
-            {/* Combat Test Button */}
-            {onStartCombat && (
-              <button
-                onClick={() => onStartCombat([
-                  { name: 'Goblin Warrior', health: 25, strength: 12, dexterity: 10, armorClass: 12 },
-                  { name: 'Goblin Archer', health: 20, strength: 10, dexterity: 14, armorClass: 13 }
-                ])}
-                className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all flex items-center space-x-1 text-sm"
+            
+            <div className="flex items-center space-x-2">
+              {/* Message Filter */}
+              <select
+                value={messageFilter}
+                onChange={(e) => setMessageFilter(e.target.value as any)}
+                className="px-3 py-1.5 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:border-purple-400"
               >
-                <Sword size={14} />
-                <span>Combat</span>
+                <option value="all">All Messages</option>
+                <option value="dm">DM Only</option>
+                <option value="player">Player Only</option>
+                <option value="system">System Only</option>
+              </select>
+
+              {/* Quick Actions Toggle */}
+              <button
+                onClick={() => setShowQuickActions(!showQuickActions)}
+                className={`p-2 rounded-lg transition-all ${showQuickActions ? 'bg-purple-600 text-white' : 'bg-white/10 text-purple-200 hover:bg-white/20'}`}
+                title="Quick Actions"
+              >
+                ⚡
               </button>
-            )}
+
+              {/* Dice Roller */}
+              <button
+                onClick={() => setShowDiceRoller(true)}
+                className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-purple-200"
+                title="Roll Dice"
+              >
+                🎲
+              </button>
+
+              {/* Atmospheric Sound */}
+              <button
+                onClick={() => setAtmosphericSound(!atmosphericSound)}
+                className={`p-2 rounded-lg transition-all ${atmosphericSound ? 'bg-green-600 text-white' : 'bg-white/10 text-purple-200 hover:bg-white/20'}`}
+                title="Atmospheric Sounds"
+              >
+                🔊
+              </button>
+
+              {/* Fullscreen */}
+              <button
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-purple-200"
+                title="Toggle Fullscreen"
+              >
+                {isFullscreen ? '🗗' : '🗖'}
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Quick Actions Panel */}
         {showQuickActions && (
-          <div className="p-4 bg-blue-900/20 border-b border-blue-400/30">
-            <h3 className="text-white font-semibold mb-2 text-sm">Quick Actions</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {quickActions.map((action, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleQuickAction(action)}
-                  className="text-left p-2 bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 transition-all text-sm text-blue-100 hover:text-white"
-                  disabled={isAIThinking}
-                >
-                  {action}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* World State Display */}
-        {worldState && (
-          <div className="p-3 bg-gradient-to-r from-purple-900/30 to-blue-900/30 border-b border-purple-400/30">
-            <div className="flex items-center justify-between text-sm">
-              <div className="flex items-center space-x-4">
-                {worldState.currentLocation && (
-                  <div className="flex items-center space-x-1 text-purple-300">
-                    <span>📍</span>
-                    <span>{worldState.currentLocation}</span>
-                  </div>
-                )}
-                {worldState.weather && (
-                  <div className="flex items-center space-x-1 text-blue-300">
-                    <span>{worldState.weather === 'clear' ? '☀️' : worldState.weather === 'rain' ? '🌧️' : '⛈️'}</span>
-                    <span>{worldState.weather}</span>
-                  </div>
-                )}
-                {worldState.timeOfDay && (
-                  <div className="flex items-center space-x-1 text-yellow-300">
-                    <span>{worldState.timeOfDay === 'day' ? '🌅' : worldState.timeOfDay === 'night' ? '🌙' : '🌆'}</span>
-                    <span>{worldState.timeOfDay}</span>
-                  </div>
-                )}
+          <div className="bg-gradient-to-r from-purple-900/30 to-blue-900/30 border-b border-purple-500/30 backdrop-blur-sm">
+            <div className="p-4">
+              <h3 className="text-white font-semibold mb-3 flex items-center space-x-2">
+                <span>⚡</span>
+                <span>Quick Actions</span>
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                {quickActions.map((action, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleQuickAction(action)}
+                    className="text-left p-3 bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 transition-all text-sm text-purple-100 hover:text-white transform hover:scale-105"
+                    disabled={isAIThinking}
+                  >
+                    {action}
+                  </button>
+                ))}
               </div>
-              
-              {character && (
-                <div className="flex items-center space-x-3 text-xs">
-                  <div className="flex items-center space-x-1 text-red-300">
-                    <span>❤️</span>
-                    <span>{character.health}/{character.maxHealth}</span>
-                  </div>
-                  <div className="flex items-center space-x-1 text-blue-300">
-                    <span>✨</span>
-                    <span>{character.mana}/{character.maxMana}</span>
-                  </div>
-                  <div className="flex items-center space-x-1 text-yellow-300">
-                    <span>💰</span>
-                    <span>{character.gold || 0}</span>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}
 
         {/* Enhanced Messages Area */}
         <div 
-          ref={messageContainerRef}
-          className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth"
+          ref={messagesContainerRef}
+          className="flex-1 overflow-y-auto bg-gradient-to-br from-slate-950/90 via-purple-950/90 to-slate-950/90 relative"
         >
-          {filteredMessages.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-center">
-              <div className="text-blue-200">
-                <div className="text-4xl mb-4 opacity-50">💬</div>
-                <p className="text-lg">Your adventure begins here!</p>
-                <p className="text-sm opacity-75">Type an action to start your story.</p>
-              </div>
-            </div>
-          ) : (
-            filteredMessages.map((msg, index) => (
-              <div key={msg.id || index} className={getMessageStyle(msg)}>
-                <div className="flex items-start space-x-3">
-                  {getMessageIcon(msg)}
+          {/* Atmospheric Background Elements */}
+          <div className="absolute inset-0 opacity-5">
+            <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-purple-500 rounded-full filter blur-3xl"></div>
+            <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-blue-500 rounded-full filter blur-3xl"></div>
+          </div>
+          
+          <div className="relative p-6 space-y-6">
+            {filteredMessages.map((msg, index) => (
+              <div
+                key={msg.id || index}
+                className={`group relative transform transition-all duration-300 hover:scale-[1.01] ${
+                  msg.type === 'player'
+                    ? 'ml-8'
+                    : msg.type === 'dm'
+                    ? 'mr-8'
+                    : ''
+                }`}
+              >
+                {/* Message Container with Enhanced Styling */}
+                <div className={`relative p-6 rounded-2xl backdrop-blur-sm border shadow-xl ${
+                  msg.type === 'player'
+                    ? 'bg-gradient-to-br from-blue-600/20 to-cyan-600/20 border-blue-400/30 shadow-blue-500/10'
+                    : msg.type === 'dm'
+                    ? 'bg-gradient-to-br from-purple-600/20 to-pink-600/20 border-purple-400/30 shadow-purple-500/10'
+                    : 'bg-gradient-to-br from-gray-600/20 to-slate-600/20 border-gray-400/30 shadow-gray-500/10'
+                }`}>
                   
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <span className="font-semibold text-white">
-                        {msg.type === 'player' 
-                          ? character?.name || 'You'
-                          : msg.type === 'dm'
-                          ? 'Dungeon Master'
-                          : msg.playerName || 'System'
-                        }
-                      </span>
-                      <span className="text-xs text-gray-400">
-                        {new Date(msg.timestamp).toLocaleTimeString()}
-                      </span>
-                      {msg.atmosphere?.mood && (
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          msg.atmosphere.mood === 'tense' ? 'bg-red-500/20 text-red-300' :
-                          msg.atmosphere.mood === 'mysterious' ? 'bg-purple-500/20 text-purple-300' :
-                          msg.atmosphere.mood === 'peaceful' ? 'bg-green-500/20 text-green-300' :
-                          'bg-blue-500/20 text-blue-300'
-                        }`}>
-                          {msg.atmosphere.mood}
-                        </span>
+                  {/* Message Header */}
+                  <div className="flex items-start space-x-4 mb-4">
+                    {/* Enhanced Avatar */}
+                    <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold shadow-lg ${
+                      msg.type === 'player'
+                        ? 'bg-gradient-to-br from-blue-500 to-cyan-600'
+                        : msg.type === 'dm'
+                        ? 'bg-gradient-to-br from-purple-500 to-pink-600'
+                        : 'bg-gradient-to-br from-gray-500 to-slate-600'
+                    }`}>
+                      {msg.type === 'player' ? (
+                        character?.name?.charAt(0) || 'P'
+                      ) : msg.type === 'dm' ? (
+                        '🎭'
+                      ) : (
+                        '⚙️'
                       )}
                     </div>
                     
-                    <div 
-                      className="text-blue-100 leading-relaxed"
-                      dangerouslySetInnerHTML={{ __html: formatMessageContent(msg.content) }}
-                    />
-                    
-                    {/* Enhanced Choice System */}
-                    {msg.choices && msg.choices.length > 0 && (
-                      <div className="mt-4 space-y-2">
-                        <div className="text-xs text-gray-400 font-medium">Choose your action:</div>
-                        <div className="grid gap-2">
-                          {msg.choices.map((choice: string, choiceIndex: number) => (
-                            <button
-                              key={choiceIndex}
-                              onClick={() => {
-                                setInputMessage(choice);
-                                setTimeout(() => sendMessage(), 100);
-                              }}
-                              className="text-left p-3 bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 transition-all text-sm group"
-                              disabled={isAIThinking}
-                            >
-                              <div className="flex items-center space-x-2">
-                                <span className="w-6 h-6 bg-blue-500/30 rounded-full flex items-center justify-center text-xs font-bold group-hover:bg-blue-500/50 transition-all">
-                                  {choiceIndex + 1}
-                                </span>
-                                <span className="group-hover:text-white transition-colors">{choice}</span>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center space-x-3 mb-2">
+                        <span className="font-bold text-white text-lg">
+                          {msg.type === 'player' 
+                            ? character?.name || 'You'
+                            : msg.type === 'dm'
+                            ? 'Dungeon Master'
+                            : msg.playerName || 'System'
+                          }
+                        </span>
+                        <span className="text-xs text-gray-400 bg-black/30 px-2 py-1 rounded-full">
+                          {new Date(msg.timestamp).toLocaleTimeString()}
+                        </span>
+                        {msg.atmosphere?.mood && (
+                          <span className={`text-xs px-3 py-1 rounded-full font-medium ${
+                            msg.atmosphere.mood === 'tense' ? 'bg-red-500/30 text-red-300 border border-red-500/50' :
+                            msg.atmosphere.mood === 'mysterious' ? 'bg-purple-500/30 text-purple-300 border border-purple-500/50' :
+                            msg.atmosphere.mood === 'peaceful' ? 'bg-green-500/30 text-green-300 border border-green-500/50' :
+                            'bg-blue-500/30 text-blue-300 border border-blue-500/50'
+                          }`}>
+                            {msg.atmosphere.mood}
+                          </span>
+                        )}
                       </div>
-                    )}
+                      
+                      {/* Enhanced Message Content */}
+                      <div 
+                        className="text-gray-100 leading-relaxed text-lg"
+                        dangerouslySetInnerHTML={{ __html: formatMessageContent(msg.content) }}
+                      />
+                      
+                      {/* Enhanced Choice System */}
+                      {msg.choices && msg.choices.length > 0 && (
+                        <div className="mt-6 space-y-3">
+                          <div className="flex items-center space-x-2 text-sm text-gray-300">
+                            <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></span>
+                            <span className="font-medium">Choose your path:</span>
+                          </div>
+                          <div className="grid gap-3">
+                            {msg.choices.map((choice: string, choiceIndex: number) => (
+                              <button
+                                key={choiceIndex}
+                                onClick={() => {
+                                  setInputMessage(choice);
+                                  setTimeout(() => sendMessage(), 100);
+                                }}
+                                className="group text-left p-4 bg-gradient-to-r from-white/10 to-white/5 hover:from-white/20 hover:to-white/10 rounded-xl border border-white/20 hover:border-white/40 transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
+                                disabled={isAIThinking}
+                              >
+                                <div className="flex items-center space-x-3">
+                                  <span className="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-600 rounded-lg flex items-center justify-center text-sm font-bold text-white group-hover:scale-110 transition-transform">
+                                    {choiceIndex + 1}
+                                  </span>
+                                  <span className="text-gray-200 group-hover:text-white transition-colors font-medium">
+                                    {choice}
+                                  </span>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
-                    {/* Atmosphere Details */}
-                    {msg.atmosphere && (msg.atmosphere.tension || msg.atmosphere.description) && (
-                      <div className="mt-3 p-2 bg-black/30 rounded-lg border border-white/10">
-                        <div className="text-xs text-gray-400 space-y-1">
-                          {msg.atmosphere.tension && (
-                            <div>
-                              <span className="font-semibold">Tension:</span> {msg.atmosphere.tension}/10
-                            </div>
-                          )}
-                          {msg.atmosphere.description && (
-                            <div className="italic text-gray-300">{msg.atmosphere.description}</div>
-                          )}
+                      {/* Atmosphere Details */}
+                      {msg.atmosphere && (
+                        <div className="mt-4 p-3 bg-black/20 rounded-xl border border-white/10">
+                          <div className="text-xs text-gray-400 mb-1">Atmosphere</div>
+                          <div className="text-sm text-gray-300">
+                            🌡️ {msg.atmosphere.mood} • 🌤️ {msg.atmosphere.lighting || 'Normal'} • 🔊 {msg.atmosphere.sounds || 'Quiet'}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            ))
-          )}
-
-          {/* AI Thinking Enhanced Indicator */}
-          {isAIThinking && (
-            <div className="flex items-center space-x-3 p-4 bg-gradient-to-r from-purple-900/40 to-purple-800/40 border border-purple-400/30 rounded-xl">
-              <div className="relative">
-                <div className="animate-spin rounded-full h-6 w-6 border-2 border-purple-300/30 border-t-purple-400"></div>
-                <div className="animate-ping absolute inset-0 rounded-full h-6 w-6 border-2 border-purple-400/50"></div>
+            ))}
+            
+            {/* Enhanced AI Thinking Indicator */}
+            {isAIThinking && (
+              <div className="group transform transition-all duration-300">
+                <div className="relative p-6 rounded-2xl bg-gradient-to-br from-purple-600/20 to-pink-600/20 border border-purple-400/30 backdrop-blur-sm shadow-xl">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+                      🎭
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-3 mb-2">
+                        <span className="font-bold text-white text-lg">Dungeon Master</span>
+                        <div className="flex space-x-1">
+                          <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                          <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
+                          <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></div>
+                        </div>
+                      </div>
+                      <div className="text-purple-200 text-lg italic">
+                        The Dungeon Master weaves the threads of fate...
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="flex-1">
-                <div className="text-purple-200 font-medium">Dungeon Master is thinking...</div>
-                <div className="text-purple-300 text-sm">Crafting your story...</div>
-              </div>
-            </div>
-          )}
-          
-          <div ref={messagesEndRef} />
+            )}
+            
+            <div ref={messagesEndRef} />
+          </div>
         </div>
 
-        {/* Auto-scroll button */}
+        {/* Scroll to Bottom Button */}
         {isScrolledUp && (
-          <div className="absolute bottom-20 right-4">
+          <div className="absolute bottom-24 right-6 z-10">
             <button
               onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })}
-              className="p-2 bg-blue-600 hover:bg-blue-700 rounded-full text-white shadow-lg transition-all"
+              className="p-3 bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 rounded-full text-white shadow-lg transition-all transform hover:scale-110"
             >
-              <ChevronDown size={20} />
+              ↓
             </button>
           </div>
         )}
 
         {/* Enhanced Input Area */}
-        <div className="p-4 bg-black/30 border-t border-white/20">
-          <div className="flex space-x-2">
+        <div className="bg-gradient-to-r from-slate-900/95 via-purple-900/95 to-slate-900/95 backdrop-blur-lg border-t border-purple-500/30 p-6">
+          <div className="flex space-x-4">
             <div className="flex-1 relative">
               <input
                 ref={inputRef}
@@ -2248,52 +2511,57 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyPress}
                 placeholder="What do you do? (Be specific and creative!)"
-                className="w-full px-4 py-3 bg-white/10 text-white placeholder-blue-200 rounded-xl border border-white/20 focus:outline-none focus:border-blue-400 transition-all pr-12"
+                className="w-full px-6 py-4 bg-white/10 text-white placeholder-purple-200 rounded-2xl border border-white/20 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-400/50 transition-all text-lg backdrop-blur-sm"
                 disabled={isAIThinking}
                 maxLength={500}
               />
               {inputMessage.length > 0 && (
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-gray-400">
+                <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-sm text-gray-400 bg-black/30 px-2 py-1 rounded-full">
                   {inputMessage.length}/500
                 </div>
               )}
             </div>
-            
-            <button 
-              onClick={sendMessage} 
+            <button
+              onClick={sendMessage}
               disabled={isAIThinking || !inputMessage.trim()}
-              className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center space-x-2 ${
-                isAIThinking || !inputMessage.trim()
-                  ? 'bg-gray-600 text-gray-300 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-lg'
-              }`}
+              className="px-8 py-4 bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed rounded-2xl transition-all text-white font-bold text-lg shadow-lg transform hover:scale-105 disabled:transform-none"
             >
-              {isAIThinking ? (
-                <>
-                  <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></div>
-                  <span>Wait...</span>
-                </>
-              ) : (
-                <>
-                  <Send size={16} />
-                  <span>Send</span>
-                </>
-              )}
+              {isAIThinking ? '⏳' : '🚀'}
             </button>
           </div>
+        </div>
 
-          {/* Input Hints */}
-          <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
-            <div className="flex items-center space-x-4">
-              <span>💡 Try: "I carefully examine the door for traps"</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span>Press Enter to send</span>
-              <span>•</span>
-              <span>Shift+Enter for new line</span>
+        {/* Enhanced Dice Roller Modal */}
+        {showDiceRoller && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-gradient-to-br from-purple-900/90 to-blue-900/90 backdrop-blur-lg rounded-2xl p-8 border border-purple-400/30 shadow-2xl max-w-md w-full mx-4">
+              <h3 className="text-2xl font-bold mb-6 text-white text-center">🎲 Dice Roller</h3>
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                {[4, 6, 8, 10, 12, 20].map(sides => (
+                  <button
+                    key={sides}
+                    onClick={() => rollDice(sides)}
+                    className="p-4 bg-white/10 hover:bg-white/20 rounded-xl transition-all text-white font-bold text-lg transform hover:scale-105 border border-white/20 hover:border-white/40"
+                  >
+                    d{sides}
+                  </button>
+                ))}
+              </div>
+              {diceResult && (
+                <div className="text-center mb-6 p-4 bg-gradient-to-br from-yellow-500/20 to-orange-500/20 rounded-xl border border-yellow-400/30">
+                  <div className="text-3xl font-bold text-yellow-400 mb-2">🎯 {diceResult}</div>
+                  <div className="text-yellow-200">Great roll!</div>
+                </div>
+              )}
+              <button
+                onClick={() => setShowDiceRoller(false)}
+                className="w-full px-6 py-3 bg-gradient-to-br from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 rounded-xl transition-all text-white font-bold"
+              >
+                Close
+              </button>
             </div>
           </div>
-        </div>
+        )}
       </div>
     );
   };
@@ -2346,7 +2614,10 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                 <p className="text-white">Welcome back, {currentUser?.displayName}!</p>
                 <Tooltip content="Continue your adventure with existing characters" ariaLabel="Continue adventure">
                   <button
-                    onClick={() => setCurrentScreen('character-select')}
+                    onClick={() => {
+                      setCurrentScreen('character-select');
+                      navigate('/characters');
+                    }}
                     className="w-full px-6 py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all"
                     aria-label="Continue your adventure with existing characters"
                   >
@@ -2422,9 +2693,16 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
 
   // Character Selection Screen
   if (currentScreen === 'character-select') {
+    // Debug logging for character selection
+    console.log('Character selection screen - userCharacters:', userCharacters);
+    console.log('Character selection screen - userCharacters length:', userCharacters.length);
+    userCharacters.forEach((char, index) => {
+      console.log(`Character ${index}: ID=${char.id}, Name=${char.name}, Class=${char.class}`);
+    });
+    
     return (
       <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} p-4 transition-all duration-1000`}>
-        <div className="max-w-6xl mx-auto">
+        <div className="w-full">
           <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20">
             <div className="flex justify-between items-center mb-8">
               <div>
@@ -2518,7 +2796,7 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
 
     return (
       <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} p-4 transition-all duration-1000`}>
-        <div className="max-w-6xl mx-auto">
+        <div className="w-full">
           <div className="bg-white/10 backdrop-lg rounded-3xl p-8 border border-white/20">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-3xl font-bold text-white">Create Your Hero</h2>
@@ -2587,31 +2865,88 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
             isMobile={false}
           />
         </Suspense>
-        {/* Main Content + Drawer Row */}
-        <div className="flex-1 flex flex-col h-full">
-          {/* Top Bar */}
-          <Suspense fallback={<LoadingSpinner />}>
-            <TopBar 
-              onNewCampaign={handleNewCampaign}
-              isMobile={isMobile}
-              onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
+        {/* DM Center - Full width without drawer constraints */}
+        {currentScreen === 'dm-center' && (
+          <div className="flex-1 flex flex-col h-full">
+            {/* Top Bar */}
+            <Suspense fallback={<LoadingSpinner />}>
+              <TopBar 
+                onNewCampaign={handleNewCampaign}
+                isMobile={isMobile}
+                onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
+                currentScreen={currentScreen}
+                onHelpClick={() => setShowHelp(true)}
+              />
+            </Suspense>
+            {/* Navigation Manager for URL routing */}
+            <NavigationManager 
+              onScreenChange={setCurrentScreen}
               currentScreen={currentScreen}
-              onHelpClick={() => setShowHelp(true)}
             />
-          </Suspense>
-          {/* Main Content */}
-          <main className="flex-1 overflow-auto">
-            <div className="px-6 lg:px-8 py-6">
-              {/* Add subtle background pattern for better visual hierarchy */}
-              <div className="relative min-h-full">
-                <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-3xl pointer-events-none"></div>
-                <div className="relative z-10">
-                  {currentScreen === 'dashboard' && (
+            
+            {/* Breadcrumb Navigation */}
+            <Breadcrumb 
+              currentScreen={currentScreen}
+              currentCampaign={currentCampaign}
+              character={character}
+              onNavigate={handleBreadcrumbNavigate}
+            />
+            
+            {/* DM Center Content - Full Width */}
+            <main className="flex-1 overflow-auto">
+              <Suspense fallback={<LoadingSpinner />}>
+                <DMCenter 
+                  dmCenterData={dmCenterData}
+                  onUpdateDMCenter={setDmCenterData}
+                  currentCampaign={currentCampaign}
+                />
+              </Suspense>
+            </main>
+          </div>
+        )}
+
+        {/* Regular layout with drawer for all other screens */}
+        {currentScreen !== 'dm-center' && (
+          <div className="flex-1 flex flex-col h-full">
+            {/* Top Bar */}
+            <Suspense fallback={<LoadingSpinner />}>
+              <TopBar 
+                onNewCampaign={handleNewCampaign}
+                isMobile={isMobile}
+                onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
+                currentScreen={currentScreen}
+                onHelpClick={() => setShowHelp(true)}
+              />
+            </Suspense>
+            {/* Main Content */}
+            <main className="flex-1 overflow-auto">
+              {/* Navigation Manager for URL routing */}
+              <NavigationManager 
+                onScreenChange={setCurrentScreen}
+                currentScreen={currentScreen}
+              />
+              
+              {/* Breadcrumb Navigation */}
+              <Breadcrumb 
+                currentScreen={currentScreen}
+                currentCampaign={currentCampaign}
+                character={character}
+                onNavigate={handleBreadcrumbNavigate}
+              />
+              
+              {/* Constrained width screens */}
+              {['dashboard', 'lobby', 'party', 'magic'].includes(currentScreen) && (
+                <div className="px-4 lg:px-6 py-2">
+                  {/* Add subtle background pattern for better visual hierarchy */}
+                  <div className="relative min-h-full">
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-3xl pointer-events-none"></div>
+                    <div className="relative z-10">
+                    {currentScreen === 'dashboard' && (
                     <div className="h-full flex items-center justify-center">
                       <div className="text-center">
                         <h2 className="text-3xl font-bold text-white mb-4">Dashboard</h2>
                         <p className="text-blue-200 mb-6">Welcome to MythSeeker RPG!</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 w-full">
                           <Tooltip content="Create new campaigns or join existing ones">
                             <button
                               onClick={() => handleNavChange('campaigns')}
@@ -2722,15 +3057,17 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                     </div>
                   )}
                   {currentScreen === 'combat' && combatState && (
-                    <CombatSystem
-                      combatants={combatState.combatants}
-                      battleMap={combatState.battleMap}
-                      currentTurn={combatState.currentTurn}
-                      activeCombatantId={combatState.turnOrder[combatState.currentCombatantIndex]}
-                      onAction={handleCombatAction}
-                      onEndCombat={endCombat}
-                      isPlayerTurn={combatService.isPlayerTurn()}
-                    />
+                    <Suspense fallback={<LoadingSpinner />}>
+                      <CombatSystem
+                        combatants={combatState.combatants}
+                        battleMap={combatState.battleMap}
+                        currentTurn={combatState.currentTurn}
+                        activeCombatantId={combatState.turnOrder[combatState.currentCombatantIndex]}
+                        onAction={handleCombatAction}
+                        onEndCombat={endCombat}
+                        isPlayerTurn={combatService.isPlayerTurn()}
+                      />
+                    </Suspense>
                   )}
                   {currentScreen === 'magic' && (
                     <div className="h-full p-6">
@@ -2750,8 +3087,9 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                       </div>
                     </div>
                   )}
+
                   {/* Default case - show dashboard if no screen matches */}
-                  {!['dashboard', 'character', 'lobby', 'waiting', 'game', 'party', 'world', 'combat', 'magic'].includes(currentScreen) && (
+                  {!['dashboard', 'character', 'lobby', 'waiting', 'game', 'party', 'world', 'combat', 'magic', 'dm-center'].includes(currentScreen) && (
                     <div className="h-full flex items-center justify-center">
                       <div className="text-center">
                         <h2 className="text-3xl font-bold text-white mb-4">Welcome to MythSeeker</h2>
@@ -2762,31 +3100,35 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                 </div>
               </div>
             </div>
-          </main>
-        </div>
-        {/* Right Drawer - desktop as flex child, mobile as fixed overlay */}
-        <Suspense fallback={<LoadingSpinner />}>
-          <RightDrawer
-            isOpen={drawerOpen}
-            onClose={() => setDrawerOpen(false)}
-            activeTab={activeDrawerTab}
-            onTabChange={setActiveDrawerTab}
-            isMobile={isMobile}
-            campaign={currentCampaign}
-            messages={messages}
-            players={partyState.players}
-            worldState={worldState}
-            achievements={achievements}
-            onSendMessage={sendMultiplayerMessage}
-            onUpdateSettings={(settings) => {
-              console.log('Settings updated:', settings);
-            }}
-            drawerWidth={drawerWidth}
-            setDrawerWidth={setDrawerWidth}
-            minWidth={MIN_WIDTH}
-            maxWidth={MAX_WIDTH}
-          />
-        </Suspense>
+            </main>
+          </div>
+        )}
+
+        {/* Right Drawer - only for non-DM Center screens */}
+        {currentScreen !== 'dm-center' && (
+          <Suspense fallback={<LoadingSpinner />}>
+            <RightDrawer
+              isOpen={drawerOpen}
+              onClose={() => setDrawerOpen(false)}
+              activeTab={activeDrawerTab}
+              onTabChange={setActiveDrawerTab}
+              isMobile={isMobile}
+              campaign={currentCampaign}
+              messages={messages}
+              players={partyState.players}
+              worldState={worldState}
+              achievements={achievements}
+              onSendMessage={sendMultiplayerMessage}
+              onUpdateSettings={(settings) => {
+                console.log('Settings updated:', settings);
+              }}
+              drawerWidth={drawerWidth}
+              setDrawerWidth={setDrawerWidth}
+              minWidth={MIN_WIDTH}
+              maxWidth={MAX_WIDTH}
+            />
+          </Suspense>
+        )}
       </div>
       {/* Floating Action Button - sets drawer tab and opens drawer */}
       <FloatingActionButton
@@ -3261,7 +3603,7 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
   const [selectedTheme, setSelectedTheme] = useState<any>(null);
   const [customPrompt, setCustomPrompt] = useState('');
   const [joinCode, setJoinCode] = useState('');
-  const [isMultiplayer, setIsMultiplayer] = useState(true);
+  const [isMultiplayer, setIsMultiplayer] = useState(true); // Restore multiplayer default for production functionality
   const [errors, setErrors] = useState<{ theme?: string; customPrompt?: string }>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'not-started'>('all');
@@ -3371,21 +3713,21 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
 
   const getCampaignStatusIcon = (campaign: any) => {
     if (!campaign.started) return '⏸️'; // Not started
-    if (campaign.status === 'active') return '▶️'; // Active
+    if (campaign.status === 'active' || (!campaign.status && campaign.started)) return '▶️'; // Active (including legacy campaigns without status)
     if (campaign.status === 'paused') return '⏸️'; // Paused
     return '⏸️'; // Default
   };
 
   const getCampaignStatusText = (campaign: any) => {
     if (!campaign.started) return 'Not Started';
-    if (campaign.status === 'active') return 'In Progress';
+    if (campaign.status === 'active' || (!campaign.status && campaign.started)) return 'In Progress'; // Include legacy campaigns
     if (campaign.status === 'paused') return 'Paused';
     return 'Unknown';
   };
 
   const getCampaignStatusColor = (campaign: any) => {
     if (!campaign.started) return 'text-gray-400';
-    if (campaign.status === 'active') return 'text-green-400';
+    if (campaign.status === 'active' || (!campaign.status && campaign.started)) return 'text-green-400'; // Include legacy campaigns
     if (campaign.status === 'paused') return 'text-yellow-400';
     return 'text-gray-400';
   };
@@ -3522,7 +3864,7 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
           </button>
         </div>
 
-        <div className="max-w-md mx-auto">
+        <div className="w-full max-w-lg mx-auto">
           <div className="bg-white/10 rounded-xl p-8 border border-white/20 text-center">
             <div className="text-6xl mb-4">🎯</div>
             <h4 className="text-xl font-bold text-white mb-4">Join Adventure</h4>
@@ -3760,32 +4102,33 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
                 
                 {/* Quick actions */}
                 <div className={`${viewMode === 'list' ? 'flex space-x-2' : 'flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity'}`}>
-                  {/* Play/Resume Button */}
-                  {(!campaign.started || campaign.status === 'paused') && (
+                  {/* Resume/Continue Button for all started campaigns */}
+                  {campaign.started && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleResumeCampaign(campaign.id);
                       }}
                       className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all text-sm font-medium flex items-center space-x-1"
-                      title={!campaign.started ? "Start Campaign" : "Resume Campaign"}
+                      title={campaign.status === 'paused' ? "Resume Campaign" : "Continue Campaign"}
                     >
                       <span>▶</span>
-                      <span>{!campaign.started ? 'Start' : 'Resume'}</span>
+                      <span>{campaign.status === 'paused' ? 'Resume' : 'Continue'}</span>
                     </button>
                   )}
                   
-                  {/* Pause Button */}
-                  {campaign.started && campaign.status === 'active' && (
+                  {/* Start Button for unstarted campaigns */}
+                  {!campaign.started && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handlePauseCampaign(campaign.id);
+                        handleResumeCampaign(campaign.id);
                       }}
-                      className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-all text-sm font-medium"
-                      title="Pause Campaign"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all text-sm font-medium flex items-center space-x-1"
+                      title="Start Campaign"
                     >
-                      ⏸
+                      <span>🚀</span>
+                      <span>Start</span>
                     </button>
                   )}
                   
@@ -3830,7 +4173,7 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
         <div className="text-center py-12">
           <div className="text-8xl mb-6 opacity-50">🏰</div>
           <h3 className="text-3xl font-bold text-white mb-4">Ready for Adventure?</h3>
-          <p className="text-blue-200 text-lg mb-8 max-w-md mx-auto">
+          <p className="text-blue-200 text-lg mb-8 max-w-2xl mx-auto">
             Your epic journey awaits! Create your first campaign or join an existing one to begin your adventure in the realms of MythSeeker.
           </p>
           <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
@@ -3853,29 +4196,167 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
   );
 };
 
-const WaitingRoom: React.FC<{ campaign: any, onStart: () => void, onBack: () => void }> = ({ campaign, onStart, onBack }) => (
-  <div className="text-white p-3 lg:p-4">
-    <h2 className="text-xl lg:text-2xl font-bold mb-3 lg:mb-4">Waiting for Players</h2>
-    <p className="text-sm lg:text-base mb-3 lg:mb-4">Campaign Code: <span className="font-mono bg-white/20 px-2 py-1 rounded">{campaign?.code}</span></p>
-    <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
-      <Tooltip content="Start the campaign and begin the adventure">
-        <button onClick={onStart} className="px-4 py-2 bg-green-600 rounded text-sm lg:text-base hover:bg-green-700 transition-all">Start Game</button>
-      </Tooltip>
-      <Tooltip content="Return to campaign lobby">
-        <button onClick={onBack} className="px-4 py-2 bg-gray-600 rounded text-sm lg:text-base hover:bg-gray-700 transition-all">Back</button>
-      </Tooltip>
+const WaitingRoom: React.FC<{ campaign: any, onStart: (campaign: any) => void, onBack: () => void }> = ({ campaign, onStart, onBack }) => {
+  const [playersReady, setPlayersReady] = useState(0);
+  const [totalPlayers, setTotalPlayers] = useState(1);
+
+  useEffect(() => {
+    if (campaign?.players) {
+      const ready = campaign.players.filter((p: any) => p.status === 'ready').length;
+      setPlayersReady(ready);
+      setTotalPlayers(campaign.players.length);
+    }
+  }, [campaign]);
+
+  const handleStart = () => {
+    console.log('WaitingRoom: Starting campaign with:', campaign);
+    onStart(campaign);
+  };
+
+  const isHost = campaign?.players?.[0]?.isHost || false;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white p-6">
+      <div className="w-full">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h2 className="text-4xl font-bold mb-4">Campaign Lobby</h2>
+          <div className="bg-white/10 rounded-lg p-4 inline-block">
+            <p className="text-lg mb-2">Campaign Code:</p>
+            <div className="font-mono text-3xl bg-white/20 px-6 py-3 rounded-lg border border-white/30">
+              {campaign?.code || 'LOADING'}
+            </div>
+            <p className="text-blue-200 text-sm mt-2">Share this code with other players</p>
+          </div>
+        </div>
+
+        {/* Campaign Info */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+            <h3 className="text-xl font-semibold mb-4">Campaign Details</h3>
+            <div className="space-y-2">
+              <p><span className="text-blue-200">Theme:</span> {campaign?.theme || 'Unknown'}</p>
+              <p><span className="text-blue-200">Max Players:</span> {campaign?.maxPlayers || 6}</p>
+              <p><span className="text-blue-200">Type:</span> {campaign?.isMultiplayer ? 'Multiplayer' : 'Solo'}</p>
+              {campaign?.customPrompt && (
+                <p><span className="text-blue-200">Custom Story:</span> {campaign.customPrompt}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+            <h3 className="text-xl font-semibold mb-4">Players ({totalPlayers}/{campaign?.maxPlayers || 6})</h3>
+            <div className="space-y-3">
+              {campaign?.players?.map((player: any, index: number) => (
+                <div key={player.id || index} className="flex items-center space-x-3">
+                  <div className={`w-3 h-3 rounded-full ${player.status === 'ready' ? 'bg-green-400' : 'bg-yellow-400'}`}></div>
+                  <div className="flex-1">
+                    <p className="font-medium">{player.character?.name || player.name}</p>
+                    <p className="text-sm text-blue-200">{player.character?.class || 'Unknown Class'} {player.isHost ? '(Host)' : ''}</p>
+                  </div>
+                  <div className={`px-3 py-1 rounded-full text-xs ${
+                    player.status === 'ready' ? 'bg-green-600 text-white' : 'bg-yellow-600 text-white'
+                  }`}>
+                    {player.status === 'ready' ? 'Ready' : 'Not Ready'}
+                  </div>
+                </div>
+              )) || (
+                <div className="text-center text-blue-200 py-4">
+                  <p>Loading players...</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Solo Start Feature */}
+        <div className="bg-gradient-to-r from-orange-600/20 to-yellow-600/20 rounded-lg p-6 border border-orange-400/30 mb-6">
+          <div className="flex items-start space-x-4">
+            <div className="text-3xl">🎯</div>
+            <div className="flex-1">
+              <h3 className="text-xl font-semibold text-orange-200 mb-2">Turn-Based Multiplayer</h3>
+              <p className="text-orange-100 mb-3">
+                You can start this multiplayer campaign solo! Other players can join during the game when it's their turn. 
+                Perfect for turn-based gameplay where friends hop in and out as needed.
+              </p>
+              <div className="flex items-center space-x-2 text-sm text-orange-200">
+                <span>✨</span>
+                <span>Players can join mid-game using the campaign code</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+          {isHost && (
+            <button
+              onClick={handleStart}
+              className="flex-1 px-8 py-4 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-lg"
+            >
+              🚀 Start Adventure
+              {totalPlayers === 1 ? ' Solo' : ` (${playersReady}/${totalPlayers} Ready)`}
+            </button>
+          )}
+          
+          {!isHost && (
+            <div className="flex-1 px-8 py-4 bg-blue-600/50 text-white rounded-xl font-bold text-lg text-center">
+              Waiting for host to start...
+            </div>
+          )}
+
+          <button
+            onClick={onBack}
+            className="px-8 py-4 bg-gray-600 hover:bg-gray-700 text-white rounded-xl font-bold text-lg transition-all"
+          >
+            ← Back to Lobby
+          </button>
+        </div>
+
+        {/* Helpful Tips */}
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+            <h4 className="font-semibold mb-2">💡 For Hosts</h4>
+            <p className="text-sm text-blue-200">
+              You can start the campaign anytime! Other players can join later using the campaign code, 
+              making it perfect for flexible scheduling.
+            </p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+            <h4 className="font-semibold mb-2">🎮 For Players</h4>
+            <p className="text-sm text-blue-200">
+              Even if the campaign has started, you can still join! Just use the campaign code and 
+              jump in when it's your turn or during a break in the action.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default function AppWrapper() {
   return (
-    <>
+    <Router>
       {/* Skip to content link for accessibility */}
       <a href="#main-content" className="sr-only focus:not-sr-only absolute top-2 left-2 bg-blue-700 text-white px-4 py-2 rounded z-50">Skip to main content</a>
       <ErrorBoundary>
-        <AIDungeonMaster />
+        <Routes>
+          <Route path="/" element={<AIDungeonMaster />} />
+          <Route path="/dashboard" element={<AIDungeonMaster />} />
+          <Route path="/characters" element={<AIDungeonMaster />} />
+          <Route path="/characters/create" element={<AIDungeonMaster />} />
+          <Route path="/campaigns" element={<AIDungeonMaster />} />
+          <Route path="/campaigns/:id" element={<AIDungeonMaster />} />
+          <Route path="/campaigns/:id/waiting" element={<AIDungeonMaster />} />
+          <Route path="/party" element={<AIDungeonMaster />} />
+          <Route path="/world" element={<AIDungeonMaster />} />
+          <Route path="/combat" element={<AIDungeonMaster />} />
+          <Route path="/magic" element={<AIDungeonMaster />} />
+          <Route path="/dm-center" element={<AIDungeonMaster />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
       </ErrorBoundary>
-    </>
+    </Router>
   );
 }

@@ -88,21 +88,26 @@ service cloud.firestore {
     match /campaigns/{campaignId} {
       allow read: if isAuthenticated() && 
         (request.auth.uid in resource.data.get('playerIds', []) ||
-         resource.data.players.hasAny([{'id': request.auth.uid}]));
+         resource.data.players.hasAny([{'id': request.auth.uid}]) ||
+         resource.data.get('participants', {}).hasAny([request.auth.uid]));
       
       allow list: if isAuthenticated();
       
       allow create: if isAuthenticated() && 
-        request.resource.data.players[0].id == request.auth.uid &&
+        (request.resource.data.players[0].id == request.auth.uid ||
+         request.auth.uid in request.resource.data.get('participants', {})) &&
         isValidCampaign();
       
       allow update: if isAuthenticated() && 
         (request.auth.uid in resource.data.get('playerIds', []) ||
-         resource.data.players.hasAny([{'id': request.auth.uid}]));
+         (resource.data.players is list && 
+          resource.data.players.hasAny([{'id': request.auth.uid}])) ||
+         resource.data.get('participants', {}).hasAny([request.auth.uid]));
          
       allow delete: if isAuthenticated() && 
         (resource.data.players.hasAny([{'id': request.auth.uid, 'isHost': true}]) ||
-         request.auth.uid in resource.data.get('hostIds', []));
+         request.auth.uid in resource.data.get('hostIds', []) ||
+         resource.data.get('participants', {}).hasAny([request.auth.uid]));
     }
 
     // Campaign messages - users can read/write messages in campaigns they're part of

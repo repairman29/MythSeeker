@@ -1,0 +1,19 @@
+{"users": [
+{
+  "localId": "Xq3ZcKX7EjaCEmw6Ww7pFNgP06T2",
+  "email": "jeffadkins1@gmail.com",
+  "emailVerified": true,
+  "displayName": "Jeff Adkins",
+  "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocLutCGLFIZEOiufuYqMQBxdOjvshuMxEquU-imhpLiAjzOPn0AohA=s96-c",
+  "lastSignedInAt": "1752635706313",
+  "createdAt": "1752554309084",
+  "providerUserInfo": [
+    {
+      "providerId": "google.com",
+      "rawId": "112170612143520745304",
+      "email": "jeffadkins1@gmail.com",
+      "displayName": "Jeff Adkins",
+      "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocLutCGLFIZEOiufuYqMQBxdOjvshuMxEquU-imhpLiAjzOPn0AohA=s96-c"
+    }
+  ]
+}]}

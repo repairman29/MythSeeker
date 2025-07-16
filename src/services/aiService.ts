@@ -63,23 +63,62 @@ export interface AIResponse {
   };
 }
 
+// New interface for Dynamic DM responses
+export interface DynamicAIResponse {
+  narrative: string;
+  npc_dialogue?: string;
+  system_actions: string[];
+  mood_adjustment: number;
+  engagement_level: number;
+}
+
 class AdvancedAIService {
   private aiDungeonMaster = httpsCallable(functions, 'aiDungeonMaster');
 
   // Generate intelligent, contextual response using Vertex AI Gemini Pro
   async complete(prompt: string, campaign?: any): Promise<string> {
+    console.log('AI Service: complete() called');
+    console.log('Campaign data:', campaign ? `ID: ${campaign.id}, isMultiplayer: ${campaign.isMultiplayer}` : 'No campaign');
+    
     try {
       // If campaign is not multiplayer, always use local AI
       if (!campaign || !campaign.isMultiplayer) {
+        console.log('AI Service: Using local AI (single player or no campaign)');
         // Simulate AI processing time for better UX
         await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
         return this.generateLocalResponse(prompt);
       }
-      // Otherwise, call the Firebase function for multiplayer campaigns
-      const result = await this.aiDungeonMaster({ prompt, campaignId: campaign.id, playerName: campaign.playerName });
-      return result.data as string;
+      
+      // For multiplayer campaigns, try Firebase function with timeout
+      console.log('AI Service: Attempting Firebase function for multiplayer campaign');
+      
+      // Add timeout wrapper to prevent hanging
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          console.warn('AI Service: Firebase function call timed out, falling back to local AI');
+          reject(new Error('Firebase function timeout'));
+        }, 15000); // 15 second timeout
+      });
+      
+      const aiPromise = this.aiDungeonMaster({ 
+        prompt, 
+        campaignId: campaign.id, 
+        playerName: campaign.players?.[0]?.name || campaign.playerName || 'Player'
+      });
+      
+      try {
+        const result = await Promise.race([aiPromise, timeoutPromise]);
+        console.log('AI Service: Firebase function succeeded');
+        return result.data as string;
+      } catch (firebaseError) {
+        console.warn('AI Service: Firebase function failed, falling back to local AI:', firebaseError);
+        // Fall back to local AI
+        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+        return this.generateLocalResponse(prompt);
+      }
     } catch (error) {
-      console.error('Error generating AI response:', error);
+      console.error('AI Service: Error in complete():', error);
+      console.log('AI Service: Using fallback response');
       return JSON.stringify(this.generateFallbackResponse());
     }
   }
@@ -922,19 +961,82 @@ class AdvancedAIService {
     return themeConflicts[Math.floor(Math.random() * themeConflicts.length)];
   }
 
+  // Enhanced Dynamic DM Response Generation - Core of the Dynamic DMing System
+  async generateEnhancedDynamicResponse(richPrompt: string): Promise<string> {
+    try {
+      console.log('🤖 AI Service: Generating dynamic DM response...');
+      
+      // Use the existing Gemini AI function with enhanced prompting for dynamic responses
+      const geminiCall = httpsCallable(functions, 'geminiAIFunction');
+      
+      const enhancedPrompt = `
+${richPrompt}
+
+RESPONSE GUIDELINES:
+- Write in an engaging, natural DM voice
+- Use vivid sensory details and immersive descriptions  
+- Include appropriate character reactions and consequences
+- Balance narrative flow with player agency
+- Incorporate humor and personality as specified
+- If dice rolls are needed, mention them naturally
+- End with a clear situation for player response
+
+RESPONSE FORMAT:
+NARRATIVE: [Your main story response with rich details and character]
+NPC_DIALOGUE: [Any NPC speech in quotes, showing personality]
+SYSTEM_ACTION: [Any dice rolls, stat changes, or game mechanics needed]
+MOOD: [How this affects scene tension: +1 for more intense, 0 for same, -1 for less intense]
+
+Generate an immersive, personalized response that makes the player feel like they're at a table with the best human DM:
+`;
+
+      const result = await geminiCall({
+        prompt: enhancedPrompt,
+        context: {
+          maxTokens: 800,
+          temperature: 0.8, // Higher creativity for dynamic responses
+          systemRole: 'dynamic_dm'
+        }
+      });
+
+      const response = (result.data as any)?.response;
+      
+      if (!response) {
+        throw new Error('No response from AI service');
+      }
+
+      console.log('✅ Dynamic DM response generated successfully');
+      return response;
+
+    } catch (error) {
+      console.error('❌ Dynamic DM generation failed:', error);
+      
+      // Fallback dynamic response
+      return `
+NARRATIVE: The mystical energies around you shimmer and shift as your action resonates through the fabric of reality. Though the path ahead seems uncertain, your determination guides you forward into the unknown.
+
+NPC_DIALOGUE: "Interesting..." murmurs a nearby figure. "The threads of fate are weaving around you in unexpected ways."
+
+SYSTEM_ACTION: Continue with current action, maintain story flow
+
+MOOD: 0
+`;
+    }
+  }
+
+  // Generate fallback response when all else fails
   private generateFallbackResponse(): AIResponse {
     return {
-      narrative: "The world around you continues to unfold, revealing new possibilities and challenges. Your actions shape the story in ways both seen and unseen.",
-      choices: [
-        "Continue exploring the current situation",
-        "Seek out more information from the environment",
-        "Interact with those around you",
-        "Take time to plan your next move"
-      ],
+      narrative: "The adventure begins... (AI temporarily unavailable)",
+      choices: ["Explore ahead", "Gather information", "Prepare equipment"],
       atmosphere: {
-        mood: 'neutral',
-        tension: 'low',
-        environmentalDetails: 'The world responds to your presence in subtle ways'
+        mood: "mysterious",
+        tension: "medium" as const,
+        environmentalDetails: "The path ahead is shrouded in uncertainty."
+      },
+      worldStateUpdates: {
+        newLocation: "Starting Point",
+        consequences: []
       }
     };
   }

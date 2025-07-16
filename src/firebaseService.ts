@@ -2,12 +2,12 @@ import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider, 
   signOut, 
   onAuthStateChanged,
-  User,
-  signInWithRedirect,
-  getRedirectResult
+  User
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -126,7 +126,7 @@ export interface GameSession {
 class FirebaseService {
   private listeners: { [key: string]: () => void } = {};
 
-  // Authentication
+  // Authentication with fallback strategy
   async signInWithGoogle(): Promise<void> {
     try {
       const provider = new GoogleAuthProvider();
@@ -135,8 +135,37 @@ class FirebaseService {
       provider.setCustomParameters({
         prompt: 'select_account'
       });
+      
+      // Add scopes for better compatibility
+      provider.addScope('profile');
+      provider.addScope('email');
 
-      await signInWithRedirect(auth, provider);
+      try {
+        // Try popup authentication first
+        const result = await signInWithPopup(auth, provider);
+        
+        // Create user profile if it doesn't exist
+        const userProfile = await this.getUserProfile(result.user.uid);
+        if (!userProfile) {
+          await this.createUserProfile(result.user);
+        }
+      } catch (popupError: any) {
+        console.log('Popup authentication failed, trying redirect:', popupError);
+        
+        // Check if it's a COOP policy error or popup blocked
+        if (popupError.code === 'auth/popup-blocked' || 
+            popupError.code === 'auth/popup-closed-by-user' ||
+            popupError.message?.includes('Cross-Origin-Opener-Policy') ||
+            popupError.message?.includes('window.closed')) {
+          
+          console.log('Falling back to redirect authentication');
+          // Fall back to redirect authentication
+          await signInWithRedirect(auth, provider);
+        } else {
+          // Re-throw other errors
+          throw popupError;
+        }
+      }
     } catch (error) {
       console.error('Error signing in with Google:', error);
       throw error;
@@ -224,24 +253,37 @@ class FirebaseService {
   async saveCharacter(character: Character): Promise<string> {
     console.log('FirebaseService.saveCharacter called with:', character);
     
+    if (!this.getCurrentUser()) {
+      throw new Error('User not authenticated');
+    }
+
+    if (!db) {
+      throw new Error('Firebase not initialized');
+    }
+    
     const characterData = {
       ...character,
       lastPlayed: Date.now()
     };
 
-    if (character.id) {
-      // Update existing character
-      console.log('Updating existing character with ID:', character.id);
-      const docRef = doc(db, 'characters', character.id);
-      await updateDoc(docRef, characterData);
-      console.log('Character updated successfully');
-      return character.id;
-    } else {
-      // Create new character
-      console.log('Creating new character');
-      const docRef = await addDoc(collection(db, 'characters'), characterData);
-      console.log('New character created with ID:', docRef.id);
-      return docRef.id;
+    try {
+      if (character.id) {
+        // Update existing character
+        console.log('Updating existing character with ID:', character.id);
+        const docRef = doc(db, 'characters', character.id);
+        await updateDoc(docRef, characterData);
+        console.log('Character updated successfully');
+        return character.id;
+      } else {
+        // Create new character
+        console.log('Creating new character');
+        const docRef = await addDoc(collection(db, 'characters'), characterData);
+        console.log('New character created with ID:', docRef.id);
+        return docRef.id;
+      }
+    } catch (error) {
+      console.error('Error saving character to Firebase:', error);
+      throw error;
     }
   }
 

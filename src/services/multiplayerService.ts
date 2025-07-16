@@ -70,6 +70,7 @@ export interface MultiplayerGame {
   worldState?: any;
   currentEnvironment?: string;
   combatState?: any;
+  participants?: Record<string, boolean>; // Added for Firebase function compatibility
 }
 
 export interface PartyState {
@@ -123,13 +124,28 @@ class MultiplayerService {
     if (!db) throw new Error('Firebase not initialized');
 
     const campaignRef = doc(collection(db, 'campaigns'));
-    const campaign: MultiplayerGame = {
+    
+    // Create participants object from players array for Firebase function compatibility
+    const participants: Record<string, boolean> = {};
+    if (campaignData.players) {
+      campaignData.players.forEach(player => {
+        if (player.id) {
+          participants[player.id] = true;
+        }
+      });
+    }
+    // Ensure current user is always a participant
+    participants[this.currentUser.uid] = true;
+    
+    const campaign: MultiplayerGame & { participants: Record<string, boolean> } = {
       ...campaignData,
       id: campaignRef.id,
+      participants, // Add participants field for Firebase function compatibility
       createdAt: serverTimestamp() as Timestamp,
       lastActivity: serverTimestamp() as Timestamp,
     };
 
+    console.log('Creating campaign with participants:', participants);
     await setDoc(campaignRef, campaign);
     return campaignRef.id;
   }
@@ -162,6 +178,7 @@ class MultiplayerService {
       maxPlayers: 6,
       createdAt: serverTimestamp() as Timestamp,
       lastActivity: serverTimestamp() as Timestamp,
+      participants: {}, // Initialize participants for new campaign
     };
 
     await setDoc(campaignRef, campaign);
@@ -285,12 +302,32 @@ class MultiplayerService {
   // Campaign State Management
   async updateCampaignState(campaignId: string, updates: Partial<MultiplayerGame>): Promise<void> {
     if (!this.currentUser) throw new Error('User not authenticated');
+    if (!db) throw new Error('Firebase not initialized');
+    
+    console.log('Updating campaign state:', campaignId, updates);
 
-    const campaignRef = doc(db, 'campaigns', campaignId);
-    await updateDoc(campaignRef, {
-      ...updates,
-      lastActivity: serverTimestamp(),
-    });
+    try {
+      const campaignRef = doc(db, 'campaigns', campaignId);
+      
+      // First check if the campaign exists
+      const campaignDoc = await getDoc(campaignRef);
+      if (!campaignDoc.exists()) {
+        throw new Error(`Campaign ${campaignId} does not exist in Firestore`);
+      }
+      
+      // Prepare the update data
+      const updateData = {
+        ...updates,
+        lastActivity: serverTimestamp(),
+      };
+      
+      console.log('Sending update to Firestore:', updateData);
+      await updateDoc(campaignRef, updateData);
+      console.log('Campaign state updated successfully');
+    } catch (error) {
+      console.error('Error updating campaign state:', error);
+      throw error;
+    }
   }
 
   async startCampaign(campaignId: string): Promise<void> {

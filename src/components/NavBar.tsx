@@ -1,10 +1,11 @@
 import React from 'react';
-import { Home, Book, Users, Map, User, Sword, Sparkles, Menu } from 'lucide-react';
+import { Home, Book, Users, Map, User, Sword, Sparkles, Menu, Settings } from 'lucide-react';
 
 const navItems = [
   { label: 'Dashboard', icon: <Home size={22} />, key: 'dashboard', description: 'Overview and quick actions' },
   { label: 'Campaigns', icon: <Book size={22} />, key: 'campaigns', description: 'Create and manage campaigns' },
   { label: 'Characters', icon: <User size={22} />, key: 'characters', description: 'Character creation and management' },
+  { label: 'DM Center', icon: <Settings size={22} />, key: 'dm-center', description: 'Dungeon Master tools and resources' },
   { label: 'Party', icon: <Users size={22} />, key: 'party', description: 'View party members and status' },
   { label: 'World', icon: <Map size={22} />, key: 'world', description: 'World map and exploration' },
   { label: 'Combat', icon: <Sword size={22} />, key: 'combat', description: 'Combat system and tactics' },
@@ -34,7 +35,7 @@ const NavBar: React.FC<{
         {/* Bottom navigation bar */}
         <nav className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-blue-900 via-indigo-900 to-purple-900 border-t border-white/20 z-50 lg:hidden">
           <div className="flex justify-around items-center py-2">
-            {navItems.slice(0, 5).map(item => (
+            {navItems.filter(item => ['dashboard', 'campaigns', 'characters', 'dm-center', 'party'].includes(item.key)).map(item => (
               <button
                 key={item.key}
                 onClick={() => onNavigate(item.key)}
