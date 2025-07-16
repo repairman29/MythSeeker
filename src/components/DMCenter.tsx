@@ -368,96 +368,174 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
     </div>
   );
 
-  const renderAIBrain = () => (
-    <div className="space-y-6">
-      <div className="bg-white/10 rounded-lg p-6 border border-white/20">
-        <h3 className="text-xl font-semibold text-white mb-4">AI Personality & Behavior</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-blue-200 text-sm font-medium mb-2">DM Style</label>
-            <select className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
-              <option value="balanced">Balanced (Recommended)</option>
-              <option value="story-focused">Story-Focused</option>
-              <option value="combat-heavy">Combat-Heavy</option>
-              <option value="roleplay-intensive">Roleplay-Intensive</option>
-              <option value="sandbox">Sandbox</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-blue-200 text-sm font-medium mb-2">Difficulty Preference</label>
-            <input 
-              type="range" 
-              min="1" 
-              max="10" 
-              defaultValue="6"
-              className="w-full"
-            />
-            <div className="flex justify-between text-xs text-gray-400 mt-1">
-              <span>Easy</span>
-              <span>Challenging</span>
-              <span>Brutal</span>
+  const renderAIBrain = () => {
+    // Get current AI settings from dmCenterData or use defaults
+    const aiSettings = dmCenterData?.aiSettings || {
+      dmStyle: 'balanced',
+      difficulty: 6,
+      descriptionLength: 'detailed',
+      improvisationLevel: 7,
+      npcComplexity: 'detailed',
+      conflictFrequency: 5,
+      continuityStrictness: 'moderate',
+      worldReactivity: 8
+    };
+
+    const updateAISetting = (key: string, value: any) => {
+      onUpdateDMCenter({
+        ...dmCenterData,
+        aiSettings: {
+          ...aiSettings,
+          [key]: value
+        }
+      });
+    };
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+          <h3 className="text-xl font-semibold text-white mb-4">AI Personality & Behavior</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-blue-200 text-sm font-medium mb-2">DM Style</label>
+              <select 
+                value={aiSettings.dmStyle}
+                onChange={(e) => updateAISetting('dmStyle', e.target.value)}
+                className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+              >
+                <option value="balanced">Balanced (Recommended)</option>
+                <option value="story-focused">Story-Focused</option>
+                <option value="combat-heavy">Combat-Heavy</option>
+                <option value="roleplay-intensive">Roleplay-Intensive</option>
+                <option value="sandbox">Sandbox</option>
+              </select>
             </div>
+            <div>
+              <label className="block text-blue-200 text-sm font-medium mb-2">Difficulty Preference</label>
+              <input 
+                type="range" 
+                min="1" 
+                max="10" 
+                value={aiSettings.difficulty}
+                onChange={(e) => updateAISetting('difficulty', parseInt(e.target.value))}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-gray-400 mt-1">
+                <span>Easy</span>
+                <span>Challenging</span>
+                <span>Brutal</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+            <h3 className="text-lg font-semibold text-white mb-4">Narrative Engine</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-blue-200 text-sm font-medium mb-1">Description Length</label>
+                <select 
+                  value={aiSettings.descriptionLength}
+                  onChange={(e) => updateAISetting('descriptionLength', e.target.value)}
+                  className="w-full px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm"
+                >
+                  <option value="concise">Concise</option>
+                  <option value="detailed">Detailed</option>
+                  <option value="verbose">Verbose</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-blue-200 text-sm font-medium mb-1">Improvisation Level</label>
+                <input 
+                  type="range" 
+                  min="1" 
+                  max="10" 
+                  value={aiSettings.improvisationLevel}
+                  onChange={(e) => updateAISetting('improvisationLevel', parseInt(e.target.value))}
+                  className="w-full" 
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+            <h3 className="text-lg font-semibold text-white mb-4">Social Director</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-blue-200 text-sm font-medium mb-1">NPC Complexity</label>
+                <select 
+                  value={aiSettings.npcComplexity}
+                  onChange={(e) => updateAISetting('npcComplexity', e.target.value)}
+                  className="w-full px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm"
+                >
+                  <option value="simple">Simple</option>
+                  <option value="detailed">Detailed</option>
+                  <option value="complex">Complex</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-blue-200 text-sm font-medium mb-1">Conflict Frequency</label>
+                <input 
+                  type="range" 
+                  min="1" 
+                  max="10" 
+                  value={aiSettings.conflictFrequency}
+                  onChange={(e) => updateAISetting('conflictFrequency', parseInt(e.target.value))}
+                  className="w-full" 
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+            <h3 className="text-lg font-semibold text-white mb-4">World Keeper</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-blue-200 text-sm font-medium mb-1">Continuity Strictness</label>
+                <select 
+                  value={aiSettings.continuityStrictness}
+                  onChange={(e) => updateAISetting('continuityStrictness', e.target.value)}
+                  className="w-full px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm"
+                >
+                  <option value="loose">Loose</option>
+                  <option value="moderate">Moderate</option>
+                  <option value="strict">Strict</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-blue-200 text-sm font-medium mb-1">World Reactivity</label>
+                <input 
+                  type="range" 
+                  min="1" 
+                  max="10" 
+                  value={aiSettings.worldReactivity}
+                  onChange={(e) => updateAISetting('worldReactivity', parseInt(e.target.value))}
+                  className="w-full" 
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* AI Settings Preview */}
+        <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-lg p-6 border border-blue-400/30">
+          <h3 className="text-lg font-semibold text-white mb-4">AI Behavior Preview</h3>
+          <div className="text-blue-200 text-sm space-y-2">
+            <p><strong>Current Style:</strong> {aiSettings.dmStyle.replace('-', ' ')} DM with {aiSettings.descriptionLength} descriptions</p>
+            <p><strong>Difficulty:</strong> {aiSettings.difficulty}/10 - {aiSettings.difficulty <= 3 ? 'Easy going' : aiSettings.difficulty <= 6 ? 'Balanced challenge' : 'High stakes'}</p>
+            <p><strong>NPCs:</strong> {aiSettings.npcComplexity} personalities with {aiSettings.conflictFrequency}/10 conflict frequency</p>
+            <p><strong>World:</strong> {aiSettings.continuityStrictness} continuity with {aiSettings.worldReactivity}/10 reactivity to player actions</p>
+          </div>
+          <div className="mt-4 p-3 bg-white/10 rounded border border-white/20">
+            <p className="text-xs text-gray-300 italic">
+              "These settings will be applied to all new campaigns and can be adjusted during gameplay."
+            </p>
           </div>
         </div>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white/10 rounded-lg p-6 border border-white/20">
-          <h3 className="text-lg font-semibold text-white mb-4">Narrative Engine</h3>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-blue-200 text-sm font-medium mb-1">Description Length</label>
-              <select className="w-full px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm">
-                <option value="concise">Concise</option>
-                <option value="detailed">Detailed</option>
-                <option value="verbose">Verbose</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-blue-200 text-sm font-medium mb-1">Improvisation Level</label>
-              <input type="range" min="1" max="10" defaultValue="7" className="w-full" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white/10 rounded-lg p-6 border border-white/20">
-          <h3 className="text-lg font-semibold text-white mb-4">Social Director</h3>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-blue-200 text-sm font-medium mb-1">NPC Complexity</label>
-              <select className="w-full px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm">
-                <option value="simple">Simple</option>
-                <option value="detailed">Detailed</option>
-                <option value="complex">Complex</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-blue-200 text-sm font-medium mb-1">Conflict Frequency</label>
-              <input type="range" min="1" max="10" defaultValue="5" className="w-full" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white/10 rounded-lg p-6 border border-white/20">
-          <h3 className="text-lg font-semibold text-white mb-4">World Keeper</h3>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-blue-200 text-sm font-medium mb-1">Continuity Strictness</label>
-              <select className="w-full px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm">
-                <option value="loose">Loose</option>
-                <option value="moderate">Moderate</option>
-                <option value="strict">Strict</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-blue-200 text-sm font-medium mb-1">World Reactivity</label>
-              <input type="range" min="1" max="10" defaultValue="8" className="w-full" />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderSessionTools = () => (
     <div className="space-y-6">

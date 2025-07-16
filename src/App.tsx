@@ -921,6 +921,73 @@ const AIDungeonMaster = () => {
     setCurrentScreen('lobby');
   };
 
+  const handleQuickStart = async () => {
+    console.log('🚀 Quick Start initiated...');
+    
+    try {
+      // Create a quick character
+      const quickCharacter = {
+        id: `quick_${Date.now()}`,
+        name: 'Adventurer',
+        class: 'Warrior',
+        level: 1,
+        health: 20,
+        maxHealth: 20,
+        mana: 0,
+        maxMana: 0,
+        experience: 0,
+        gold: 50,
+        inventory: {
+          'Sword': 1,
+          'Shield': 1,
+          'Health Potion': 2
+        },
+        baseStats: {
+          strength: 16,
+          dexterity: 12,
+          intelligence: 10,
+          charisma: 14
+        },
+        skills: ['Athletics', 'Intimidation'],
+        backstory: 'A brave warrior seeking adventure and glory.',
+        totalPlayTime: 0,
+        lastPlayed: new Date(),
+        achievements: []
+      };
+
+      // Set the character
+      setCharacter(quickCharacter);
+      
+      // Create a quick campaign
+      const quickCampaign = {
+        id: `quick_campaign_${Date.now()}`,
+        name: 'Quick Adventure',
+        theme: 'Fantasy',
+        description: 'A fast-paced fantasy adventure for quick play',
+        isMultiplayer: false,
+        started: false,
+        status: 'active',
+        players: [{
+          id: playerId,
+          name: currentUser?.displayName || 'Player',
+          character: quickCharacter
+        }],
+        customPrompt: 'A classic fantasy adventure with action, exploration, and discovery.',
+        createdAt: new Date(),
+        lastActivity: new Date()
+      };
+
+      // Start the campaign immediately
+      await startCampaign(quickCampaign);
+      
+      addToast('success', { message: 'Quick start campaign created! Welcome to your adventure!' });
+      
+    } catch (error) {
+      console.error('Quick start error:', error);
+      addToast('error', { message: 'Failed to start quick campaign. Please try again.' });
+    }
+  };
+
   const sendMultiplayerMessage = async (message: string) => {
     if (!message.trim() || !currentCampaign?.id) return;
 
@@ -1897,6 +1964,18 @@ const AIDungeonMaster = () => {
     const timeOfDay = worldState.timeOfDay;
     const weather = worldState.weather;
     
+    // Get AI settings from DM Center
+    const aiSettings = dmCenterData?.aiSettings || {
+      dmStyle: 'balanced',
+      difficulty: 6,
+      descriptionLength: 'detailed',
+      improvisationLevel: 7,
+      npcComplexity: 'detailed',
+      conflictFrequency: 5,
+      continuityStrictness: 'moderate',
+      worldReactivity: 8
+    };
+    
     // Build context from recent actions
     const recentActions = aiMemory.playerActions.slice(-5);
     const recentConsequences = aiMemory.consequences.slice(-3);
@@ -1918,7 +1997,41 @@ const AIDungeonMaster = () => {
       .map((quest: any) => `${quest.title}: ${quest.description} (${quest.progress}/${quest.totalSteps})`)
       .join('\n');
 
+    // Generate AI personality based on settings
+    const getDMStyle = () => {
+      switch (aiSettings.dmStyle) {
+        case 'story-focused': return 'Focus on narrative depth, character development, and emotional storytelling. Prioritize story over mechanics.';
+        case 'combat-heavy': return 'Emphasize tactical combat, strategic thinking, and action sequences. Make every fight meaningful and challenging.';
+        case 'roleplay-intensive': return 'Deep character interactions, NPC development, and social encounters. Focus on dialogue and relationships.';
+        case 'sandbox': return 'Open world exploration, player-driven storylines, and emergent gameplay. Let players shape the world.';
+        default: return 'Balanced approach between story, combat, and roleplay. Adapt to player preferences dynamically.';
+      }
+    };
+
+    const getDescriptionStyle = () => {
+      switch (aiSettings.descriptionLength) {
+        case 'concise': return 'Keep descriptions brief and to the point. Focus on essential details only.';
+        case 'verbose': return 'Provide rich, detailed descriptions with sensory details, atmosphere, and immersive world-building.';
+        default: return 'Use moderate detail - enough to paint a picture without overwhelming.';
+      }
+    };
+
+    const getDifficultyGuidance = () => {
+      if (aiSettings.difficulty <= 3) return 'Keep challenges easy and accessible. Provide clear solutions and helpful guidance.';
+      if (aiSettings.difficulty <= 6) return 'Balanced challenges that test players but provide reasonable solutions.';
+      return 'Create challenging, high-stakes situations that require clever thinking and may have serious consequences.';
+    };
+
     const basePrompt = `You are an advanced AI Dungeon Master for a ${currentCampaign?.theme || 'fantasy'} campaign. You must create dynamic, responsive, and truly intelligent storytelling.
+
+**AI PERSONALITY SETTINGS:**
+- DM Style: ${getDMStyle()}
+- Description Style: ${getDescriptionStyle()}
+- Difficulty Level: ${getDifficultyGuidance()}
+- NPC Complexity: ${aiSettings.npcComplexity} - Create NPCs with ${aiSettings.npcComplexity} personalities and motivations
+- Conflict Frequency: ${aiSettings.conflictFrequency}/10 - ${aiSettings.conflictFrequency <= 3 ? 'Minimal conflict, peaceful interactions' : aiSettings.conflictFrequency <= 6 ? 'Moderate tension and occasional conflicts' : 'High tension with frequent dramatic conflicts'}
+- Continuity: ${aiSettings.continuityStrictness} - ${aiSettings.continuityStrictness === 'strict' ? 'Maintain strict world consistency and logical consequences' : aiSettings.continuityStrictness === 'loose' ? 'Allow creative flexibility while maintaining basic coherence' : 'Balance consistency with creative freedom'}
+- World Reactivity: ${aiSettings.worldReactivity}/10 - ${aiSettings.worldReactivity <= 3 ? 'Minimal world changes' : aiSettings.worldReactivity <= 6 ? 'Moderate world reactions to player actions' : 'Highly reactive world that changes dramatically based on player choices'}
 
 **CORE PRINCIPLES:**
 - NEVER give generic responses. Every response must be specific to the current situation, character actions, and world state.
@@ -2146,13 +2259,41 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
   const renderFullWidthContent = () => {
     switch (currentScreen) {
       case 'character':
+        if (!isAuthenticated) {
+          return (
+            <div className="h-full flex items-center justify-center p-4">
+              <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 max-w-md w-full border border-white/20 text-center">
+                <h2 className="text-2xl font-bold text-white mb-4">Authentication Required</h2>
+                <p className="text-blue-200 mb-6">Please sign in to create a character</p>
+                <button
+                  onClick={signInWithGoogle}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all"
+                >
+                  Sign in with Google
+                </button>
+              </div>
+            </div>
+          );
+        }
+        
         return (
-          <CharacterCreation 
-            playerName={currentUser?.displayName || ''}
-            classes={classes}
-            onCreateCharacter={createCharacter}
-            joinCode={joinCode}
-          />
+          <div className="h-full p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-bold text-white">Create Your Hero</h2>
+              <button
+                onClick={() => setCurrentScreen('character-select')}
+                className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
+              >
+                ← Back to Characters
+              </button>
+            </div>
+            <CharacterCreation 
+              playerName={currentUser?.displayName || ''}
+              classes={classes}
+              onCreateCharacter={createCharacter}
+              joinCode={joinCode}
+            />
+          </div>
         );
       case 'waiting':
         return (
@@ -2217,13 +2358,16 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
         return (
           <div className="h-full p-6">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-3xl font-bold text-white">Your Characters</h2>
+              <div>
+                <h2 className="text-3xl font-bold text-white">Choose Your Character</h2>
+                <p className="text-blue-200">Welcome back, {currentUser?.displayName}!</p>
+              </div>
               <div className="flex space-x-3">
                 <button
-                  onClick={() => setCurrentScreen('welcome')}
+                  onClick={() => setCurrentScreen('dashboard')}
                   className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
                 >
-                  ← Back to Welcome
+                  ← Back to Dashboard
                 </button>
                 <button
                   onClick={() => setCurrentScreen('character')}
@@ -2251,23 +2395,37 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                 {userCharacters.map((char: any) => (
                   <div
                     key={char.id}
-                    className="bg-white/10 rounded-lg p-6 border border-white/20 hover:bg-white/15 transition-all cursor-pointer"
-                    onClick={() => {
-                      setCharacter(char);
-                      setCurrentScreen('lobby');
-                    }}
+                    className="bg-white/10 rounded-xl p-6 border border-white/20 hover:border-blue-400 hover:bg-white/20 cursor-pointer transition-all"
+                    onClick={() => loadCharacter(char.id!)}
                   >
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-xl font-bold text-white">{char.name}</h3>
-                      <span className="text-sm text-blue-200">Level {char.level}</span>
-                    </div>
-                    <p className="text-blue-200 mb-2">{char.class}</p>
-                    <div className="flex justify-between text-sm text-gray-300">
-                      <span>HP: {char.health}/{char.maxHealth}</span>
-                      <span>XP: {char.experience}</span>
+                    <div className="text-center">
+                      <div className="text-4xl mb-3">{char.class === 'Warrior' ? '⚔️' : char.class === 'Rogue' ? '🗡️' : char.class === 'Mage' ? '🔮' : char.class === 'Cleric' ? '⚡' : char.class === 'Ranger' ? '🏹' : '🎵'}</div>
+                      <h3 className="text-xl font-bold text-white mb-2">{char.name}</h3>
+                      <p className="text-blue-200 mb-3">Level {char.level} {char.class}</p>
+                      <div className="grid grid-cols-2 gap-2 text-sm text-blue-200">
+                        <div>HP: {char.health}/{char.maxHealth}</div>
+                        <div>XP: {char.experience}</div>
+                        <div>Gold: {char.gold}</div>
+                        <div>Play Time: {Math.floor(char.totalPlayTime / 60000)}m</div>
+                      </div>
+                      <div className="mt-3 text-xs text-green-400">
+                        Last played: {new Date(char.lastPlayed).toLocaleDateString()}
+                      </div>
                     </div>
                   </div>
                 ))}
+                
+                {/* Create New Character Card */}
+                <div
+                  onClick={() => setCurrentScreen('character')}
+                  className="bg-gradient-to-br from-green-500/20 to-blue-500/20 rounded-xl p-6 border-2 border-dashed border-white/30 hover:border-white/50 hover:from-green-500/30 hover:to-blue-500/30 cursor-pointer transition-all"
+                >
+                  <div className="text-center">
+                    <div className="text-4xl mb-3">✨</div>
+                    <h3 className="text-xl font-bold text-white mb-2">Create New Character</h3>
+                    <p className="text-blue-200">Start a new adventure with a fresh hero</p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -2826,132 +2984,14 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
     );
   }
 
-  // Character Selection Screen
+  // Character screens are now handled in the main layout below
+  // Debug logging for character selection
   if (currentScreen === 'character-select') {
-    // Debug logging for character selection
     console.log('Character selection screen - userCharacters:', userCharacters);
     console.log('Character selection screen - userCharacters length:', userCharacters.length);
     userCharacters.forEach((char, index) => {
       console.log(`Character ${index}: ID=${char.id}, Name=${char.name}, Class=${char.class}`);
     });
-    
-    return (
-      <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} p-4 transition-all duration-1000`}>
-        <div className="w-full">
-          <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20">
-            <div className="flex justify-between items-center mb-8">
-              <div>
-                <h2 className="text-3xl font-bold text-white">Choose Your Character</h2>
-                <p className="text-blue-200">Welcome back, {currentUser?.displayName}!</p>
-              </div>
-              <Tooltip content="Sign out of your account">
-                <button
-                  onClick={signOut}
-                  className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
-                >
-                  Sign Out
-                </button>
-              </Tooltip>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-              {userCharacters.map((char) => (
-                <Tooltip key={char.id} content={`Load ${char.name} - Level ${char.level} ${char.class}`}>
-                  <div
-                    onClick={() => loadCharacter(char.id!)}
-                    className="bg-white/10 rounded-xl p-6 border border-white/20 hover:border-blue-400 hover:bg-white/20 cursor-pointer transition-all"
-                  >
-                    <div className="text-center">
-                      <div className="text-4xl mb-3">{char.class === 'Warrior' ? '⚔️' : char.class === 'Rogue' ? '🗡️' : char.class === 'Mage' ? '🔮' : char.class === 'Cleric' ? '⚡' : char.class === 'Ranger' ? '🏹' : '🎵'}</div>
-                      <h3 className="text-xl font-bold text-white mb-2">{char.name}</h3>
-                      <p className="text-blue-200 mb-3">Level {char.level} {char.class}</p>
-                      <div className="grid grid-cols-2 gap-2 text-sm text-blue-200">
-                        <div>HP: {char.health}/{char.maxHealth}</div>
-                        <div>XP: {char.experience}</div>
-                        <div>Gold: {char.gold}</div>
-                        <div>Play Time: {Math.floor(char.totalPlayTime / 60000)}m</div>
-                      </div>
-                      <div className="mt-3 text-xs text-green-400">
-                        Last played: {new Date(char.lastPlayed).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </div>
-                </Tooltip>
-              ))}
-              
-              {/* Create New Character Card */}
-              <Tooltip content="Create a new character and start a fresh adventure">
-                <div
-                  onClick={() => setCurrentScreen('character')}
-                  className="bg-gradient-to-br from-green-500/20 to-blue-500/20 rounded-xl p-6 border-2 border-dashed border-white/30 hover:border-white/50 hover:from-green-500/30 hover:to-blue-500/30 cursor-pointer transition-all"
-                >
-                  <div className="text-center">
-                    <div className="text-4xl mb-3">✨</div>
-                    <h3 className="text-xl font-bold text-white mb-2">Create New Character</h3>
-                    <p className="text-blue-200">Start a new adventure with a fresh hero</p>
-                  </div>
-                </div>
-              </Tooltip>
-            </div>
-            
-            <div className="text-center">
-              <Tooltip content="Return to the welcome screen">
-                <button
-                  onClick={() => setCurrentScreen('lobby')}
-                  className="px-6 py-3 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
-                >
-                  ← Back to Welcome
-                </button>
-              </Tooltip>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Character Creation Screen
-  if (currentScreen === 'character') {
-    if (!isAuthenticated) {
-      return (
-        <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} flex items-center justify-center p-4 transition-all duration-1000`}>
-          <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 max-w-md w-full border border-white/20 text-center">
-            <h2 className="text-2xl font-bold text-white mb-4">Authentication Required</h2>
-            <p className="text-blue-200 mb-6">Please sign in to create a character</p>
-            <button
-              onClick={signInWithGoogle}
-              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all"
-            >
-              Sign in with Google
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className={`min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} p-4 transition-all duration-1000`}>
-        <div className="w-full">
-          <div className="bg-white/10 backdrop-lg rounded-3xl p-8 border border-white/20">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-3xl font-bold text-white">Create Your Hero</h2>
-              <button
-                onClick={() => setCurrentScreen('character-select')}
-                className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-all"
-              >
-                ← Back to Characters
-              </button>
-            </div>
-            <CharacterCreation 
-              playerName={currentUser?.displayName || ''}
-              classes={classes}
-              onCreateCharacter={createCharacter}
-              joinCode={joinCode}
-            />
-          </div>
-        </div>
-      </div>
-    );
   }
 
   // Main App Layout (for all other screens)
@@ -3092,6 +3132,17 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                         <h2 className="text-3xl font-bold text-white mb-4">Dashboard</h2>
                         <p className="text-blue-200 mb-6">Welcome to MythSeeker RPG!</p>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 w-full">
+                          {/* Quick Start Button */}
+                          <Tooltip content="Start playing immediately with a pre-made character and campaign">
+                            <button
+                              onClick={() => handleQuickStart()}
+                              className="p-6 bg-gradient-to-br from-green-600/20 to-blue-600/20 rounded-lg border-2 border-green-400/30 hover:border-green-400 hover:from-green-600/30 hover:to-blue-600/30 transition-all"
+                            >
+                              <div className="text-3xl mb-2">⚡</div>
+                              <h3 className="text-white font-semibold">Quick Start</h3>
+                              <p className="text-green-200 text-sm">Play in 30 seconds</p>
+                            </button>
+                          </Tooltip>
                           <Tooltip content="Create new campaigns or join existing ones">
                             <button
                               onClick={() => handleNavChange('campaigns')}
