@@ -3097,9 +3097,10 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                       </div>
                     </div>
                   )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              )}
             </main>
           </div>
         )}
