@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { MessageCircle, ShoppingCart, Gift, Users, Heart, Star, X, ChevronRight, ChevronLeft } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { MessageCircle, ShoppingCart, Gift, Users, Heart, Star, X, ChevronRight, ChevronLeft, Brain, Clock, TrendingUp, TrendingDown } from 'lucide-react';
 
 export interface DialogueOption {
   id: string;
@@ -9,6 +9,13 @@ export interface DialogueOption {
   questId?: string;
   itemId?: string;
   relationshipChange?: number;
+  emotionalImpact?: {
+    joy?: number;
+    anger?: number;
+    fear?: number;
+    trust?: number;
+    respect?: number;
+  };
   requirements?: {
     level?: number;
     reputation?: number;
@@ -21,12 +28,48 @@ export interface DialogueNode {
   id: string;
   npcText: string;
   options: DialogueOption[];
-  mood?: 'friendly' | 'neutral' | 'hostile' | 'sad' | 'excited';
+  mood?: 'friendly' | 'neutral' | 'hostile' | 'sad' | 'excited' | 'anxious' | 'confident' | 'suspicious';
   conditions?: {
     relationship?: number;
     completedQuests?: string[];
     timeOfDay?: 'morning' | 'afternoon' | 'evening' | 'night';
+    emotionalState?: {
+      joy?: number;
+      anger?: number;
+      fear?: number;
+      trust?: number;
+      respect?: number;
+    };
   };
+}
+
+export interface NPCMemory {
+  id: string;
+  timestamp: Date;
+  type: 'conversation' | 'gift' | 'quest' | 'trade' | 'conflict' | 'help';
+  description: string;
+  emotionalImpact: {
+    joy: number;
+    anger: number;
+    fear: number;
+    trust: number;
+    respect: number;
+  };
+  relationshipChange: number;
+  context: string;
+}
+
+export interface NPCEmotionalState {
+  joy: number; // -100 to 100
+  anger: number; // -100 to 100
+  fear: number; // -100 to 100
+  trust: number; // -100 to 100
+  respect: number; // -100 to 100
+  currentMood: 'friendly' | 'neutral' | 'hostile' | 'sad' | 'excited' | 'anxious' | 'confident' | 'suspicious';
+  moodIntensity: number; // 0 to 10
+  lastMoodChange: Date;
+  stressLevel: number; // 0 to 10
+  confidence: number; // 0 to 10
 }
 
 export interface NPC {
@@ -53,6 +96,30 @@ export interface NPC {
     evening?: string;
     night?: string;
   };
+  // Enhanced emotional and memory system
+  emotionalState: NPCEmotionalState;
+  memories: NPCMemory[];
+  personalityTraits: {
+    openness: number; // 0 to 10
+    conscientiousness: number; // 0 to 10
+    extraversion: number; // 0 to 10
+    agreeableness: number; // 0 to 10
+    neuroticism: number; // 0 to 10
+  };
+  background: {
+    origin: string;
+    occupation: string;
+    goals: string[];
+    fears: string[];
+    secrets: string[];
+  };
+  interactionHistory: Array<{
+    timestamp: Date;
+    playerAction: string;
+    npcResponse: string;
+    relationshipChange: number;
+    emotionalImpact: Partial<NPCEmotionalState>;
+  }>;
 }
 
 interface NPCInteractionProps {
@@ -61,6 +128,7 @@ interface NPCInteractionProps {
   onTrade?: (npcId: string, itemId: string, quantity: number) => void;
   onAcceptQuest?: (questId: string) => void;
   onGiveGift?: (npcId: string, itemId: string) => void;
+  onUpdateNPC?: (npcId: string, updates: Partial<NPC>) => void;
   playerLevel?: number;
   playerReputation?: number;
   playerInventory?: Array<{ name: string; quantity: number }>;
@@ -73,15 +141,17 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
   onTrade,
   onAcceptQuest,
   onGiveGift,
+  onUpdateNPC,
   playerLevel = 1,
   playerReputation = 0,
   playerInventory = [],
   completedQuests = []
 }) => {
   const [currentDialogueId, setCurrentDialogueId] = useState('greeting');
-  const [interactionMode, setInteractionMode] = useState<'dialogue' | 'trade' | 'quests'>('dialogue');
+  const [interactionMode, setInteractionMode] = useState<'dialogue' | 'trade' | 'quests' | 'memory' | 'emotions'>('dialogue');
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [tradeQuantity, setTradeQuantity] = useState(1);
+  const [showEmotionalDetails, setShowEmotionalDetails] = useState(false);
 
   const currentDialogue = npc.dialogue.find(d => d.id === currentDialogueId) || npc.dialogue[0];
 
@@ -108,8 +178,27 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
       case 'excited': return <Star className="text-yellow-400" size={20} />;
       case 'sad': return <Heart className="text-blue-400" size={20} />;
       case 'hostile': return <X className="text-red-400" size={20} />;
+      case 'anxious': return <TrendingDown className="text-orange-400" size={20} />;
+      case 'confident': return <TrendingUp className="text-purple-400" size={20} />;
+      case 'suspicious': return <X className="text-yellow-400" size={20} />;
       default: return <Users className="text-gray-400" size={20} />;
     }
+  };
+
+  const getEmotionalColor = (value: number) => {
+    if (value >= 50) return 'text-green-400';
+    if (value >= 20) return 'text-blue-400';
+    if (value >= -20) return 'text-yellow-400';
+    if (value >= -50) return 'text-orange-400';
+    return 'text-red-400';
+  };
+
+  const getEmotionalBarColor = (value: number) => {
+    if (value >= 50) return 'bg-green-500';
+    if (value >= 20) return 'bg-blue-500';
+    if (value >= -20) return 'bg-yellow-500';
+    if (value >= -50) return 'bg-orange-500';
+    return 'bg-red-500';
   };
 
   const canSelectOption = (option: DialogueOption): boolean => {
@@ -132,11 +221,70 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
         if (!completedQuests.includes(questId)) return false;
       }
     }
+
+    // Check emotional state requirements
+    if (requirements.emotionalState) {
+      const { emotionalState } = requirements;
+      if (emotionalState.joy !== undefined && npc.emotionalState.joy < emotionalState.joy) return false;
+      if (emotionalState.trust !== undefined && npc.emotionalState.trust < emotionalState.trust) return false;
+      if (emotionalState.respect !== undefined && npc.emotionalState.respect < emotionalState.respect) return false;
+    }
     
     return true;
   };
 
   const handleDialogueOption = (option: DialogueOption) => {
+    // Update NPC emotional state and relationship
+    if (option.emotionalImpact || option.relationshipChange) {
+      const updatedEmotionalState = { ...npc.emotionalState };
+      const updatedRelationship = npc.relationship + (option.relationshipChange || 0);
+
+      if (option.emotionalImpact) {
+        Object.entries(option.emotionalImpact).forEach(([emotion, change]) => {
+          if (updatedEmotionalState[emotion as keyof NPCEmotionalState] !== undefined) {
+            updatedEmotionalState[emotion as keyof NPCEmotionalState] = Math.max(-100, Math.min(100, 
+              updatedEmotionalState[emotion as keyof NPCEmotionalState] + change
+            ));
+          }
+        });
+      }
+
+      // Update current mood based on emotional state
+      updatedEmotionalState.currentMood = calculateCurrentMood(updatedEmotionalState);
+      updatedEmotionalState.lastMoodChange = new Date();
+
+      // Add to interaction history
+      const interactionRecord = {
+        timestamp: new Date(),
+        playerAction: option.text,
+        npcResponse: currentDialogue.npcText,
+        relationshipChange: option.relationshipChange || 0,
+        emotionalImpact: option.emotionalImpact || {}
+      };
+
+      // Add memory
+      const memory: NPCMemory = {
+        id: Date.now().toString(),
+        timestamp: new Date(),
+        type: 'conversation',
+        description: `Player said: "${option.text}"`,
+        emotionalImpact: option.emotionalImpact || { joy: 0, anger: 0, fear: 0, trust: 0, respect: 0 },
+        relationshipChange: option.relationshipChange || 0,
+        context: currentDialogue.npcText
+      };
+
+      const updatedNPC: Partial<NPC> = {
+        relationship: updatedRelationship,
+        emotionalState: updatedEmotionalState,
+        interactionHistory: [...npc.interactionHistory, interactionRecord],
+        memories: [...npc.memories, memory]
+      };
+
+      if (onUpdateNPC) {
+        onUpdateNPC(npc.id, updatedNPC);
+      }
+    }
+
     switch (option.action) {
       case 'quest':
         if (option.questId && onAcceptQuest) {
@@ -161,12 +309,38 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
     }
   };
 
+  const calculateCurrentMood = (emotionalState: NPCEmotionalState): NPCEmotionalState['currentMood'] => {
+    const { joy, anger, fear, trust, respect } = emotionalState;
+    
+    if (joy > 50 && trust > 30) return 'friendly';
+    if (joy > 70) return 'excited';
+    if (anger > 50) return 'hostile';
+    if (fear > 50) return 'anxious';
+    if (respect > 50 && trust > 20) return 'confident';
+    if (trust < -30) return 'suspicious';
+    if (joy < -30) return 'sad';
+    return 'neutral';
+  };
+
   const handleTrade = () => {
     if (selectedItem && onTrade) {
       onTrade(npc.id, selectedItem, tradeQuantity);
       setSelectedItem(null);
       setTradeQuantity(1);
     }
+  };
+
+  const formatTimeAgo = (date: Date) => {
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (days > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (minutes > 0) return `${minutes}m ago`;
+    return 'Just now';
   };
 
   return (
@@ -185,7 +359,10 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
                 <span className={getRelationshipColor(npc.relationship)}>
                   {getRelationshipText(npc.relationship)}
                 </span>
-                {getMoodIcon(currentDialogue?.mood)}
+                {getMoodIcon(npc.emotionalState.currentMood)}
+                <span className="text-gray-400">
+                  {npc.emotionalState.currentMood}
+                </span>
               </div>
             </div>
           </div>
@@ -226,6 +403,26 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
               </button>
             )}
             <button
+              onClick={() => setInteractionMode('emotions')}
+              className={`px-3 py-1 rounded text-sm transition-all ${
+                interactionMode === 'emotions'
+                  ? 'bg-pink-600 text-white'
+                  : 'bg-white/10 text-white hover:bg-white/20'
+              }`}
+            >
+              <Heart size={16} />
+            </button>
+            <button
+              onClick={() => setInteractionMode('memory')}
+              className={`px-3 py-1 rounded text-sm transition-all ${
+                interactionMode === 'memory'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white/10 text-white hover:bg-white/20'
+              }`}
+            >
+              <Brain size={16} />
+            </button>
+            <button
               onClick={onClose}
               className="p-1 rounded bg-red-600 text-white hover:bg-red-700 transition-all"
             >
@@ -253,96 +450,233 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
                     className={`w-full text-left p-3 rounded-lg transition-all ${
                       canSelectOption(option)
                         ? 'bg-white/10 text-white hover:bg-white/20'
-                        : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                        : 'bg-white/5 text-gray-500 cursor-not-allowed'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <span>{option.text}</span>
-                      <ChevronRight size={16} />
-                    </div>
-                    {!canSelectOption(option) && option.requirements && (
-                      <div className="text-xs text-red-400 mt-1">
-                        Requirements not met
+                      <div className="flex items-center space-x-2">
+                        {option.relationshipChange && (
+                          <span className={`text-xs ${option.relationshipChange > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {option.relationshipChange > 0 ? '+' : ''}{option.relationshipChange}
+                          </span>
+                        )}
+                        {option.emotionalImpact && (
+                          <div className="flex space-x-1">
+                            {Object.entries(option.emotionalImpact).map(([emotion, change]) => (
+                              <span key={emotion} className={`text-xs ${change > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {emotion}: {change > 0 ? '+' : ''}{change}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          {interactionMode === 'trade' && npc.inventory && (
+          {interactionMode === 'emotions' && (
             <div className="space-y-4">
-              <h3 className="text-lg font-bold text-white mb-4">Available Items</h3>
-              <div className="grid grid-cols-2 gap-4">
-                {npc.inventory.map(item => (
-                  <div
-                    key={item.id}
-                    onClick={() => setSelectedItem(item.id)}
-                    className={`p-3 rounded-lg cursor-pointer transition-all border ${
-                      selectedItem === item.id
-                        ? 'border-blue-400 bg-blue-500/20'
-                        : 'border-white/20 bg-white/5 hover:bg-white/10'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-white font-semibold">{item.name}</h4>
-                        <p className="text-blue-200 text-sm">{item.price} gold</p>
-                        <p className={`text-xs ${
-                          item.rarity === 'common' ? 'text-gray-400' :
-                          item.rarity === 'uncommon' ? 'text-green-400' :
-                          item.rarity === 'rare' ? 'text-blue-400' :
-                          item.rarity === 'epic' ? 'text-purple-400' :
-                          'text-yellow-400'
-                        }`}>
-                          {item.rarity}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-white text-sm">x{item.quantity}</p>
+              <h3 className="text-xl font-bold text-white mb-4">Emotional State</h3>
+              
+              {/* Current Mood */}
+              <div className="bg-white/10 rounded-lg p-4">
+                <div className="flex items-center space-x-3 mb-3">
+                  {getMoodIcon(npc.emotionalState.currentMood)}
+                  <span className="text-white font-semibold">
+                    {npc.emotionalState.currentMood.charAt(0).toUpperCase() + npc.emotionalState.currentMood.slice(1)}
+                  </span>
+                  <span className="text-gray-400">
+                    Intensity: {npc.emotionalState.moodIntensity}/10
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-gray-400 text-sm">Stress Level</span>
+                    <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                      <div 
+                        className={`h-2 rounded-full ${npc.emotionalState.stressLevel > 7 ? 'bg-red-500' : npc.emotionalState.stressLevel > 4 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                        style={{ width: `${(npc.emotionalState.stressLevel / 10) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 text-sm">Confidence</span>
+                    <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                      <div 
+                        className={`h-2 rounded-full ${npc.emotionalState.confidence > 7 ? 'bg-green-500' : npc.emotionalState.confidence > 4 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                        style={{ width: `${(npc.emotionalState.confidence / 10) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Emotional Metrics */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Object.entries({
+                  joy: npc.emotionalState.joy,
+                  anger: npc.emotionalState.anger,
+                  fear: npc.emotionalState.fear,
+                  trust: npc.emotionalState.trust,
+                  respect: npc.emotionalState.respect
+                }).map(([emotion, value]) => (
+                  <div key={emotion} className="bg-white/10 rounded-lg p-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className={`font-semibold ${getEmotionalColor(value)} capitalize`}>
+                        {emotion}
+                      </span>
+                      <span className={`text-sm ${getEmotionalColor(value)}`}>
+                        {value}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-700 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full ${getEmotionalBarColor(value)}`}
+                        style={{ width: `${((value + 100) / 200) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Personality Traits */}
+              <div className="bg-white/10 rounded-lg p-4">
+                <h4 className="text-white font-semibold mb-3">Personality Traits</h4>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  {Object.entries(npc.personalityTraits).map(([trait, value]) => (
+                    <div key={trait} className="text-center">
+                      <div className="text-xs text-gray-400 capitalize mb-1">{trait}</div>
+                      <div className="text-lg font-bold text-white">{value}/10</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {interactionMode === 'memory' && (
+            <div className="space-y-4">
+              <h3 className="text-xl font-bold text-white mb-4">Memories & History</h3>
+              
+              {/* Recent Memories */}
+              <div className="space-y-3">
+                {npc.memories.slice(-5).reverse().map((memory) => (
+                  <div key={memory.id} className="bg-white/10 rounded-lg p-3">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="text-white font-medium">{memory.description}</span>
+                      <span className="text-gray-400 text-sm">{formatTimeAgo(memory.timestamp)}</span>
+                    </div>
+                    <div className="text-gray-300 text-sm mb-2">{memory.context}</div>
+                    <div className="flex items-center space-x-4 text-xs">
+                      <span className={`${memory.relationshipChange > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        Relationship: {memory.relationshipChange > 0 ? '+' : ''}{memory.relationshipChange}
+                      </span>
+                      <div className="flex space-x-2">
+                        {Object.entries(memory.emotionalImpact).map(([emotion, impact]) => (
+                          <span key={emotion} className={`${impact > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {emotion}: {impact > 0 ? '+' : ''}{impact}
+                          </span>
+                        ))}
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
 
-              {selectedItem && (
-                <div className="bg-white/10 rounded-lg p-4">
-                  <h4 className="text-white font-semibold mb-3">Purchase</h4>
-                  <div className="flex items-center space-x-4">
-                    <div className="flex items-center space-x-2">
-                      <label className="text-white text-sm">Quantity:</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={tradeQuantity}
-                        onChange={(e) => setTradeQuantity(parseInt(e.target.value) || 1)}
-                        className="w-16 px-2 py-1 rounded bg-white/20 text-white border border-white/30"
-                      />
+              {/* Interaction History */}
+              <div className="bg-white/10 rounded-lg p-4">
+                <h4 className="text-white font-semibold mb-3">Recent Interactions</h4>
+                <div className="space-y-2">
+                  {npc.interactionHistory.slice(-3).reverse().map((interaction, index) => (
+                    <div key={index} className="text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-white">{interaction.playerAction}</span>
+                        <span className="text-gray-400">{formatTimeAgo(interaction.timestamp)}</span>
+                      </div>
+                      <div className="text-gray-300 text-xs ml-2">{interaction.npcResponse}</div>
                     </div>
-                    <button
-                      onClick={handleTrade}
-                      className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-all"
-                    >
-                      Buy
-                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {interactionMode === 'trade' && npc.inventory && (
+            <div className="space-y-4">
+              <h3 className="text-xl font-bold text-white mb-4">Trade with {npc.name}</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* NPC Inventory */}
+                <div>
+                  <h4 className="text-white font-semibold mb-3">Available Items</h4>
+                  <div className="space-y-2">
+                    {npc.inventory.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => setSelectedItem(item.id)}
+                        className={`w-full p-3 rounded-lg text-left transition-all ${
+                          selectedItem === item.id
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white/10 text-white hover:bg-white/20'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <div className="font-medium">{item.name}</div>
+                            <div className="text-sm text-gray-300">{item.rarity}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold">{item.price} gold</div>
+                            <div className="text-sm text-gray-300">Qty: {item.quantity}</div>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
                   </div>
                 </div>
-              )}
+
+                {/* Trade Controls */}
+                <div>
+                  <h4 className="text-white font-semibold mb-3">Trade Details</h4>
+                  {selectedItem && (
+                    <div className="bg-white/10 rounded-lg p-4 space-y-4">
+                      <div>
+                        <label className="text-white text-sm">Quantity</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={tradeQuantity}
+                          onChange={(e) => setTradeQuantity(parseInt(e.target.value) || 1)}
+                          className="w-full mt-1 p-2 bg-white/20 text-white rounded border border-white/30"
+                        />
+                      </div>
+                      <button
+                        onClick={handleTrade}
+                        className="w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all"
+                      >
+                        Complete Trade
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
           {interactionMode === 'quests' && npc.quests && (
             <div className="space-y-4">
-              <h3 className="text-lg font-bold text-white mb-4">Available Quests</h3>
+              <h3 className="text-xl font-bold text-white mb-4">Available Quests</h3>
+              
               <div className="space-y-3">
                 {npc.quests.map(questId => (
                   <div key={questId} className="bg-white/10 rounded-lg p-4">
-                    <h4 className="text-white font-semibold">Quest: {questId}</h4>
-                    <p className="text-white/70 text-sm mb-3">
-                      Quest description would go here...
-                    </p>
+                    <h4 className="text-white font-semibold mb-2">Quest #{questId}</h4>
+                    <p className="text-gray-300 mb-3">Quest description would go here...</p>
                     <button
                       onClick={() => onAcceptQuest?.(questId)}
                       className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-all"

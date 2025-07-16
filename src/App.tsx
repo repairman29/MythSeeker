@@ -6,6 +6,7 @@ import UserProfileComponent from './UserProfile';
 import { aiService } from './services/aiService';
 import { DynamicDMService } from './services/dynamicDMService';
 import { MultiplayerGame, Player } from './services/multiplayerService';
+import { npcService } from './services/npcService';
 import Tooltip from './components/Tooltip';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastNotifications from './components/ToastNotifications';
@@ -172,6 +173,10 @@ const generateToastMessage = (action: string, context?: any): ToastMessage => {
     campaignResumed: { message: 'Campaign resumed', type: 'success' },
     welcomeBack: { message: 'Welcome back to your adventure!', type: 'success' },
     ftueSkipped: { message: 'Tutorial skipped', type: 'info' },
+    npcInteraction: { 
+      message: context?.npcName ? `${context.npcName} is ${context.disposition} (${context.emotionalSummary})` : 'NPC interaction recorded', 
+      type: 'info' 
+    },
   };
   
   const defaultMessage = { message: 'Action completed', type: 'success' as const };
@@ -2211,37 +2216,32 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
 
       // Add new NPCs with enhanced persistence
       if (updates.newNPCs) {
-        updates.newNPCs.forEach((npc: any) => {
-          const existingNPC = newState.npcs[npc.name];
+        updates.newNPCs.forEach((npcData: any) => {
+          const existingNPC = newState.npcs[npcData.name];
           if (existingNPC) {
-            // Update existing NPC with new information
-            newState.npcs[npc.name] = {
-              ...existingNPC,
-              ...npc,
+            // Update existing NPC with new information and emotional state
+            const updatedNPC = npcService.updateEmotionalState(existingNPC, npcData.emotionalImpact || {});
+            newState.npcs[npcData.name] = {
+              ...updatedNPC,
+              ...npcData,
               lastSeen: new Date(),
               interactionCount: (existingNPC.interactionCount || 0) + 1,
-              knownSecrets: [...(existingNPC.knownSecrets || []), ...(npc.knownSecrets || [])],
-              relationship: npc.relationship || existingNPC.relationship,
+              knownSecrets: [...(existingNPC.knownSecrets || []), ...(npcData.knownSecrets || [])],
               currentLocation: newState.currentLocation
             };
           } else {
-            // Create new NPC with full memory system
-            newState.npcs[npc.name] = {
-              ...npc,
+            // Create new NPC with full emotional and memory system
+            const newNPC = npcService.createNPC({
+              ...npcData,
               id: Date.now().toString(),
               firstEncounter: new Date(),
               lastSeen: new Date(),
               interactionCount: 1,
-              relationship: 'neutral',
+              relationship: 0,
               knownSecrets: [],
-              memory: {
-                playerActions: [],
-                conversations: [],
-                sharedSecrets: [],
-                emotionalState: 'neutral'
-              },
               currentLocation: newState.currentLocation
-            };
+            });
+            newState.npcs[npcData.name] = newNPC;
           }
         });
       }
@@ -2293,6 +2293,61 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
     }));
   };
 
+  // Handle NPC interaction with emotional feedback
+  const handleNPCInteraction = (npcId: string, playerAction: string, emotionalImpact?: any) => {
+    const npc = worldState.npcs[npcId];
+    if (!npc) return;
+
+    // Update NPC emotional state
+    const updatedNPC = npcService.updateEmotionalState(npc, emotionalImpact || {});
+    
+    // Add memory of this interaction
+    const memory = {
+      type: 'conversation' as const,
+      description: `Player said: "${playerAction}"`,
+      emotionalImpact: emotionalImpact || { joy: 0, anger: 0, fear: 0, trust: 0, respect: 0 },
+      relationshipChange: 0,
+      context: `Interaction at ${worldState.currentLocation}`
+    };
+    
+    const npcWithMemory = npcService.addMemory(updatedNPC, memory);
+    
+    // Update world state
+    setWorldState(prev => ({
+      ...prev,
+      npcs: {
+        ...prev.npcs,
+        [npcId]: npcWithMemory
+      }
+    }));
+
+    // Generate NPC response based on emotional state
+    const npcResponse = npcService.generateResponse(npcWithMemory, playerAction);
+    
+    // Add NPC response to messages
+    const npcMessage = {
+      id: Date.now() + 1,
+      type: 'npc' as const,
+      content: npcResponse,
+      npcId: npcId,
+      npcName: npcWithMemory.name,
+      timestamp: new Date(),
+      emotionalState: npcWithMemory.emotionalState
+    };
+    
+    setMessages(prev => [...prev, npcMessage]);
+    
+    // Show emotional feedback toast
+    const disposition = npcService.getDisposition(npcWithMemory);
+    const emotionalSummary = npcService.getEmotionalSummary(npcWithMemory);
+    
+    addToast('npcInteraction', { 
+      npcName: npcWithMemory.name, 
+      disposition, 
+      emotionalSummary 
+    });
+  };
+
   // World State Display Component
   const WorldStateDisplay: React.FC<{ worldState: any, aiMemory: any }> = ({ worldState, aiMemory }) => (
     <div className="bg-black/30 rounded-lg p-3 mb-4">
@@ -2329,6 +2384,28 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
             {aiMemory.consequences.slice(-2).map((consequence: any, index: number) => (
               <div key={index} className="text-xs text-orange-200 bg-orange-900/20 p-1 rounded">
                 {consequence.description}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* NPC Emotional States */}
+      {Object.keys(worldState.npcs).length > 0 && (
+        <div className="mt-2">
+          <h4 className="text-purple-400 font-semibold text-xs mb-1">NPC Emotions:</h4>
+          <div className="space-y-1">
+            {Object.entries(worldState.npcs).slice(0, 3).map(([npcId, npc]: [string, any]) => (
+              <div key={npcId} className="text-xs text-purple-200 bg-purple-900/20 p-1 rounded flex justify-between">
+                <span>{npc.name}</span>
+                <span className={`${
+                  npc.emotionalState?.currentMood === 'friendly' ? 'text-green-400' :
+                  npc.emotionalState?.currentMood === 'hostile' ? 'text-red-400' :
+                  npc.emotionalState?.currentMood === 'anxious' ? 'text-orange-400' :
+                  'text-gray-400'
+                }`}>
+                  {npc.emotionalState?.currentMood || 'neutral'}
+                </span>
               </div>
             ))}
           </div>
