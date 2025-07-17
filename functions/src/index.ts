@@ -77,6 +77,59 @@ interface GameSession {
   completedAt?: number;
 }
 
+interface CombatState {
+  id: string;
+  gameId: string;
+  status: 'active' | 'completed' | 'fled';
+  participants: Array<{
+    id: string;
+    name: string;
+    type: 'player' | 'enemy';
+    characterId?: string;
+    health: number;
+    maxHealth: number;
+    armorClass: number;
+    initiative: number;
+    isActive: boolean;
+    statusEffects: string[];
+    position?: { x: number; y: number };
+  }>;
+  currentTurn: number;
+  turnOrder: string[];
+  round: number;
+  actions: Array<{
+    id: string;
+    actorId: string;
+    actionType: 'attack' | 'spell' | 'move' | 'item' | 'dodge' | 'dash';
+    targetId?: string;
+    spellId?: string;
+    weaponId?: string;
+    damage?: number;
+    damageType?: string;
+    hit?: boolean;
+    critical?: boolean;
+    description: string;
+    timestamp: number;
+  }>;
+  environment: {
+    terrain: string;
+    lighting: string;
+    weather: string;
+    cover: Array<{ x: number; y: number; type: string }>;
+  };
+  createdAt: number;
+  lastActivity: number;
+}
+
+interface CombatAction {
+  actionType: 'attack' | 'spell' | 'move' | 'item' | 'dodge' | 'dash';
+  targetId?: string;
+  spellId?: string;
+  weaponId?: string;
+  position?: { x: number; y: number };
+  description?: string;
+}
+
 // Create user profile when user signs up
 // export const createUserProfile = functions.auth.user().onCreate(async (user) => {
 //   const userProfile: UserProfile = {
@@ -492,6 +545,287 @@ export const cleanupOldGames = functions.pubsub.schedule('every 24 hours').onRun
 // Export AI Dungeon Master function
 export { aiDungeonMaster }; 
 
+// Combat System Endpoints
+
+// Start combat
+export const startCombat = functions.https.onCall(async (data: { gameId: string; enemies: Array<{ name: string; health: number; armorClass: number; initiative: number }> }, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { gameId, enemies } = data;
+
+  // Get game session and players
+  const gameDoc = await admin.firestore().collection('games').doc(gameId).get();
+  if (!gameDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Game session not found');
+  }
+
+  const gameData = gameDoc.data() as GameSession;
+  
+  // Get player characters
+  const playerCharacters = await Promise.all(
+    gameData.players.map(async (player) => {
+      const charDoc = await admin.firestore().collection('characters').doc(player.characterId).get();
+      const charData = charDoc.data() as Character;
+      return {
+        id: player.id,
+        name: charData.name,
+        type: 'player' as const,
+        characterId: player.characterId,
+        health: charData.health,
+        maxHealth: charData.maxHealth,
+        armorClass: charData.stats?.dexterity ? 10 + Math.floor((charData.stats.dexterity - 10) / 2) : 10,
+        initiative: Math.floor(Math.random() * 20) + 1 + Math.floor((charData.stats?.dexterity || 10 - 10) / 2),
+        isActive: true,
+        statusEffects: []
+      };
+    })
+  );
+
+  // Create enemy participants
+  const enemyParticipants = enemies.map((enemy, index) => ({
+    id: `enemy-${index}`,
+    name: enemy.name,
+    type: 'enemy' as const,
+    health: enemy.health,
+    maxHealth: enemy.health,
+    armorClass: enemy.armorClass,
+    initiative: enemy.initiative,
+    isActive: true,
+    statusEffects: []
+  }));
+
+  // Combine all participants and sort by initiative
+  const allParticipants = [...playerCharacters, ...enemyParticipants];
+  allParticipants.sort((a, b) => b.initiative - a.initiative);
+
+  const turnOrder = allParticipants.map(p => p.id);
+
+  const combatState: CombatState = {
+    id: '',
+    gameId,
+    status: 'active',
+    participants: allParticipants,
+    currentTurn: 0,
+    turnOrder,
+    round: 1,
+    actions: [],
+    environment: {
+      terrain: 'forest',
+      lighting: 'daylight',
+      weather: 'clear',
+      cover: []
+    },
+    createdAt: Date.now(),
+    lastActivity: Date.now()
+  };
+
+  const docRef = await admin.firestore().collection('combat').add(combatState);
+
+  // Update game session to reference combat
+  await admin.firestore().collection('games').doc(gameId).update({
+    currentCombatId: docRef.id,
+    lastActivity: Date.now()
+  });
+
+  return { 
+    combatId: docRef.id, 
+    combatState: { ...combatState, id: docRef.id },
+    currentActor: allParticipants[0]
+  };
+});
+
+// Get combat state
+export const getCombatState = functions.https.onCall(async (data: { combatId: string }, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { combatId } = data;
+  
+  const combatDoc = await admin.firestore().collection('combat').doc(combatId).get();
+  if (!combatDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Combat session not found');
+  }
+
+  const combatData = combatDoc.data() as CombatState;
+  const currentActor = combatData.participants.find(p => p.id === combatData.turnOrder[combatData.currentTurn]);
+
+  return {
+    combatState: { ...combatData, id: combatId },
+    currentActor,
+    isPlayerTurn: currentActor?.type === 'player'
+  };
+});
+
+// Resolve combat action
+export const resolveCombatAction = functions.https.onCall(async (data: { combatId: string; action: CombatAction }, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { combatId, action } = data;
+  
+  const combatDoc = await admin.firestore().collection('combat').doc(combatId).get();
+  if (!combatDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Combat session not found');
+  }
+
+  const combatData = combatDoc.data() as CombatState;
+  const currentActor = combatData.participants.find(p => p.id === combatData.turnOrder[combatData.currentTurn]);
+  
+  if (!currentActor) {
+    throw new functions.https.HttpsError('failed-precondition', 'No active participant found');
+  }
+
+  // Process the action
+  let actionResult: any = {
+    id: `action-${Date.now()}`,
+    actorId: currentActor.id,
+    actionType: action.actionType,
+    targetId: action.targetId,
+    spellId: action.spellId,
+    weaponId: action.weaponId,
+    description: action.description || `${currentActor.name} performs ${action.actionType}`,
+    timestamp: Date.now()
+  };
+
+  // Handle different action types
+  switch (action.actionType) {
+    case 'attack':
+      if (action.targetId) {
+        const target = combatData.participants.find(p => p.id === action.targetId);
+        if (target) {
+          const attackRoll = Math.floor(Math.random() * 20) + 1;
+          const hit = attackRoll >= target.armorClass;
+          actionResult.hit = hit;
+          actionResult.critical = attackRoll === 20;
+          
+          if (hit) {
+            const damage = Math.floor(Math.random() * 8) + 1; // 1d8 damage
+            actionResult.damage = damage;
+            actionResult.damageType = 'slashing';
+            
+            // Update target health
+            const targetIndex = combatData.participants.findIndex(p => p.id === action.targetId);
+            if (targetIndex !== -1) {
+              combatData.participants[targetIndex].health = Math.max(0, target.health - damage);
+              if (combatData.participants[targetIndex].health === 0) {
+                combatData.participants[targetIndex].isActive = false;
+              }
+            }
+          }
+        }
+      }
+      break;
+      
+    case 'spell':
+      if (action.spellId && action.targetId) {
+        const target = combatData.participants.find(p => p.id === action.targetId);
+        if (target) {
+          const damage = Math.floor(Math.random() * 6) + 1; // 1d6 spell damage
+          actionResult.damage = damage;
+          actionResult.damageType = 'force';
+          
+          // Update target health
+          const targetIndex = combatData.participants.findIndex(p => p.id === action.targetId);
+          if (targetIndex !== -1) {
+            combatData.participants[targetIndex].health = Math.max(0, target.health - damage);
+            if (combatData.participants[targetIndex].health === 0) {
+              combatData.participants[targetIndex].isActive = false;
+            }
+          }
+        }
+      }
+      break;
+      
+    case 'move':
+      if (action.position) {
+        const actorIndex = combatData.participants.findIndex(p => p.id === currentActor.id);
+        if (actorIndex !== -1) {
+          combatData.participants[actorIndex].position = action.position;
+        }
+      }
+      break;
+      
+    default:
+      // Handle other actions (dodge, dash, item)
+      break;
+  }
+
+  // Add action to combat history
+  combatData.actions.push(actionResult);
+
+  // Move to next turn
+  combatData.currentTurn = (combatData.currentTurn + 1) % combatData.turnOrder.length;
+  
+  // If we've completed a full round, increment round counter
+  if (combatData.currentTurn === 0) {
+    combatData.round++;
+  }
+
+  // Check if combat is complete
+  const activePlayers = combatData.participants.filter(p => p.type === 'player' && p.isActive);
+  const activeEnemies = combatData.participants.filter(p => p.type === 'enemy' && p.isActive);
+  
+  if (activePlayers.length === 0) {
+    combatData.status = 'completed'; // Players defeated
+  } else if (activeEnemies.length === 0) {
+    combatData.status = 'completed'; // Enemies defeated
+  }
+
+  // Update combat state
+  await admin.firestore().collection('combat').doc(combatId).update({
+    participants: combatData.participants,
+    currentTurn: combatData.currentTurn,
+    round: combatData.round,
+    actions: combatData.actions,
+    status: combatData.status,
+    lastActivity: Date.now()
+  });
+
+  // Get next actor
+  const nextActor = combatData.participants.find(p => p.id === combatData.turnOrder[combatData.currentTurn]);
+
+  return {
+    actionResult,
+    nextActor,
+    combatStatus: combatData.status,
+    round: combatData.round
+  };
+});
+
+// End combat
+export const endCombat = functions.https.onCall(async (data: { combatId: string; result: 'victory' | 'defeat' | 'fled' }, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { combatId, result } = data;
+  
+  const combatDoc = await admin.firestore().collection('combat').doc(combatId).get();
+  if (!combatDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Combat session not found');
+  }
+
+  const combatData = combatDoc.data() as CombatState;
+  
+  // Update combat status
+  await admin.firestore().collection('combat').doc(combatId).update({
+    status: result === 'fled' ? 'fled' : 'completed',
+    lastActivity: Date.now()
+  });
+
+  // Remove combat reference from game session
+  await admin.firestore().collection('games').doc(combatData.gameId).update({
+    currentCombatId: admin.firestore.FieldValue.delete(),
+    lastActivity: Date.now()
+  });
+
+  return { success: true, result };
+});
+
 // Test endpoint for development (bypasses auth)
 export const testEndpoint = functions.https.onRequest(async (req, res) => {
   // Set CORS headers
@@ -541,6 +875,18 @@ export const testEndpoint = functions.https.onRequest(async (req, res) => {
         break;
       case 'completeCampaign':
         result = await handleCompleteCampaign(data, { auth: { uid: 'test-user' } });
+        break;
+      case 'startCombat':
+        result = await handleStartCombat(data, { auth: { uid: 'test-user' } });
+        break;
+      case 'getCombatState':
+        result = await handleGetCombatState(data, { auth: { uid: 'test-user' } });
+        break;
+      case 'resolveCombatAction':
+        result = await handleResolveCombatAction(data, { auth: { uid: 'test-user' } });
+        break;
+      case 'endCombat':
+        result = await handleEndCombat(data, { auth: { uid: 'test-user' } });
         break;
       default:
         res.status(400).json({ error: 'Unknown action' });
@@ -693,4 +1039,264 @@ async function handleCompleteCampaign(data: any, context: any) {
   });
 
   return { success: true };
+} 
+
+// Combat helper functions for test endpoint
+async function handleStartCombat(data: any, context: any) {
+  const { gameId, enemies } = data;
+
+  // Get game session and players
+  const gameDoc = await admin.firestore().collection('games').doc(gameId).get();
+  if (!gameDoc.exists) {
+    throw new Error('Game session not found');
+  }
+
+  const gameData = gameDoc.data() as GameSession;
+  
+  // Get player characters
+  const playerCharacters = await Promise.all(
+    gameData.players.map(async (player) => {
+      const charDoc = await admin.firestore().collection('characters').doc(player.characterId).get();
+      const charData = charDoc.data() as Character;
+      return {
+        id: player.id,
+        name: charData.name,
+        type: 'player' as const,
+        characterId: player.characterId,
+        health: charData.health,
+        maxHealth: charData.maxHealth,
+        armorClass: charData.stats?.dexterity ? 10 + Math.floor((charData.stats.dexterity - 10) / 2) : 10,
+        initiative: Math.floor(Math.random() * 20) + 1 + Math.floor((charData.stats?.dexterity || 10 - 10) / 2),
+        isActive: true,
+        statusEffects: []
+      };
+    })
+  );
+
+  // Create enemy participants
+  const enemyParticipants = enemies.map((enemy: any, index: number) => ({
+    id: `enemy-${index}`,
+    name: enemy.name,
+    type: 'enemy' as const,
+    health: enemy.health,
+    maxHealth: enemy.health,
+    armorClass: enemy.armorClass,
+    initiative: enemy.initiative,
+    isActive: true,
+    statusEffects: []
+  }));
+
+  // Combine all participants and sort by initiative
+  const allParticipants = [...playerCharacters, ...enemyParticipants];
+  allParticipants.sort((a, b) => b.initiative - a.initiative);
+
+  const turnOrder = allParticipants.map(p => p.id);
+
+  const combatState: CombatState = {
+    id: '',
+    gameId,
+    status: 'active',
+    participants: allParticipants,
+    currentTurn: 0,
+    turnOrder,
+    round: 1,
+    actions: [],
+    environment: {
+      terrain: 'forest',
+      lighting: 'daylight',
+      weather: 'clear',
+      cover: []
+    },
+    createdAt: Date.now(),
+    lastActivity: Date.now()
+  };
+
+  const docRef = await admin.firestore().collection('combat').add(combatState);
+
+  // Update game session to reference combat
+  await admin.firestore().collection('games').doc(gameId).update({
+    currentCombatId: docRef.id,
+    lastActivity: Date.now()
+  });
+
+  return { 
+    combatId: docRef.id, 
+    combatState: { ...combatState, id: docRef.id },
+    currentActor: allParticipants[0]
+  };
+}
+
+async function handleGetCombatState(data: any, context: any) {
+  const { combatId } = data;
+  
+  const combatDoc = await admin.firestore().collection('combat').doc(combatId).get();
+  if (!combatDoc.exists) {
+    throw new Error('Combat session not found');
+  }
+
+  const combatData = combatDoc.data() as CombatState;
+  const currentActor = combatData.participants.find(p => p.id === combatData.turnOrder[combatData.currentTurn]);
+
+  return {
+    combatState: { ...combatData, id: combatId },
+    currentActor,
+    isPlayerTurn: currentActor?.type === 'player'
+  };
+}
+
+async function handleResolveCombatAction(data: any, context: any) {
+  const { combatId, action } = data;
+  
+  const combatDoc = await admin.firestore().collection('combat').doc(combatId).get();
+  if (!combatDoc.exists) {
+    throw new Error('Combat session not found');
+  }
+
+  const combatData = combatDoc.data() as CombatState;
+  const currentActor = combatData.participants.find(p => p.id === combatData.turnOrder[combatData.currentTurn]);
+  
+  if (!currentActor) {
+    throw new Error('No active participant found');
+  }
+
+  // Process the action
+  let actionResult: any = {
+    id: `action-${Date.now()}`,
+    actorId: currentActor.id,
+    actionType: action.actionType,
+    targetId: action.targetId,
+    spellId: action.spellId,
+    weaponId: action.weaponId,
+    description: action.description || `${currentActor.name} performs ${action.actionType}`,
+    timestamp: Date.now()
+  };
+
+  // Handle different action types
+  switch (action.actionType) {
+    case 'attack':
+      if (action.targetId) {
+        const target = combatData.participants.find(p => p.id === action.targetId);
+        if (target) {
+          const attackRoll = Math.floor(Math.random() * 20) + 1;
+          const hit = attackRoll >= target.armorClass;
+          actionResult.hit = hit;
+          actionResult.critical = attackRoll === 20;
+          
+          if (hit) {
+            const damage = Math.floor(Math.random() * 8) + 1; // 1d8 damage
+            actionResult.damage = damage;
+            actionResult.damageType = 'slashing';
+            
+            // Update target health
+            const targetIndex = combatData.participants.findIndex(p => p.id === action.targetId);
+            if (targetIndex !== -1) {
+              combatData.participants[targetIndex].health = Math.max(0, target.health - damage);
+              if (combatData.participants[targetIndex].health === 0) {
+                combatData.participants[targetIndex].isActive = false;
+              }
+            }
+          }
+        }
+      }
+      break;
+      
+    case 'spell':
+      if (action.spellId && action.targetId) {
+        const target = combatData.participants.find(p => p.id === action.targetId);
+        if (target) {
+          const damage = Math.floor(Math.random() * 6) + 1; // 1d6 spell damage
+          actionResult.damage = damage;
+          actionResult.damageType = 'force';
+          
+          // Update target health
+          const targetIndex = combatData.participants.findIndex(p => p.id === action.targetId);
+          if (targetIndex !== -1) {
+            combatData.participants[targetIndex].health = Math.max(0, target.health - damage);
+            if (combatData.participants[targetIndex].health === 0) {
+              combatData.participants[targetIndex].isActive = false;
+            }
+          }
+        }
+      }
+      break;
+      
+    case 'move':
+      if (action.position) {
+        const actorIndex = combatData.participants.findIndex(p => p.id === currentActor.id);
+        if (actorIndex !== -1) {
+          combatData.participants[actorIndex].position = action.position;
+        }
+      }
+      break;
+      
+    default:
+      // Handle other actions (dodge, dash, item)
+      break;
+  }
+
+  // Add action to combat history
+  combatData.actions.push(actionResult);
+
+  // Move to next turn
+  combatData.currentTurn = (combatData.currentTurn + 1) % combatData.turnOrder.length;
+  
+  // If we've completed a full round, increment round counter
+  if (combatData.currentTurn === 0) {
+    combatData.round++;
+  }
+
+  // Check if combat is complete
+  const activePlayers = combatData.participants.filter(p => p.type === 'player' && p.isActive);
+  const activeEnemies = combatData.participants.filter(p => p.type === 'enemy' && p.isActive);
+  
+  if (activePlayers.length === 0) {
+    combatData.status = 'completed'; // Players defeated
+  } else if (activeEnemies.length === 0) {
+    combatData.status = 'completed'; // Enemies defeated
+  }
+
+  // Update combat state
+  await admin.firestore().collection('combat').doc(combatId).update({
+    participants: combatData.participants,
+    currentTurn: combatData.currentTurn,
+    round: combatData.round,
+    actions: combatData.actions,
+    status: combatData.status,
+    lastActivity: Date.now()
+  });
+
+  // Get next actor
+  const nextActor = combatData.participants.find(p => p.id === combatData.turnOrder[combatData.currentTurn]);
+
+  return {
+    actionResult,
+    nextActor,
+    combatStatus: combatData.status,
+    round: combatData.round
+  };
+}
+
+async function handleEndCombat(data: any, context: any) {
+  const { combatId, result } = data;
+  
+  const combatDoc = await admin.firestore().collection('combat').doc(combatId).get();
+  if (!combatDoc.exists) {
+    throw new Error('Combat session not found');
+  }
+
+  const combatData = combatDoc.data() as CombatState;
+  
+  // Update combat status
+  await admin.firestore().collection('combat').doc(combatId).update({
+    status: result === 'fled' ? 'fled' : 'completed',
+    lastActivity: Date.now()
+  });
+
+  // Remove combat reference from game session
+  await admin.firestore().collection('games').doc(combatData.gameId).update({
+    currentCombatId: admin.firestore.FieldValue.delete(),
+    lastActivity: Date.now()
+  });
+
+  return { success: true, result };
 } 

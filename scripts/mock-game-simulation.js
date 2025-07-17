@@ -266,6 +266,158 @@ class GameSimulation {
     };
   }
 
+  async simulateEdgeCases() {
+    log('🧪 Phase 8: Edge Case Testing', 'PHASE');
+
+    // 1. Invalid action: attack with no target
+    try {
+      const result = await this.api.callFunction('resolveCombatAction', {
+        combatId: 'invalid-combat-id',
+        action: { actionType: 'attack' }
+      });
+      if (result.status !== 200) {
+        log('✅ Correctly handled invalid combat action (no target)', 'SUCCESS');
+      } else {
+        log('❌ Invalid combat action was accepted (should fail)', 'ERROR');
+      }
+    } catch (e) {
+      log('✅ Exception thrown for invalid combat action (expected)', 'SUCCESS');
+    }
+
+    // 2. Join full campaign
+    try {
+      // Create a campaign with maxPlayers = 1
+      const campaignResult = await this.api.callFunction('createGameSession', {
+        hostId: 'test-user-1',
+        theme: 'Edge Case',
+        customPrompt: 'Testing max party size',
+        maxPlayers: 1
+      });
+      const gameId = campaignResult.data.result?.gameId;
+      const code = campaignResult.data.result?.code;
+      // Join as host (should succeed)
+      await this.api.callFunction('joinGameSession', { code, playerId: 'test-user-1', characterId: 'char-1' });
+      // Try to join as another user (should fail)
+      const joinResult = await this.api.callFunction('joinGameSession', { code, playerId: 'test-user-2', characterId: 'char-2' });
+      if (joinResult.status !== 200) {
+        log('✅ Correctly prevented joining full campaign', 'SUCCESS');
+      } else {
+        log('❌ Allowed joining full campaign (should fail)', 'ERROR');
+      }
+    } catch (e) {
+      log('✅ Exception thrown for joining full campaign (expected)', 'SUCCESS');
+    }
+
+    // 3. Campaign completion without combat
+    try {
+      const campaignResult = await this.api.callFunction('createGameSession', {
+        hostId: 'test-user-1',
+        theme: 'Edge Case',
+        customPrompt: 'Testing campaign completion',
+        maxPlayers: 3
+      });
+      const gameId = campaignResult.data.result?.gameId;
+      const completeResult = await this.api.callFunction('completeCampaign', {
+        gameId,
+        finalState: { score: 100, achievements: ['edge_case'] }
+      });
+      if (completeResult.status === 200) {
+        log('✅ Campaign completed without combat', 'SUCCESS');
+      } else {
+        log('❌ Campaign completion failed', 'ERROR');
+      }
+    } catch (e) {
+      log('❌ Exception during campaign completion', 'ERROR');
+    }
+
+    // 4. Error handling: invalid user
+    try {
+      const result = await this.api.callFunction('getUserCharacters', { userId: 'nonexistent-user' });
+      if (result.status === 200) {
+        log('✅ Handled nonexistent user gracefully', 'SUCCESS');
+      } else {
+        log('❌ Error for nonexistent user', 'ERROR');
+      }
+    } catch (e) {
+      log('✅ Exception thrown for nonexistent user (expected)', 'SUCCESS');
+    }
+  }
+
+  async simulateConcurrentUsers() {
+    log('👥 Phase 9: Concurrent User Simulation', 'PHASE');
+    const NUM_USERS = 5;
+    const userIds = Array.from({ length: NUM_USERS }, (_, i) => `concurrent-user-${i + 1}`);
+    const characterIds = userIds.map((uid, i) => `concurrent-char-${i + 1}`);
+    const campaignResult = await this.api.callFunction('createGameSession', {
+      hostId: userIds[0],
+      theme: 'Concurrent Test',
+      customPrompt: 'Testing concurrent users',
+      maxPlayers: NUM_USERS
+    });
+    const gameId = campaignResult.data.result?.gameId;
+    const code = campaignResult.data.result?.code;
+    // Save characters for each user
+    await Promise.all(userIds.map((uid, i) =>
+      this.api.callFunction('saveCharacter', {
+        userId: uid,
+        name: `ConcurrentUser${i + 1}`,
+        class: 'Rogue',
+        level: 1,
+        health: 50,
+        maxHealth: 50,
+        mana: 20,
+        maxMana: 20,
+        gold: 10,
+        inventory: {},
+        equipment: {},
+        stats: { strength: 10, dexterity: 14, intelligence: 10, charisma: 10 },
+        skills: {},
+        achievements: [],
+        createdAt: Date.now(),
+        lastPlayed: Date.now(),
+        totalPlayTime: 0
+      })
+    ));
+    // All users join the campaign
+    await Promise.all(userIds.map((uid, i) =>
+      this.api.callFunction('joinGameSession', { code, playerId: uid, characterId: characterIds[i] })
+    ));
+    // Start the campaign
+    await this.api.callFunction('startGameSession', { gameId });
+    // Simulate all users sending a message in parallel
+    await Promise.all(userIds.map((uid, i) =>
+      this.api.callFunction('aiDungeonMaster', { gameId, playerInput: `Hello from ${uid}` })
+    ));
+    // Simulate all users taking a combat action in parallel (after starting combat)
+    const combatStart = await this.api.callFunction('startCombat', {
+      gameId,
+      enemies: [
+        { name: 'Test Goblin', health: 10, armorClass: 12, initiative: 10 }
+      ]
+    });
+    const combatId = combatStart.data.result?.combatId;
+    await Promise.all(userIds.map((uid, i) =>
+      this.api.callFunction('resolveCombatAction', {
+        combatId,
+        action: {
+          actionType: 'attack',
+          targetId: 'enemy-0',
+          description: `Attack by ${uid}`
+        }
+      })
+    ));
+    log('✅ Concurrent user simulation completed', 'SUCCESS');
+  }
+
+  async simulateRealtimeMultiplayer() {
+    log('🔄 Phase 10: Real-time Multiplayer Simulation (Stub)', 'PHASE');
+    // TODO: Simulate player presence (join/leave events)
+    // TODO: Simulate live chat (broadcast messages to all users)
+    // TODO: Simulate shared state updates (e.g., map movement, party sync)
+    // This will require backend support for WebSocket or Firebase Realtime DB
+    log('ℹ️ Real-time multiplayer simulation is a stub. Implement when backend is ready.', 'INFO');
+  }
+
   async runFullSimulation() {
     log('🚀 Starting MythSeeker Mock Game Simulation', 'SIMULATION');
     log(`Testing with ${TEST_DATA.users.length} players`, 'SIMULATION');
@@ -296,6 +448,11 @@ class GameSimulation {
       
       // Phase 7: Performance Analysis
       await this.analyzePerformance();
+      
+      // Phase 8: Edge Case Testing
+      await this.simulateEdgeCases();
+      await this.simulateConcurrentUsers();
+      await this.simulateRealtimeMultiplayer();
       
     } catch (error) {
       log(`Simulation failed: ${error.message}`, 'ERROR');
@@ -484,13 +641,72 @@ class GameSimulation {
   async simulateCombat(campaignData) {
     log('⚔️ Phase 4: Combat Testing', 'PHASE');
     
-    // Note: This is a placeholder since combat API doesn't exist yet
-    log('⚠️ Combat API not implemented yet - adding to gaps', 'WARNING');
-    this.results.gaps.push({
-      type: 'combat_system',
-      description: 'No combat API endpoints found',
-      needed: ['startCombat', 'resolveCombatAction', 'getCombatState']
-    });
+    const { gameId } = campaignData;
+    
+    // Test combat system
+    console.log('\n🔪 Testing Combat System...');
+    
+    try {
+      // Start combat
+      const combatStartResult = await this.api.callFunction('startCombat', {
+        gameId: gameId,
+        enemies: [
+          { name: 'Goblin', health: 20, armorClass: 15, initiative: 12 },
+          { name: 'Orc', health: 30, armorClass: 14, initiative: 10 }
+        ]
+      });
+        
+        if (combatStartResult.status === 200) {
+          console.log('✅ Combat started successfully');
+          const combatId = combatStartResult.data.result?.combatId || 'test-combat-id';
+          
+          // Get combat state
+          const combatStateResult = await this.api.callFunction('getCombatState', { combatId });
+          if (combatStateResult.status === 200) {
+            console.log('✅ Combat state retrieved');
+            console.log(`   Round: ${combatStateResult.data.result?.combatState?.round}`);
+            console.log(`   Current actor: ${combatStateResult.data.result?.currentActor?.name}`);
+            console.log(`   Participants: ${combatStateResult.data.result?.combatState?.participants?.length}`);
+          }
+          
+          // Test combat actions
+          const actionResult = await this.api.callFunction('resolveCombatAction', {
+            combatId,
+            action: {
+              actionType: 'attack',
+              targetId: 'enemy-0',
+              description: 'Player attacks the goblin'
+            }
+          });
+          
+          if (actionResult.status === 200) {
+            console.log('✅ Combat action resolved');
+            console.log(`   Action: ${actionResult.data.result?.actionResult?.description}`);
+            console.log(`   Hit: ${actionResult.data.result?.actionResult?.hit}`);
+            if (actionResult.data.result?.actionResult?.damage) {
+              console.log(`   Damage: ${actionResult.data.result?.actionResult?.damage}`);
+            }
+            console.log(`   Next actor: ${actionResult.data.result?.nextActor?.name}`);
+          }
+          
+          // End combat
+          const endCombatResult = await this.api.callFunction('endCombat', {
+            combatId,
+            result: 'victory'
+          });
+          
+          if (endCombatResult.status === 200) {
+            console.log('✅ Combat ended successfully');
+          }
+          
+        } else {
+          console.log('❌ Failed to start combat');
+        }
+      } catch (error) {
+        console.log('❌ Combat system test failed:', error.message);
+      }
+
+    // Test AI Dungeon Master
   }
 
   async simulateMultiplayerInteraction(campaignData) {
@@ -568,6 +784,42 @@ class GameSimulation {
         log(`   ${p.action}: ${p.duration}ms`, 'WARNING');
       });
     }
+    // Fail simulation if any endpoint > 3s
+    const criticalSlow = this.results.performance.filter(p => p.duration > 3000);
+    if (criticalSlow.length > 0) {
+      log('❌ Critical: Some endpoints exceeded 3s!', 'ERROR');
+      this.results.errors += criticalSlow.length;
+      this.results.gaps.push({ type: 'performance', description: 'Critical endpoint latency', endpoints: criticalSlow });
+    }
+  }
+
+  outputJsonReport() {
+    const totalActions = this.results.success + this.results.errors;
+    const successRate = totalActions > 0 ? ((this.results.success / totalActions) * 100).toFixed(1) : '0.0';
+    const report = {
+      timestamp: new Date().toISOString(),
+      success: this.results.success,
+      errors: this.results.errors,
+      successRate: Number(successRate),
+      performance: this.results.performance,
+      gaps: this.results.gaps,
+      recommendations: []
+    };
+    if (this.results.gaps.some(g => g.type === 'combat_system')) {
+      report.recommendations.push('Implement combat system backend API');
+    }
+    if (this.results.gaps.some(g => g.type === 'multiplayer_realtime')) {
+      report.recommendations.push('Add WebSocket/Realtime DB for multiplayer');
+    }
+    if (this.results.performance.some(p => p.duration > 1000)) {
+      report.recommendations.push('Optimize slow API endpoints');
+    }
+    if (this.results.performance.some(p => p.duration > 3000)) {
+      report.recommendations.push('Critical: Some endpoints exceeded 3s!');
+    }
+    const fs = require('fs');
+    fs.writeFileSync('simulation-report.json', JSON.stringify(report, null, 2));
+    log('📄 JSON summary report written to simulation-report.json', 'RESULTS');
   }
 
   printResults() {
@@ -602,6 +854,7 @@ class GameSimulation {
     }
     
     log('\n🎮 MythSeeker is ready for the next phase!', 'SUCCESS');
+    this.outputJsonReport();
   }
 }
 

@@ -38,6 +38,8 @@ import Dashboard from './components/Dashboard';
 import DiceRoller3D from './components/DiceRoller3D';
 import Navigation from './components/Navigation';
 import CharacterSheet from './components/CharacterSheet';
+import CampaignCreator from './components/CampaignCreator';
+import WorldMap from './components/WorldMap';
 
 // Lazy load components
 const NavBar = lazy(() => import('./components/NavBar'));
@@ -6694,6 +6696,7 @@ const PartyPage: React.FC<{ user: any }> = ({ user }) => {
 };
 
 const WorldPage: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
   const [characters, setCharacters] = useState<any[]>([]);
   const [selectedCharacter, setSelectedCharacter] = useState<any>(null);
   const [showWorldMap, setShowWorldMap] = useState(false);
