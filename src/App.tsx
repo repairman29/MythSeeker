@@ -2755,7 +2755,7 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
             <h2 className="text-2xl font-bold text-white mb-6">World Map & Exploration</h2>
             <div className="bg-white/10 rounded-lg p-6 border border-white/20">
               <p className="text-blue-200 mb-4">Interactive world map coming soon!</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-black/20 rounded-lg p-4">
                   <h3 className="text-white font-semibold mb-2">Current Location</h3>
                   <p className="text-blue-200">{worldState?.currentLocation || 'Unknown'}</p>
@@ -3729,7 +3729,8 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }:
               {isStep2Valid && <span className="text-green-400">✓</span>}
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4 class-grid">
-              {classes.map((cls) => (
+              {classes && classes.length > 0 ? (
+                classes.map((cls) => (
                 <div
                   key={cls.name}
                   onClick={() => {
@@ -3782,7 +3783,13 @@ const CharacterCreation = ({ playerName, classes, onCreateCharacter, joinCode }:
                     )}
                   </div>
                 </div>
-              ))}
+              ))
+              ) : (
+                <div className="col-span-2 text-center py-8 text-gray-400">
+                  <div className="animate-spin w-8 h-8 border-4 border-blue-300/30 border-t-blue-400 rounded-full mx-auto mb-4"></div>
+                  <p>Loading character classes...</p>
+                </div>
+              )}
             </div>
             {errors.class && <div className="text-red-400 text-xs mt-1 animate-pulse">{errors.class}</div>}
             {isStep2Valid && !errors.class && (
@@ -5693,12 +5700,42 @@ const CharactersPage: React.FC<{ user: any }> = ({ user }) => {
   
   // Define character classes
   const classes = [
-    { name: 'Warrior', description: 'Mighty fighter with heavy armor and weapons', icon: '⚔️' },
-    { name: 'Mage', description: 'Powerful spellcaster with arcane magic', icon: '🔮' },
-    { name: 'Ranger', description: 'Skilled archer and wilderness expert', icon: '🏹' },
-    { name: 'Cleric', description: 'Divine healer and protector', icon: '⛪' },
-    { name: 'Rogue', description: 'Stealthy assassin and thief', icon: '🗡️' },
-    { name: 'Paladin', description: 'Holy warrior with divine powers', icon: '🛡️' }
+    { 
+      name: 'Warrior', 
+      description: 'Mighty fighter with heavy armor and weapons', 
+      icon: '⚔️',
+      stats: { strength: 16, dexterity: 12, intelligence: 10, charisma: 8 }
+    },
+    { 
+      name: 'Mage', 
+      description: 'Powerful spellcaster with arcane magic', 
+      icon: '🔮',
+      stats: { strength: 8, dexterity: 10, intelligence: 16, charisma: 12 }
+    },
+    { 
+      name: 'Ranger', 
+      description: 'Skilled archer and wilderness expert', 
+      icon: '🏹',
+      stats: { strength: 14, dexterity: 14, intelligence: 10, charisma: 8 }
+    },
+    { 
+      name: 'Cleric', 
+      description: 'Divine healer and protector', 
+      icon: '⛪',
+      stats: { strength: 12, dexterity: 8, intelligence: 12, charisma: 16 }
+    },
+    { 
+      name: 'Rogue', 
+      description: 'Stealthy assassin and thief', 
+      icon: '🗡️',
+      stats: { strength: 10, dexterity: 16, intelligence: 12, charisma: 8 }
+    },
+    { 
+      name: 'Paladin', 
+      description: 'Holy warrior with divine powers', 
+      icon: '🛡️',
+      stats: { strength: 14, dexterity: 10, intelligence: 8, charisma: 14 }
+    }
   ];
 
   useEffect(() => {
