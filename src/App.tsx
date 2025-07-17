@@ -1162,6 +1162,144 @@ Start with a welcoming scene that introduces the magical academy setting and the
     }
   };
 
+  // Real-time multiplayer functions
+  const initializeRealTimeMultiplayer = async (gameId: string) => {
+    if (!character || !playerId) return;
+
+    try {
+      await multiplayerService.initializeGame(gameId, {
+        id: playerId,
+        name: playerName,
+        characterId: character.id
+      });
+
+      // Set up event handlers
+      multiplayerService.onPresenceUpdate((presence) => {
+        const onlinePlayers = Object.values(presence || {}).filter((p: any) => p.isOnline);
+        setOnlinePlayers(onlinePlayers);
+      });
+
+      multiplayerService.onMessageUpdate((messages) => {
+        const messageArray = Object.values(messages || {}).sort((a: any, b: any) => a.timestamp - b.timestamp);
+        setLiveMessages(messageArray);
+      });
+
+      multiplayerService.onStateUpdate((state) => {
+        setSharedState(state);
+      });
+
+      multiplayerService.onEventUpdate((events) => {
+        const eventArray = Object.values(events || {}).sort((a: any, b: any) => a.timestamp - b.timestamp);
+        setMultiplayerEvents(eventArray);
+      });
+
+      setIsConnected(true);
+      console.log('Real-time multiplayer initialized for game:', gameId);
+    } catch (error) {
+      console.error('Error initializing real-time multiplayer:', error);
+    }
+  };
+
+  const sendLiveMessage = async (content: string, type: 'chat' | 'system' | 'combat' | 'movement' = 'chat', metadata?: any) => {
+    if (!multiplayerService.isGameConnected() || !character) return;
+
+    try {
+      await multiplayerService.sendMessage({
+        type,
+        content,
+        playerId: playerId!,
+        playerName: playerName,
+        characterId: character.id,
+        metadata
+      });
+    } catch (error) {
+      console.error('Error sending live message:', error);
+    }
+  };
+
+  const updatePlayerPresence = async (status: 'idle' | 'typing' | 'in-combat' | 'exploring', position?: { x: number; y: number }) => {
+    if (!multiplayerService.isGameConnected()) return;
+
+    try {
+      await multiplayerService.updatePresence(status, position);
+    } catch (error) {
+      console.error('Error updating presence:', error);
+    }
+  };
+
+  const handleTypingStart = async () => {
+    if (!multiplayerService.isGameConnected()) return;
+
+    // Clear existing timeout
+    if (typingTimeout[playerId!]) {
+      clearTimeout(typingTimeout[playerId!]);
+    }
+
+    // Set typing status
+    setIsTyping(prev => ({ ...prev, [playerId!]: true }));
+    await updatePlayerPresence('typing');
+
+    // Set timeout to clear typing status
+    const timeout = setTimeout(async () => {
+      setIsTyping(prev => ({ ...prev, [playerId!]: false }));
+      await updatePlayerPresence('idle');
+    }, 3000);
+
+    setTypingTimeout(prev => ({ ...prev, [playerId!]: timeout }));
+  };
+
+  const handleTypingStop = async () => {
+    if (!multiplayerService.isGameConnected()) return;
+
+    // Clear timeout
+    if (typingTimeout[playerId!]) {
+      clearTimeout(typingTimeout[playerId!]);
+    }
+
+    // Clear typing status
+    setIsTyping(prev => ({ ...prev, [playerId!]: false }));
+    await updatePlayerPresence('idle');
+  };
+
+  const updateSharedGameState = async (updates: Partial<SharedState>) => {
+    if (!multiplayerService.isGameConnected()) return;
+
+    try {
+      await multiplayerService.updateSharedState(updates);
+    } catch (error) {
+      console.error('Error updating shared state:', error);
+    }
+  };
+
+  const broadcastMultiplayerEvent = async (eventType: MultiplayerEvent['type'], data: any) => {
+    if (!multiplayerService.isGameConnected()) return;
+
+    try {
+      await multiplayerService.broadcastEvent({
+        type: eventType,
+        data
+      });
+    } catch (error) {
+      console.error('Error broadcasting event:', error);
+    }
+  };
+
+  const disconnectFromMultiplayer = async () => {
+    try {
+      await multiplayerService.disconnect();
+      setIsConnected(false);
+      setOnlinePlayers([]);
+      setLiveMessages([]);
+      setSharedState(null);
+      setMultiplayerEvents([]);
+      setIsTyping({});
+      Object.values(typingTimeout).forEach(timeout => clearTimeout(timeout));
+      setTypingTimeout({});
+    } catch (error) {
+      console.error('Error disconnecting from multiplayer:', error);
+    }
+  };
+
   // Campaign persistence and management
   const saveCampaign = async (campaign: any) => {
     if (!campaign?.id) {

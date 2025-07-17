@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
 import { getFunctions } from 'firebase/functions';
+import { getAuth } from 'firebase/auth';
 
 // Firebase configuration for mythseekers-rpg project
 const firebaseConfig = {
@@ -18,6 +19,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const database = getDatabase(app);
 export const functions = getFunctions(app);
+export const auth = getAuth(app);
 
 // Production mode - uses real Firebase
 export const useDemoMode = false; 

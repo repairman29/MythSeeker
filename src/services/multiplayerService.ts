@@ -1,498 +1,380 @@
-import { initializeApp } from 'firebase/app';
-import { 
-  getFirestore, 
-  doc, 
-  onSnapshot, 
-  updateDoc, 
-  setDoc, 
-  getDoc,
-  collection,
-  query,
-  where,
-  orderBy,
-  limit,
-  serverTimestamp,
-  Timestamp,
-  getDocs,
-  deleteDoc
-} from 'firebase/firestore';
-import { 
-  getAuth, 
-  onAuthStateChanged, 
-  User as FirebaseUser 
-} from 'firebase/auth';
+import { ref, set, get, onValue, off, push, update, remove, serverTimestamp, onDisconnect } from 'firebase/database';
+import { database } from '../firebase';
+import { auth } from '../firebase';
 
-// Import Firebase services from existing configuration
-import { auth, db } from '../firebaseService';
-
-// Firebase is already initialized in firebaseService.ts
-
-// Types
-export interface Player {
+export interface PlayerPresence {
   id: string;
   name: string;
-  character: any;
-  isHost: boolean;
+  characterId: string;
   isOnline: boolean;
-  lastSeen: Timestamp;
-  status: 'ready' | 'not-ready' | 'in-game' | 'away';
+  lastSeen: number;
+  status: 'idle' | 'typing' | 'in-combat' | 'exploring';
   position?: { x: number; y: number };
-  health?: number;
-  mana?: number;
 }
 
-export interface GameMessage {
+export interface LiveMessage {
   id: string;
-  type: 'player' | 'dm' | 'system';
+  type: 'chat' | 'system' | 'combat' | 'movement';
   content: string;
-  character?: string;
-  playerId?: string;
-  playerName?: string;
-  timestamp: Timestamp;
-  campaignId: string;
+  playerId: string;
+  playerName: string;
+  characterId?: string;
+  timestamp: number;
+  metadata?: any;
 }
 
-export interface MultiplayerGame {
-  id: string;
-  code: string;
-  theme: string;
-  background: string;
-  players: Player[];
-  messages: GameMessage[];
-  systemMessages: any[];
-  started: boolean;
-  status?: 'active' | 'paused' | 'completed';
-  customPrompt: string;
-  isMultiplayer: boolean;
-  maxPlayers: number;
-  createdAt: Timestamp;
-  lastActivity: Timestamp;
-  worldState?: any;
-  currentEnvironment?: string;
-  combatState?: any;
-  participants?: Record<string, boolean>; // Added for Firebase function compatibility
+export interface SharedState {
+  gameId: string;
+  worldState: {
+    currentLocation: string;
+    weather: string;
+    timeOfDay: string;
+    activeNPCs: Array<{ id: string; name: string; position: { x: number; y: number } }>;
+  };
+  partyState: {
+    members: PlayerPresence[];
+    formation: 'scattered' | 'formation' | 'stealth';
+    sharedInventory: Record<string, number>;
+  };
+  combatState?: {
+    isActive: boolean;
+    participants: string[];
+    currentTurn: string;
+    round: number;
+  };
 }
 
-export interface PartyState {
-  players: Player[];
-  campaign: MultiplayerGame | null;
-  isHost: boolean;
-  isConnected: boolean;
-  lastSync: Date | null;
+export interface MultiplayerEvent {
+  type: 'player_joined' | 'player_left' | 'message' | 'state_update' | 'combat_start' | 'combat_end' | 'movement';
+  data: any;
+  timestamp: number;
 }
 
 class MultiplayerService {
-  private unsubscribeFunctions: (() => void)[] = [];
-  private currentUser: FirebaseUser | null = null;
-  private currentCampaignId: string | null = null;
-  private listeners: Map<string, (data: any) => void> = new Map();
-  private isFirebaseAvailable: boolean;
+  private gameId: string | null = null;
+  private playerId: string | null = null;
+  private listeners: { [key: string]: () => void } = {};
+  private presenceRef: any = null;
+  private messagesRef: any = null;
+  private stateRef: any = null;
+  private eventsRef: any = null;
+  private isConnected = false;
 
-  constructor() {
-    this.isFirebaseAvailable = !!(db && auth);
-    if (this.isFirebaseAvailable) {
-      this.initializeAuth();
-    } else {
-      console.warn('MultiplayerService: Firebase not available, using demo mode');
-    }
-  }
+  // Initialize real-time multiplayer for a game session
+  async initializeGame(gameId: string, playerData: { id: string; name: string; characterId: string }): Promise<void> {
+    this.gameId = gameId;
+    this.playerId = playerData.id;
 
-  private initializeAuth() {
-    if (!auth) return;
-    
-    onAuthStateChanged(auth, (user) => {
-      this.currentUser = user;
-      if (user) {
-        console.log('User authenticated:', user.email);
-      } else {
-        console.log('User signed out');
-        this.cleanup();
-      }
-    });
-  }
-
-  // Campaign Management
-  async createCampaign(campaignData: Omit<MultiplayerGame, 'id' | 'createdAt' | 'lastActivity'>): Promise<string> {
-    if (!this.isFirebaseAvailable) {
-      // Fallback: create a demo campaign ID
-      const demoId = 'demo-' + Date.now();
-      console.log('Creating demo campaign:', demoId);
-      return demoId;
-    }
-
-    if (!this.currentUser) throw new Error('User not authenticated');
-    if (!db) throw new Error('Firebase not initialized');
-
-    const campaignRef = doc(collection(db, 'campaigns'));
-    
-    // Create participants object from players array for Firebase function compatibility
-    const participants: Record<string, boolean> = {};
-    if (campaignData.players) {
-      campaignData.players.forEach(player => {
-        if (player.id) {
-          participants[player.id] = true;
-        }
-      });
-    }
-    // Ensure current user is always a participant
-    participants[this.currentUser.uid] = true;
-    
-    const campaign: MultiplayerGame & { participants: Record<string, boolean> } = {
-      ...campaignData,
-      id: campaignRef.id,
-      participants, // Add participants field for Firebase function compatibility
-      createdAt: serverTimestamp() as Timestamp,
-      lastActivity: serverTimestamp() as Timestamp,
-    };
-
-    console.log('Creating campaign with participants:', participants);
-    await setDoc(campaignRef, campaign);
-    return campaignRef.id;
-  }
-
-  async joinCampaign(campaignCode: string, playerData: Omit<Player, 'id' | 'lastSeen'>): Promise<string> {
-    if (!this.currentUser) throw new Error('User not authenticated');
-
-    // Find campaign by code
-    const campaignsRef = collection(db, 'campaigns');
-    const q = query(campaignsRef, where('code', '==', campaignCode.toUpperCase()));
-    
-    // For now, we'll create a new campaign if none exists (for demo purposes)
-    // In production, you'd want to search existing campaigns
-    const campaignRef = doc(collection(db, 'campaigns'));
-    const campaign: MultiplayerGame = {
-      id: campaignRef.id,
-      code: campaignCode.toUpperCase(),
-      theme: 'Classic Fantasy',
-      background: 'fantasy',
-      players: [{
-        ...playerData,
-        id: this.currentUser.uid,
-        lastSeen: serverTimestamp() as Timestamp,
-      }],
-      messages: [],
-      systemMessages: [],
-      started: false,
-      customPrompt: '',
-      isMultiplayer: true,
-      maxPlayers: 6,
-      createdAt: serverTimestamp() as Timestamp,
-      lastActivity: serverTimestamp() as Timestamp,
-      participants: {}, // Initialize participants for new campaign
-    };
-
-    await setDoc(campaignRef, campaign);
-    return campaignRef.id;
-  }
-
-  // Real-time Campaign Subscription
-  subscribeToCampaign(campaignId: string, callback: (campaign: MultiplayerGame) => void): () => void {
-    if (!this.isFirebaseAvailable) {
-      // Fallback: return a no-op unsubscribe function
-      console.log('Firebase not available, skipping campaign subscription');
-      return () => {};
-    }
-
-    if (this.currentCampaignId === campaignId) {
-      return () => {}; // Already subscribed
-    }
-
-    if (!db) {
-      console.error('Firebase not initialized');
-      return () => {};
-    }
-
-    this.currentCampaignId = campaignId;
-    const campaignRef = doc(db, 'campaigns', campaignId);
-
-    const unsubscribe = onSnapshot(campaignRef, (doc) => {
-      if (doc.exists()) {
-        const campaign = { id: doc.id, ...doc.data() } as MultiplayerGame;
-        callback(campaign);
-      }
-    }, (error) => {
-      console.error('Error subscribing to campaign:', error);
-    });
-
-    this.unsubscribeFunctions.push(unsubscribe);
-    return unsubscribe;
-  }
-
-  // Send message to campaign
-  async sendMessage(campaignId: string, messageData: Omit<GameMessage, 'id' | 'timestamp' | 'campaignId'>): Promise<void> {
-    if (!this.isFirebaseAvailable) {
-      // Fallback: just log the message
-      console.log('Demo mode - message would be sent:', messageData);
-      return;
-    }
-
-    if (!this.currentUser) throw new Error('User not authenticated');
-    if (!db) throw new Error('Firebase not initialized');
-
-    const message: GameMessage = {
-      ...messageData,
-      id: Date.now().toString(),
-      timestamp: serverTimestamp() as Timestamp,
-      campaignId,
-    };
-
-    const campaignRef = doc(db, 'campaigns', campaignId);
-    const currentMessages = await this.getCampaignMessages(campaignId);
-    await updateDoc(campaignRef, {
-      messages: [...currentMessages, message],
-      lastActivity: serverTimestamp(),
-    });
-  }
-
-  // Player Management
-  async updatePlayerStatus(campaignId: string, status: Player['status'], position?: { x: number; y: number }): Promise<void> {
-    if (!this.currentUser) throw new Error('User not authenticated');
-
-    const campaignRef = doc(db, 'campaigns', campaignId);
-    const playerUpdate: Partial<Player> = {
+    // Set up presence tracking
+    this.presenceRef = ref(database, `games/${gameId}/presence/${playerData.id}`);
+    await set(this.presenceRef, {
+      id: playerData.id,
+      name: playerData.name,
+      characterId: playerData.characterId,
       isOnline: true,
-      lastSeen: serverTimestamp() as Timestamp,
+      lastSeen: Date.now(),
+      status: 'idle'
+    });
+
+    // Set up disconnect cleanup
+    const disconnectRef = ref(database, `games/${gameId}/presence/${playerData.id}`);
+    await onDisconnect(disconnectRef).update({
+      isOnline: false,
+      lastSeen: Date.now()
+    });
+
+    // Set up real-time listeners
+    this.setupRealtimeListeners();
+    this.isConnected = true;
+  }
+
+  private setupRealtimeListeners(): void {
+    if (!this.gameId) return;
+
+    // Listen for player presence changes
+    const presenceRef = ref(database, `games/${this.gameId}/presence`);
+    this.listeners.presence = onValue(presenceRef, (snapshot) => {
+      const presence = snapshot.val();
+      this.handlePresenceUpdate(presence);
+    });
+
+    // Listen for live messages
+    const messagesRef = ref(database, `games/${this.gameId}/messages`);
+    this.listeners.messages = onValue(messagesRef, (snapshot) => {
+      const messages = snapshot.val();
+      this.handleMessageUpdate(messages);
+    });
+
+    // Listen for shared state changes
+    const stateRef = ref(database, `games/${this.gameId}/sharedState`);
+    this.listeners.state = onValue(stateRef, (snapshot) => {
+      const state = snapshot.val();
+      this.handleStateUpdate(state);
+    });
+
+    // Listen for multiplayer events
+    const eventsRef = ref(database, `games/${this.gameId}/events`);
+    this.listeners.events = onValue(eventsRef, (snapshot) => {
+      const events = snapshot.val();
+      this.handleEventUpdate(events);
+    });
+  }
+
+  // Send a live message to all players
+  async sendMessage(message: Omit<LiveMessage, 'id' | 'timestamp'>): Promise<void> {
+    if (!this.gameId || !this.isConnected) return;
+
+    const messageRef = ref(database, `games/${this.gameId}/messages`);
+    const newMessageRef = push(messageRef);
+    
+    await set(newMessageRef, {
+      ...message,
+      id: newMessageRef.key,
+      timestamp: Date.now()
+    });
+  }
+
+  // Update player presence status
+  async updatePresence(status: PlayerPresence['status'], position?: { x: number; y: number }): Promise<void> {
+    if (!this.gameId || !this.playerId || !this.isConnected) return;
+
+    const updates: any = {
       status,
+      lastSeen: Date.now()
     };
 
     if (position) {
-      playerUpdate.position = position;
+      updates.position = position;
     }
 
-    await updateDoc(campaignRef, {
-      [`players.${this.currentUser.uid}`]: playerUpdate,
-      lastActivity: serverTimestamp(),
+    await update(ref(database, `games/${this.gameId}/presence/${this.playerId}`), updates);
+  }
+
+  // Update shared game state
+  async updateSharedState(updates: Partial<SharedState>): Promise<void> {
+    if (!this.gameId || !this.isConnected) return;
+
+    const stateRef = ref(database, `games/${this.gameId}/sharedState`);
+    await update(stateRef, {
+      ...updates,
+      lastUpdated: Date.now()
     });
   }
 
-  async addPlayerToCampaign(campaignId: string, playerData: Omit<Player, 'id' | 'lastSeen'>): Promise<void> {
-    if (!this.currentUser) throw new Error('User not authenticated');
+  // Broadcast a multiplayer event
+  async broadcastEvent(event: Omit<MultiplayerEvent, 'timestamp'>): Promise<void> {
+    if (!this.gameId || !this.isConnected) return;
 
-    const campaignRef = doc(db, 'campaigns', campaignId);
-    const player: Player = {
-      ...playerData,
-      id: this.currentUser.uid,
-      lastSeen: serverTimestamp() as Timestamp,
-    };
-
-    await updateDoc(campaignRef, {
-      [`players.${this.currentUser.uid}`]: player,
-      lastActivity: serverTimestamp(),
-    });
-  }
-
-  async removePlayerFromCampaign(campaignId: string): Promise<void> {
-    if (!this.currentUser) throw new Error('User not authenticated');
-
-    const campaignRef = doc(db, 'campaigns', campaignId);
-    await updateDoc(campaignRef, {
-      [`players.${this.currentUser.uid}`]: null,
-      lastActivity: serverTimestamp(),
-    });
-  }
-
-
-
-  private async getCampaignMessages(campaignId: string): Promise<GameMessage[]> {
-    const campaignRef = doc(db, 'campaigns', campaignId);
-    const campaignDoc = await getDoc(campaignRef);
-    return campaignDoc.data()?.messages || [];
-  }
-
-  // Campaign State Management
-  async updateCampaignState(campaignId: string, updates: Partial<MultiplayerGame>): Promise<void> {
-    if (!this.currentUser) throw new Error('User not authenticated');
-    if (!db) throw new Error('Firebase not initialized');
+    const eventRef = ref(database, `games/${this.gameId}/events`);
+    const newEventRef = push(eventRef);
     
-    console.log('Updating campaign state:', campaignId, updates);
+    await set(newEventRef, {
+      ...event,
+      timestamp: Date.now()
+    });
+  }
 
-    try {
-      const campaignRef = doc(db, 'campaigns', campaignId);
-      
-      // First check if the campaign exists
-      const campaignDoc = await getDoc(campaignRef);
-      if (!campaignDoc.exists()) {
-        throw new Error(`Campaign ${campaignId} does not exist in Firestore`);
+  // Start combat and notify all players
+  async startCombat(combatData: any): Promise<void> {
+    if (!this.gameId || !this.isConnected) return;
+
+    // Update shared state
+    await this.updateSharedState({
+      combatState: {
+        isActive: true,
+        participants: combatData.participants,
+        currentTurn: combatData.currentTurn,
+        round: 1
       }
-      
-      // Prepare the update data
-      const updateData = {
-        ...updates,
-        lastActivity: serverTimestamp(),
-      };
-      
-      console.log('Sending update to Firestore:', updateData);
-      await updateDoc(campaignRef, updateData);
-      console.log('Campaign state updated successfully');
-    } catch (error) {
-      console.error('Error updating campaign state:', error);
-      throw error;
+    });
+
+    // Broadcast combat start event
+    await this.broadcastEvent({
+      type: 'combat_start',
+      data: combatData
+    });
+
+    // Update presence for all participants
+    for (const participantId of combatData.participants) {
+      await update(ref(database, `games/${this.gameId}/presence/${participantId}`), {
+        status: 'in-combat',
+        lastSeen: Date.now()
+      });
     }
   }
 
-  async startCampaign(campaignId: string): Promise<void> {
-    await this.updateCampaignState(campaignId, { started: true });
-  }
+  // End combat and notify all players
+  async endCombat(result: any): Promise<void> {
+    if (!this.gameId || !this.isConnected) return;
 
-  async endCampaign(campaignId: string): Promise<void> {
-    await this.updateCampaignState(campaignId, { started: false });
-  }
+    // Update shared state
+    await this.updateSharedState({
+      combatState: {
+        isActive: false,
+        participants: [],
+        currentTurn: null as any,
+        round: 0
+      }
+    });
 
-  // World State Synchronization
-  async updateWorldState(campaignId: string, worldState: any): Promise<void> {
-    await this.updateCampaignState(campaignId, { worldState });
-  }
+    // Broadcast combat end event
+    await this.broadcastEvent({
+      type: 'combat_end',
+      data: result
+    });
 
-  async updateEnvironment(campaignId: string, environment: string): Promise<void> {
-    await this.updateCampaignState(campaignId, { currentEnvironment: environment });
-  }
-
-  // Combat State Management
-  async updateCombatState(campaignId: string, combatState: any): Promise<void> {
-    await this.updateCampaignState(campaignId, { combatState });
-  }
-
-  // Utility Methods
-  isHost(campaign: MultiplayerGame): boolean {
-    if (!this.currentUser || !campaign.players || !Array.isArray(campaign.players)) return false;
-    return campaign.players.find(p => p.id === this.currentUser?.uid)?.isHost || false;
-  }
-
-  getCurrentPlayer(campaign: MultiplayerGame): Player | undefined {
-    if (!this.currentUser || !campaign.players || !Array.isArray(campaign.players)) return undefined;
-    return campaign.players.find(p => p.id === this.currentUser?.uid);
-  }
-
-  getOnlinePlayers(campaign: MultiplayerGame): Player[] {
-    if (!campaign.players || !Array.isArray(campaign.players)) return [];
-    return campaign.players.filter(p => p.isOnline);
-  }
-
-  // Campaign Management
-  async getUserCampaigns(): Promise<MultiplayerGame[]> {
-    if (!this.isFirebaseAvailable || !this.currentUser) {
-      return [];
-    }
-
-    if (!db) {
-      console.error('Firebase not initialized');
-      return [];
-    }
-
-    try {
-      const campaignsRef = collection(db, 'campaigns');
-      // Get all campaigns and filter in memory since array-contains doesn't work with complex objects
-      const q = query(campaignsRef);
+    // Reset presence for all players
+    const presenceRef = ref(database, `games/${this.gameId}/presence`);
+    const snapshot = await get(presenceRef);
+    if (snapshot.exists()) {
+      const presence = snapshot.val();
+      const updates: any = {};
       
-      const querySnapshot = await getDocs(q);
-      const campaigns: MultiplayerGame[] = [];
-      
-      querySnapshot.forEach((doc) => {
-        const campaignData = { id: doc.id, ...doc.data() } as MultiplayerGame;
-        // Check if current user is in the campaign
-        if (campaignData.players && Array.isArray(campaignData.players)) {
-          const isInCampaign = campaignData.players.some(player => player.id === this.currentUser?.uid);
-          if (isInCampaign) {
-            campaigns.push(campaignData);
-          }
-        }
+      Object.keys(presence).forEach(playerId => {
+        updates[`${playerId}/status`] = 'idle';
+        updates[`${playerId}/lastSeen`] = Date.now();
       });
       
-      return campaigns;
-    } catch (error) {
-      console.error('Error getting user campaigns:', error);
-      return [];
+      await update(presenceRef, updates);
     }
   }
 
-  async getCampaign(campaignId: string): Promise<MultiplayerGame | null> {
-    if (!this.isFirebaseAvailable) {
-      return null;
-    }
+  // Handle player movement and sync with other players
+  async updatePlayerPosition(position: { x: number; y: number }): Promise<void> {
+    if (!this.gameId || !this.playerId || !this.isConnected) return;
 
-    if (!db) {
-      console.error('Firebase not initialized');
-      return null;
-    }
+    // Update presence with new position
+    await this.updatePresence('exploring', position);
 
-    try {
-      const campaignRef = doc(db, 'campaigns', campaignId);
-      const campaignDoc = await getDoc(campaignRef);
-      
-      if (campaignDoc.exists()) {
-        return { id: campaignDoc.id, ...campaignDoc.data() } as MultiplayerGame;
+    // Broadcast movement event
+    await this.broadcastEvent({
+      type: 'movement',
+      data: {
+        playerId: this.playerId,
+        position,
+        timestamp: Date.now()
       }
-      
-      return null;
-    } catch (error) {
-      console.error('Error getting campaign:', error);
-      return null;
-    }
+    });
   }
 
-  async deleteCampaign(campaignId: string): Promise<void> {
-    if (!this.isFirebaseAvailable) {
-      console.warn('Firebase not available, skipping Firebase deletion');
-      return; // Don't throw error, just skip Firebase deletion
-    }
+  // Get current online players
+  async getOnlinePlayers(): Promise<PlayerPresence[]> {
+    if (!this.gameId) return [];
 
-    if (!this.currentUser) {
-      throw new Error('User not authenticated');
-    }
+    const presenceRef = ref(database, `games/${this.gameId}/presence`);
+    const snapshot = await get(presenceRef);
+    
+    if (!snapshot.exists()) return [];
 
-    if (!db) {
-      console.warn('Firebase not initialized, skipping Firebase deletion');
-      return; // Don't throw error, just skip Firebase deletion
-    }
-
-    try {
-      // Check if user is host of the campaign
-      const campaign = await this.getCampaign(campaignId);
-      if (!campaign) {
-        console.warn('Campaign not found in Firebase, may have been deleted already');
-        return; // Don't throw error if campaign doesn't exist
-      }
-      
-      if (!this.isHost(campaign)) {
-        throw new Error('Only the campaign host can delete the campaign');
-      }
-
-      const campaignRef = doc(db, 'campaigns', campaignId);
-      await deleteDoc(campaignRef);
-      console.log('Campaign deleted from Firebase:', campaignId);
-    } catch (error) {
-      console.error('Error deleting campaign from Firebase:', error);
-      throw error;
-    }
+    const presence = snapshot.val();
+    return Object.values(presence).filter((player: any) => player.isOnline) as PlayerPresence[];
   }
 
-  // Cleanup
-  cleanup(): void {
-    this.unsubscribeFunctions.forEach(unsubscribe => unsubscribe());
-    this.unsubscribeFunctions = [];
-    this.currentCampaignId = null;
-    this.listeners.clear();
+  // Get recent messages
+  async getRecentMessages(limit: number = 50): Promise<LiveMessage[]> {
+    if (!this.gameId) return [];
+
+    const messagesRef = ref(database, `games/${this.gameId}/messages`);
+    const snapshot = await get(messagesRef);
+    
+    if (!snapshot.exists()) return [];
+
+    const messages = snapshot.val();
+    const messageArray = Object.values(messages) as LiveMessage[];
+    
+    return messageArray
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, limit);
   }
 
-  // Heartbeat to keep players online
-  startHeartbeat(campaignId: string): () => void {
-    if (!this.isFirebaseAvailable) {
-      // Fallback: return a no-op cleanup function
-      console.log('Firebase not available, skipping heartbeat');
-      return () => {};
-    }
+  // Get current shared state
+  async getSharedState(): Promise<SharedState | null> {
+    if (!this.gameId) return null;
 
-    const interval = setInterval(async () => {
-      try {
-        await this.updatePlayerStatus(campaignId, 'in-game');
-      } catch (error) {
-        console.error('Heartbeat error:', error);
+    const stateRef = ref(database, `games/${this.gameId}/sharedState`);
+    const snapshot = await get(stateRef);
+    
+    if (!snapshot.exists()) return null;
+
+    return snapshot.val();
+  }
+
+  // Event handlers (to be overridden by components)
+  private handlePresenceUpdate(presence: any): void {
+    // Override in components that need presence updates
+    console.log('Presence update:', presence);
+  }
+
+  private handleMessageUpdate(messages: any): void {
+    // Override in components that need message updates
+    console.log('Message update:', messages);
+  }
+
+  private handleStateUpdate(state: any): void {
+    // Override in components that need state updates
+    console.log('State update:', state);
+  }
+
+  private handleEventUpdate(events: any): void {
+    // Override in components that need event updates
+    console.log('Event update:', events);
+  }
+
+  // Set up event handlers
+  onPresenceUpdate(callback: (presence: any) => void): void {
+    this.handlePresenceUpdate = callback;
+  }
+
+  onMessageUpdate(callback: (messages: any) => void): void {
+    this.handleMessageUpdate = callback;
+  }
+
+  onStateUpdate(callback: (state: any) => void): void {
+    this.handleStateUpdate = callback;
+  }
+
+  onEventUpdate(callback: (events: any) => void): void {
+    this.handleEventUpdate = callback;
+  }
+
+  // Cleanup and disconnect
+  async disconnect(): Promise<void> {
+    if (!this.gameId || !this.playerId) return;
+
+    // Mark player as offline
+    await update(ref(database, `games/${this.gameId}/presence/${this.playerId}`), {
+      isOnline: false,
+      lastSeen: Date.now()
+    });
+
+    // Remove all listeners
+    Object.values(this.listeners).forEach(unsubscribe => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
       }
-    }, 30000); // Every 30 seconds
+    });
 
-    return () => clearInterval(interval);
+    this.listeners = {};
+    this.isConnected = false;
+    this.gameId = null;
+    this.playerId = null;
+  }
+
+  // Check connection status
+  isGameConnected(): boolean {
+    return this.isConnected && this.gameId !== null;
+  }
+
+  // Get current game ID
+  getCurrentGameId(): string | null {
+    return this.gameId;
+  }
+
+  // Get current player ID
+  getCurrentPlayerId(): string | null {
+    return this.playerId;
   }
 }
 
-export const multiplayerService = new MultiplayerService();
-export default multiplayerService; 
+// Export singleton instance
+export const multiplayerService = new MultiplayerService(); 
