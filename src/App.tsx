@@ -3210,9 +3210,34 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                 <p className="text-white">Welcome back, {currentUser?.displayName}!</p>
                 <Tooltip content="Continue your adventure with existing characters" ariaLabel="Continue adventure">
                   <button
-                    onClick={() => {
-                      setCurrentScreen('character-select');
-                      navigate('/characters');
+                    onClick={async () => {
+                      try {
+                        // Load user's campaigns first
+                        await loadCampaigns();
+                        if (campaigns && campaigns.length > 0) {
+                          // Find the most recent active campaign
+                          const activeCampaign = campaigns.find(c => c.status === 'active') || campaigns[0];
+                          if (activeCampaign) {
+                            // Load the campaign and navigate to game
+                            setCurrentCampaign(activeCampaign);
+                            setCurrentScreen('game');
+                            navigate('/game', { state: { campaignId: activeCampaign.id } });
+                          } else {
+                            // No active campaign, go to character selection
+                            setCurrentScreen('character-select');
+                            navigate('/characters');
+                          }
+                        } else {
+                          // No campaigns, go to character selection
+                          setCurrentScreen('character-select');
+                          navigate('/characters');
+                        }
+                      } catch (error) {
+                        console.error('Error loading campaigns:', error);
+                        // Fallback to character selection
+                        setCurrentScreen('character-select');
+                        navigate('/characters');
+                      }
                     }}
                     className="w-full px-6 py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all"
                     aria-label="Continue your adventure with existing characters"
@@ -4768,7 +4793,7 @@ const GameWrapper: React.FC<{ user: any }> = ({ user }) => {
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
       <div className="flex-1 overflow-hidden">
-        <AIDungeonMaster />
+        <AIDungeonMaster initialScreen="game" />
       </div>
     </div>
   );
