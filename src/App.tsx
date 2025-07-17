@@ -5178,36 +5178,249 @@ const CharactersPage: React.FC<{ user: any }> = ({ user }) => {
 };
 
 const PartyPage: React.FC<{ user: any }> = ({ user }) => {
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [activeParty, setActiveParty] = useState<any>(null);
+  const [partyInvitations, setPartyInvitations] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+
+  useEffect(() => {
+    const loadPartyData = async () => {
+      try {
+        // Load user's campaigns (parties)
+        const userCampaigns = await firebaseService.getUserCampaigns(user.uid);
+        setCampaigns(userCampaigns || []);
+        
+        // Load user's characters
+        const userCharacters = await firebaseService.getUserCharacters(user.uid);
+        setCharacters(userCharacters || []);
+        
+        // Find active party (campaign with multiple players)
+        const active = userCampaigns?.find(c => c.isMultiplayer && c.players?.length > 1);
+        setActiveParty(active);
+        
+        // Load party invitations from localStorage (simulated)
+        const invitations = JSON.parse(localStorage.getItem('mythseeker_party_invitations') || '[]');
+        setPartyInvitations(invitations);
+      } catch (error) {
+        console.error('Error loading party data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadPartyData();
+  }, [user.uid]);
+
+  const handleJoinParty = async () => {
+    if (!joinCode.trim()) return;
+    
+    try {
+      await multiplayerService.joinCampaign(joinCode);
+      setShowJoinModal(false);
+      setJoinCode('');
+      // Refresh data
+      const userCampaigns = await firebaseService.getUserCampaigns(user.uid);
+      setCampaigns(userCampaigns || []);
+    } catch (error) {
+      console.error('Error joining party:', error);
+      alert('Failed to join party. Please check the code and try again.');
+    }
+  };
+
+  const handleCreateParty = () => {
+    navigate('/campaigns');
+  };
+
+  const handleInviteToParty = (campaign: any) => {
+    const inviteCode = campaign.code || 'INVITE123';
+    navigator.clipboard.writeText(inviteCode);
+    alert(`Invite code copied: ${inviteCode}`);
+  };
+
+  const handleAcceptInvitation = (invitation: any) => {
+    setJoinCode(invitation.code);
+    setShowJoinModal(true);
+  };
+
+  const handleDeclineInvitation = (invitationId: string) => {
+    setPartyInvitations(prev => prev.filter(inv => inv.id !== invitationId));
+    localStorage.setItem('mythseeker_party_invitations', JSON.stringify(partyInvitations.filter(inv => inv.id !== invitationId)));
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-8 h-8 border-4 border-blue-300/30 border-t-blue-400 rounded-full animate-spin mx-auto"></div>
+          <p className="text-blue-200">Loading party data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 p-6 overflow-y-auto">
       <div className="max-w-6xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Party</h1>
-          <p className="text-blue-200">Team up with friends and coordinate adventures</p>
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">Party</h1>
+            <p className="text-blue-200">Team up with friends and coordinate adventures</p>
+          </div>
+          <div className="flex space-x-3">
+            <button 
+              onClick={() => setShowJoinModal(true)}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            >
+              Join Party
+            </button>
+            <button 
+              onClick={handleCreateParty}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            >
+              Create Party
+            </button>
+          </div>
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Active Party */}
           <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
             <h3 className="text-xl font-semibold text-white mb-4">Active Party</h3>
-            <div className="text-center py-8">
-              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Users className="w-8 h-8 text-slate-400" />
+            {activeParty ? (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h4 className="text-white font-medium">{activeParty.theme || 'Adventure Party'}</h4>
+                    <p className="text-blue-200 text-sm">{activeParty.players?.length || 0} members</p>
+                  </div>
+                  <button 
+                    onClick={() => handleInviteToParty(activeParty)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                  >
+                    Invite
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {activeParty.players?.map((player: any, index: number) => (
+                    <div key={index} className="flex items-center space-x-3 p-2 bg-slate-700/30 rounded">
+                      <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                        <span className="text-white text-sm font-bold">{player.name?.charAt(0)}</span>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-white text-sm font-medium">{player.name}</p>
+                        <p className="text-blue-200 text-xs">{player.character?.class || 'Adventurer'}</p>
+                      </div>
+                      <div className={`w-2 h-2 rounded-full ${
+                        player.isOnline ? 'bg-green-400' : 'bg-slate-400'
+                      }`}></div>
+                    </div>
+                  ))}
+                </div>
+                <button 
+                  onClick={() => navigate(`/campaigns/${activeParty.id}`)}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors"
+                >
+                  Join Adventure
+                </button>
               </div>
-              <p className="text-blue-200">No active party</p>
-              <p className="text-slate-400 text-sm">Join or create a party to start playing together</p>
-            </div>
+            ) : (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Users className="w-8 h-8 text-slate-400" />
+                </div>
+                <p className="text-blue-200 mb-2">No active party</p>
+                <p className="text-slate-400 text-sm mb-4">Join or create a party to start playing together</p>
+                <button 
+                  onClick={handleCreateParty}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors"
+                >
+                  Create Party
+                </button>
+              </div>
+            )}
           </div>
           
+          {/* Party Invitations */}
           <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
             <h3 className="text-xl font-semibold text-white mb-4">Party Invitations</h3>
-            <div className="text-center py-8">
-              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <User className="w-8 h-8 text-slate-400" />
+            {partyInvitations.length > 0 ? (
+              <div className="space-y-3">
+                {partyInvitations.map((invitation) => (
+                  <div key={invitation.id} className="p-3 bg-slate-700/30 rounded">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <p className="text-white font-medium">{invitation.hostName}</p>
+                        <p className="text-blue-200 text-sm">{invitation.campaignName}</p>
+                      </div>
+                      <span className="text-slate-400 text-xs">
+                        {new Date(invitation.timestamp).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button 
+                        onClick={() => handleAcceptInvitation(invitation)}
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                      >
+                        Accept
+                      </button>
+                      <button 
+                        onClick={() => handleDeclineInvitation(invitation.id)}
+                        className="flex-1 bg-slate-600 hover:bg-slate-500 text-white px-3 py-1 rounded text-sm transition-colors"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <p className="text-blue-200">No pending invitations</p>
-            </div>
+            ) : (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <User className="w-8 h-8 text-slate-400" />
+                </div>
+                <p className="text-blue-200">No pending invitations</p>
+                <p className="text-slate-400 text-sm">Ask friends to send you party invitations</p>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Join Party Modal */}
+        {showJoinModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-800 rounded-lg p-6 max-w-md w-full border border-slate-700">
+              <h3 className="text-xl font-semibold text-white mb-4">Join Party</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-blue-200 text-sm mb-2">Party Code</label>
+                  <input
+                    type="text"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value)}
+                    placeholder="Enter party invitation code"
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex space-x-3">
+                  <button 
+                    onClick={handleJoinParty}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors"
+                  >
+                    Join
+                  </button>
+                  <button 
+                    onClick={() => setShowJoinModal(false)}
+                    className="flex-1 bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -5546,6 +5759,97 @@ const CombatPage: React.FC<{ user: any }> = ({ user }) => {
 };
 
 const MagicPage: React.FC<{ user: any }> = ({ user }) => {
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [selectedCharacter, setSelectedCharacter] = useState<any>(null);
+  const [spells, setSpells] = useState<any[]>([]);
+  const [knownSpells, setKnownSpells] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadMagicData = async () => {
+      try {
+        // Load user's characters
+        const userCharacters = await firebaseService.getUserCharacters(user.uid);
+        setCharacters(userCharacters || []);
+        
+        // Load spells from data
+        const spellsData = JSON.parse(localStorage.getItem('mythseeker_spells') || '[]');
+        if (spellsData.length === 0) {
+          // Initialize with default spells
+          const defaultSpells = [
+            { id: '1', name: 'Fireball', level: 3, school: 'Evocation', description: 'A bright streak flashes from your pointing finger to a point you choose within range and then blossoms with a low roar into an explosion of flame.' },
+            { id: '2', name: 'Magic Missile', level: 1, school: 'Evocation', description: 'You create three glowing darts of magical force. Each dart hits a creature of your choice that you can see within range.' },
+            { id: '3', name: 'Cure Wounds', level: 1, school: 'Evocation', description: 'A creature you touch regains a number of hit points equal to 1d8 + your spellcasting ability modifier.' },
+            { id: '4', name: 'Invisibility', level: 2, school: 'Illusion', description: 'A creature you touch and everything it is wearing and carrying becomes invisible until the spell ends.' },
+            { id: '5', name: 'Lightning Bolt', level: 3, school: 'Evocation', description: 'A stroke of lightning forming a line of 100 feet long and 5 feet wide blasts out from you in a direction you choose.' },
+            { id: '6', name: 'Teleport', level: 7, school: 'Conjuration', description: 'This spell instantly transports you and up to eight willing creatures of your choice that you can see within range.' }
+          ];
+          setSpells(defaultSpells);
+          localStorage.setItem('mythseeker_spells', JSON.stringify(defaultSpells));
+        } else {
+          setSpells(spellsData);
+        }
+        
+        // Load known spells from localStorage
+        const known = JSON.parse(localStorage.getItem('mythseeker_known_spells') || '[]');
+        setKnownSpells(known);
+      } catch (error) {
+        console.error('Error loading magic data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadMagicData();
+  }, [user.uid]);
+
+  const handleLearnSpell = (spell: any) => {
+    if (!selectedCharacter) {
+      alert('Please select a character first');
+      return;
+    }
+    
+    const newKnownSpell = {
+      ...spell,
+      characterId: selectedCharacter.id,
+      learnedAt: new Date().toISOString()
+    };
+    
+    const updatedKnownSpells = [...knownSpells, newKnownSpell];
+    setKnownSpells(updatedKnownSpells);
+    localStorage.setItem('mythseeker_known_spells', JSON.stringify(updatedKnownSpells));
+  };
+
+  const handleForgetSpell = (spellId: string) => {
+    const updatedKnownSpells = knownSpells.filter(s => s.id !== spellId);
+    setKnownSpells(updatedKnownSpells);
+    localStorage.setItem('mythseeker_known_spells', JSON.stringify(updatedKnownSpells));
+  };
+
+  const getSpellSchoolColor = (school: string) => {
+    const colors: { [key: string]: string } = {
+      'Evocation': 'from-red-500 to-pink-500',
+      'Illusion': 'from-purple-500 to-indigo-500',
+      'Conjuration': 'from-blue-500 to-cyan-500',
+      'Abjuration': 'from-green-500 to-emerald-500',
+      'Transmutation': 'from-yellow-500 to-orange-500',
+      'Divination': 'from-indigo-500 to-purple-500',
+      'Enchantment': 'from-pink-500 to-rose-500',
+      'Necromancy': 'from-gray-500 to-slate-500'
+    };
+    return colors[school] || 'from-slate-500 to-gray-500';
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-8 h-8 border-4 border-blue-300/30 border-t-blue-400 rounded-full animate-spin mx-auto"></div>
+          <p className="text-blue-200">Loading magic system...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 p-6 overflow-y-auto">
       <div className="max-w-6xl mx-auto">
@@ -5555,28 +5859,148 @@ const MagicPage: React.FC<{ user: any }> = ({ user }) => {
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Spell Library */}
           <div className="lg:col-span-2 bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
             <h3 className="text-xl font-semibold text-white mb-4">Spell Library</h3>
-            <div className="text-center py-8">
-              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Swords className="w-8 h-8 text-slate-400" />
+            {characters.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <User className="w-8 h-8 text-slate-400" />
+                </div>
+                <p className="text-blue-200 mb-4">No characters available</p>
+                <button 
+                  onClick={() => navigate('/characters')}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors"
+                >
+                  Create Character
+                </button>
               </div>
-              <p className="text-blue-200">Browse and learn spells</p>
-              <button className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors">
-                Explore Spells
-              </button>
-            </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="mb-4">
+                  <label className="block text-blue-200 text-sm mb-2">Select Character</label>
+                  <select 
+                    value={selectedCharacter?.id || ''}
+                    onChange={(e) => {
+                      const char = characters.find(c => c.id === e.target.value);
+                      setSelectedCharacter(char);
+                    }}
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white"
+                  >
+                    <option value="">Choose a character...</option>
+                    {characters.map((character) => (
+                      <option key={character.id} value={character.id}>
+                        {character.name} - Level {character.level || 1}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
+                  {spells.map((spell) => {
+                    const isKnown = knownSpells.some(s => s.id === spell.id && s.characterId === selectedCharacter?.id);
+                    
+                    return (
+                      <div key={spell.id} className="p-4 bg-slate-700/30 rounded-lg border border-slate-600">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <h4 className="text-white font-medium">{spell.name}</h4>
+                            <p className="text-blue-200 text-sm">Level {spell.level} • {spell.school}</p>
+                          </div>
+                          <div className={`w-8 h-8 bg-gradient-to-br ${getSpellSchoolColor(spell.school)} rounded-full flex items-center justify-center`}>
+                            <Swords className="w-4 h-4 text-white" />
+                          </div>
+                        </div>
+                        <p className="text-slate-300 text-xs mb-3 line-clamp-2">{spell.description}</p>
+                        <button 
+                          onClick={() => isKnown ? handleForgetSpell(spell.id) : handleLearnSpell(spell)}
+                          className={`w-full px-3 py-1 rounded text-sm font-medium transition-colors ${
+                            isKnown 
+                              ? 'bg-red-600 hover:bg-red-700 text-white' 
+                              : 'bg-blue-600 hover:bg-blue-700 text-white'
+                          }`}
+                        >
+                          {isKnown ? 'Forget Spell' : 'Learn Spell'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
           
+          {/* Character Magic Info */}
           <div className="space-y-6">
             <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
-              <h3 className="text-lg font-semibold text-white mb-4">Known Spells</h3>
-              <p className="text-slate-400 text-sm">No spells learned yet</p>
+              <h3 className="text-lg font-semibold text-white mb-4">Character Magic</h3>
+              {selectedCharacter ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-blue-200">Character</span>
+                    <span className="text-white">{selectedCharacter.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-200">Level</span>
+                    <span className="text-white">{selectedCharacter.level || 1}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-200">Mana</span>
+                    <span className="text-white">{selectedCharacter.mana || 0}/{selectedCharacter.maxMana || 50}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-200">Known Spells</span>
+                    <span className="text-white">
+                      {knownSpells.filter(s => s.characterId === selectedCharacter.id).length}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-slate-400 text-sm">Select a character to view magic info</p>
+              )}
             </div>
             
             <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
-              <h3 className="text-lg font-semibold text-white mb-4">Spell Slots</h3>
-              <p className="text-slate-400 text-sm">No spell slots available</p>
+              <h3 className="text-lg font-semibold text-white mb-4">Known Spells</h3>
+              {selectedCharacter ? (
+                <div className="space-y-2">
+                  {knownSpells
+                    .filter(s => s.characterId === selectedCharacter.id)
+                    .map((spell) => (
+                      <div key={spell.id} className="p-2 bg-slate-700/30 rounded">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <p className="text-white text-sm font-medium">{spell.name}</p>
+                            <p className="text-blue-200 text-xs">Level {spell.level}</p>
+                          </div>
+                          <button 
+                            onClick={() => handleForgetSpell(spell.id)}
+                            className="text-red-400 hover:text-red-300 text-xs"
+                          >
+                            Forget
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  {knownSpells.filter(s => s.characterId === selectedCharacter.id).length === 0 && (
+                    <p className="text-slate-400 text-sm">No spells learned yet</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-slate-400 text-sm">Select a character to view known spells</p>
+              )}
+            </div>
+            
+            <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+              <h3 className="text-lg font-semibold text-white mb-4">Spell Schools</h3>
+              <div className="space-y-2">
+                {['Evocation', 'Illusion', 'Conjuration', 'Abjuration', 'Transmutation', 'Divination', 'Enchantment', 'Necromancy'].map((school) => (
+                  <div key={school} className="flex items-center space-x-2">
+                    <div className={`w-3 h-3 bg-gradient-to-r ${getSpellSchoolColor(school)} rounded-full`}></div>
+                    <span className="text-blue-200 text-sm">{school}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -5800,6 +6224,118 @@ const ProfilePage: React.FC<{ user: any }> = ({ user }) => {
 };
 
 const AchievementsPage: React.FC<{ user: any }> = ({ user }) => {
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [achievements, setAchievements] = useState<any[]>([]);
+  const [gameStats, setGameStats] = useState<any>({});
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadAchievementData = async () => {
+      try {
+        // Load user's characters
+        const userCharacters = await firebaseService.getUserCharacters(user.uid);
+        setCharacters(userCharacters || []);
+        
+        // Load user's campaigns
+        const userCampaigns = await firebaseService.getUserCampaigns(user.uid);
+        setCampaigns(userCampaigns || []);
+        
+        // Load game stats from localStorage
+        const stats = JSON.parse(localStorage.getItem('mythseeker_game_stats') || '{}');
+        setGameStats(stats);
+        
+        // Load achievements from localStorage
+        const userAchievements = JSON.parse(localStorage.getItem('mythseeker_achievements') || '[]');
+        setAchievements(userAchievements);
+      } catch (error) {
+        console.error('Error loading achievement data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadAchievementData();
+  }, [user.uid]);
+
+  const getAchievementProgress = (achievementId: string) => {
+    switch (achievementId) {
+      case 'first_character':
+        return characters.length > 0 ? 100 : 0;
+      case 'first_campaign':
+        return campaigns.length > 0 ? 100 : 0;
+      case 'first_combat_win':
+        return gameStats.combatsWon > 0 ? 100 : 0;
+      case 'character_level_5':
+        return characters.some(c => c.level >= 5) ? 100 : 0;
+      case 'complete_campaign':
+        return campaigns.some(c => c.status === 'completed') ? 100 : 0;
+      case 'multiplayer_party':
+        return campaigns.some(c => c.isMultiplayer && c.players?.length > 1) ? 100 : 0;
+      default:
+        return 0;
+    }
+  };
+
+  const isAchievementUnlocked = (achievementId: string) => {
+    return achievements.some(a => a.id === achievementId);
+  };
+
+  const achievementList = [
+    {
+      id: 'first_character',
+      title: 'First Steps',
+      description: 'Create your first character',
+      icon: <User className="w-8 h-8" />,
+      color: 'from-blue-500 to-cyan-500'
+    },
+    {
+      id: 'first_campaign',
+      title: 'Adventure Begins',
+      description: 'Start your first campaign',
+      icon: <Book className="w-8 h-8" />,
+      color: 'from-green-500 to-emerald-500'
+    },
+    {
+      id: 'first_combat_win',
+      title: 'Warrior',
+      description: 'Win your first combat',
+      icon: <Sword className="w-8 h-8" />,
+      color: 'from-red-500 to-pink-500'
+    },
+    {
+      id: 'character_level_5',
+      title: 'Experienced Hero',
+      description: 'Reach level 5 with any character',
+      icon: <TrendingUp className="w-8 h-8" />,
+      color: 'from-purple-500 to-indigo-500'
+    },
+    {
+      id: 'complete_campaign',
+      title: 'Storyteller',
+      description: 'Complete a campaign',
+      icon: <Trophy className="w-8 h-8" />,
+      color: 'from-yellow-500 to-orange-500'
+    },
+    {
+      id: 'multiplayer_party',
+      title: 'Party Leader',
+      description: 'Play in a multiplayer campaign',
+      icon: <Users className="w-8 h-8" />,
+      color: 'from-indigo-500 to-purple-500'
+    }
+  ];
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-8 h-8 border-4 border-blue-300/30 border-t-blue-400 rounded-full animate-spin mx-auto"></div>
+          <p className="text-blue-200">Loading achievements...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 p-6 overflow-y-auto">
       <div className="max-w-6xl mx-auto">
@@ -5807,107 +6343,473 @@ const AchievementsPage: React.FC<{ user: any }> = ({ user }) => {
           <h1 className="text-3xl font-bold text-white mb-2">Achievements</h1>
           <p className="text-blue-200">Track your progress and accomplishments</p>
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Trophy className="w-8 h-8 text-slate-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-white mb-2">First Steps</h3>
-              <p className="text-blue-200 text-sm mb-4">Create your first character</p>
-              <div className="w-full bg-slate-700 rounded-full h-2">
-                <div className="bg-blue-600 h-2 rounded-full" style={{ width: '0%' }}></div>
-              </div>
-              <p className="text-slate-400 text-xs mt-2">0% Complete</p>
-            </div>
+
+        {/* Achievement Stats */}
+        <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 text-center">
+            <div className="text-2xl font-bold text-white">{achievements.length}</div>
+            <div className="text-blue-200 text-sm">Achievements Unlocked</div>
           </div>
-          
-          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Book className="w-8 h-8 text-slate-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-white mb-2">Storyteller</h3>
-              <p className="text-blue-200 text-sm mb-4">Complete your first campaign</p>
-              <div className="w-full bg-slate-700 rounded-full h-2">
-                <div className="bg-blue-600 h-2 rounded-full" style={{ width: '0%' }}></div>
-              </div>
-              <p className="text-slate-400 text-xs mt-2">0% Complete</p>
-            </div>
+          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 text-center">
+            <div className="text-2xl font-bold text-white">{characters.length}</div>
+            <div className="text-blue-200 text-sm">Characters Created</div>
           </div>
-          
-          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Sword className="w-8 h-8 text-slate-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-white mb-2">Warrior</h3>
-              <p className="text-blue-200 text-sm mb-4">Win your first combat</p>
-              <div className="w-full bg-slate-700 rounded-full h-2">
-                <div className="bg-blue-600 h-2 rounded-full" style={{ width: '0%' }}></div>
-              </div>
-              <p className="text-slate-400 text-xs mt-2">0% Complete</p>
-            </div>
+          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 text-center">
+            <div className="text-2xl font-bold text-white">{campaigns.length}</div>
+            <div className="text-blue-200 text-sm">Campaigns Started</div>
+          </div>
+          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 text-center">
+            <div className="text-2xl font-bold text-white">{gameStats.combatsWon || 0}</div>
+            <div className="text-blue-200 text-sm">Combats Won</div>
           </div>
         </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {achievementList.map((achievement) => {
+            const progress = getAchievementProgress(achievement.id);
+            const unlocked = isAchievementUnlocked(achievement.id);
+            
+            return (
+              <div 
+                key={achievement.id} 
+                className={`bg-slate-800/50 rounded-lg p-6 border transition-all duration-300 ${
+                  unlocked 
+                    ? 'border-yellow-500/50 shadow-lg shadow-yellow-500/20' 
+                    : 'border-slate-700/50'
+                }`}
+              >
+                <div className="text-center">
+                  <div className={`w-16 h-16 bg-gradient-to-br ${achievement.color} rounded-full flex items-center justify-center mx-auto mb-4 ${
+                    unlocked ? 'animate-pulse' : 'opacity-50'
+                  }`}>
+                    <div className="text-white">
+                      {achievement.icon}
+                    </div>
+                  </div>
+                  <h3 className={`text-lg font-semibold mb-2 ${
+                    unlocked ? 'text-white' : 'text-slate-400'
+                  }`}>
+                    {achievement.title}
+                  </h3>
+                  <p className="text-blue-200 text-sm mb-4">{achievement.description}</p>
+                  <div className="w-full bg-slate-700 rounded-full h-2 mb-2">
+                    <div 
+                      className={`h-2 rounded-full transition-all duration-500 ${
+                        unlocked ? 'bg-gradient-to-r from-yellow-400 to-orange-500' : 'bg-blue-600'
+                      }`} 
+                      style={{ width: `${progress}%` }}
+                    ></div>
+                  </div>
+                  <p className={`text-xs ${
+                    unlocked ? 'text-yellow-400' : 'text-slate-400'
+                  }`}>
+                    {unlocked ? 'Unlocked!' : `${progress}% Complete`}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Recent Achievements */}
+        {achievements.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-xl font-semibold text-white mb-4">Recent Achievements</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {achievements.slice(0, 3).map((achievement) => (
+                <div key={achievement.id} className="bg-slate-800/50 rounded-lg p-4 border border-yellow-500/30">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-full flex items-center justify-center">
+                      <Trophy className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-white font-medium">{achievement.title}</p>
+                      <p className="text-blue-200 text-sm">
+                        {new Date(achievement.unlockedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
 const SettingsPage: React.FC<{ user: any }> = ({ user }) => {
+  const [settings, setSettings] = useState<any>({});
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadSettings = () => {
+      try {
+        const savedSettings = JSON.parse(localStorage.getItem('mythseeker_settings') || '{}');
+        const defaultSettings = {
+          soundEffects: true,
+          music: false,
+          notifications: true,
+          theme: 'dark',
+          fontSize: 'medium',
+          autoSave: true,
+          showTutorials: true,
+          diceRoller: {
+            soundEnabled: true,
+            hapticEnabled: true,
+            shakeToRoll: true,
+            showHistory: true
+          },
+          game: {
+            autoRoll: false,
+            showDamageNumbers: true,
+            showHealthBars: true,
+            confirmActions: true
+          }
+        };
+        setSettings({ ...defaultSettings, ...savedSettings });
+      } catch (error) {
+        console.error('Error loading settings:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  const updateSetting = (category: string, key: string, value: any) => {
+    const newSettings = {
+      ...settings,
+      [category]: {
+        ...settings[category],
+        [key]: value
+      }
+    };
+    setSettings(newSettings);
+    localStorage.setItem('mythseeker_settings', JSON.stringify(newSettings));
+  };
+
+  const updateMainSetting = (key: string, value: any) => {
+    const newSettings = {
+      ...settings,
+      [key]: value
+    };
+    setSettings(newSettings);
+    localStorage.setItem('mythseeker_settings', JSON.stringify(newSettings));
+  };
+
+  const resetSettings = () => {
+    if (window.confirm('Are you sure you want to reset all settings to default?')) {
+      localStorage.removeItem('mythseeker_settings');
+      window.location.reload();
+    }
+  };
+
+  const exportSettings = () => {
+    const dataStr = JSON.stringify(settings, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'mythseeker-settings.json';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importSettings = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const importedSettings = JSON.parse(e.target?.result as string);
+          setSettings(importedSettings);
+          localStorage.setItem('mythseeker_settings', JSON.stringify(importedSettings));
+          alert('Settings imported successfully!');
+        } catch (error) {
+          alert('Error importing settings. Please check the file format.');
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-8 h-8 border-4 border-blue-300/30 border-t-blue-400 rounded-full animate-spin mx-auto"></div>
+          <p className="text-blue-200">Loading settings...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 p-6 overflow-y-auto">
       <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Settings</h1>
-          <p className="text-blue-200">App preferences and configuration</p>
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">Settings</h1>
+            <p className="text-blue-200">App preferences and configuration</p>
+          </div>
+          <div className="flex space-x-3">
+            <button 
+              onClick={exportSettings}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            >
+              Export
+            </button>
+            <label className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer">
+              Import
+              <input 
+                type="file" 
+                accept=".json" 
+                onChange={importSettings} 
+                className="hidden" 
+              />
+            </label>
+            <button 
+              onClick={resetSettings}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            >
+              Reset
+            </button>
+          </div>
         </div>
         
         <div className="space-y-6">
+          {/* Audio Settings */}
           <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
-            <h3 className="text-lg font-semibold text-white mb-4">Game Settings</h3>
+            <h3 className="text-lg font-semibold text-white mb-4">Audio Settings</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-blue-200">Sound Effects</span>
-                <button className="w-12 h-6 bg-blue-600 rounded-full relative">
-                  <div className="w-4 h-4 bg-white rounded-full absolute top-1 right-1"></div>
+                <div>
+                  <span className="text-blue-200">Sound Effects</span>
+                  <p className="text-slate-400 text-sm">Enable sound effects and audio feedback</p>
+                </div>
+                <button 
+                  onClick={() => updateMainSetting('soundEffects', !settings.soundEffects)}
+                  className={`w-12 h-6 rounded-full relative transition-colors ${
+                    settings.soundEffects ? 'bg-blue-600' : 'bg-slate-600'
+                  }`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${
+                    settings.soundEffects ? 'right-1' : 'left-1'
+                  }`}></div>
                 </button>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-blue-200">Music</span>
-                <button className="w-12 h-6 bg-slate-600 rounded-full relative">
-                  <div className="w-4 h-4 bg-white rounded-full absolute top-1 left-1"></div>
+                <div>
+                  <span className="text-blue-200">Music</span>
+                  <p className="text-slate-400 text-sm">Enable background music</p>
+                </div>
+                <button 
+                  onClick={() => updateMainSetting('music', !settings.music)}
+                  className={`w-12 h-6 rounded-full relative transition-colors ${
+                    settings.music ? 'bg-blue-600' : 'bg-slate-600'
+                  }`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${
+                    settings.music ? 'right-1' : 'left-1'
+                  }`}></div>
                 </button>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-blue-200">Notifications</span>
-                <button className="w-12 h-6 bg-blue-600 rounded-full relative">
-                  <div className="w-4 h-4 bg-white rounded-full absolute top-1 right-1"></div>
+                <div>
+                  <span className="text-blue-200">Notifications</span>
+                  <p className="text-slate-400 text-sm">Show toast notifications</p>
+                </div>
+                <button 
+                  onClick={() => updateMainSetting('notifications', !settings.notifications)}
+                  className={`w-12 h-6 rounded-full relative transition-colors ${
+                    settings.notifications ? 'bg-blue-600' : 'bg-slate-600'
+                  }`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${
+                    settings.notifications ? 'right-1' : 'left-1'
+                  }`}></div>
                 </button>
               </div>
             </div>
           </div>
           
+          {/* Display Settings */}
           <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
             <h3 className="text-lg font-semibold text-white mb-4">Display Settings</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-blue-200">Theme</span>
-                <select className="bg-slate-700 text-white px-3 py-2 rounded border border-slate-600">
-                  <option>Dark</option>
-                  <option>Light</option>
-                  <option>Auto</option>
+                <div>
+                  <span className="text-blue-200">Theme</span>
+                  <p className="text-slate-400 text-sm">Choose your preferred theme</p>
+                </div>
+                <select 
+                  value={settings.theme}
+                  onChange={(e) => updateMainSetting('theme', e.target.value)}
+                  className="bg-slate-700 text-white px-3 py-2 rounded border border-slate-600"
+                >
+                  <option value="dark">Dark</option>
+                  <option value="light">Light</option>
+                  <option value="auto">Auto</option>
                 </select>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-blue-200">Font Size</span>
-                <select className="bg-slate-700 text-white px-3 py-2 rounded border border-slate-600">
-                  <option>Small</option>
-                  <option>Medium</option>
-                  <option>Large</option>
+                <div>
+                  <span className="text-blue-200">Font Size</span>
+                  <p className="text-slate-400 text-sm">Adjust text size for readability</p>
+                </div>
+                <select 
+                  value={settings.fontSize}
+                  onChange={(e) => updateMainSetting('fontSize', e.target.value)}
+                  className="bg-slate-700 text-white px-3 py-2 rounded border border-slate-600"
+                >
+                  <option value="small">Small</option>
+                  <option value="medium">Medium</option>
+                  <option value="large">Large</option>
                 </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Game Settings */}
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-lg font-semibold text-white mb-4">Game Settings</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-blue-200">Auto Save</span>
+                  <p className="text-slate-400 text-sm">Automatically save game progress</p>
+                </div>
+                <button 
+                  onClick={() => updateMainSetting('autoSave', !settings.autoSave)}
+                  className={`w-12 h-6 rounded-full relative transition-colors ${
+                    settings.autoSave ? 'bg-blue-600' : 'bg-slate-600'
+                  }`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${
+                    settings.autoSave ? 'right-1' : 'left-1'
+                  }`}></div>
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-blue-200">Show Tutorials</span>
+                  <p className="text-slate-400 text-sm">Display helpful tutorial tips</p>
+                </div>
+                <button 
+                  onClick={() => updateMainSetting('showTutorials', !settings.showTutorials)}
+                  className={`w-12 h-6 rounded-full relative transition-colors ${
+                    settings.showTutorials ? 'bg-blue-600' : 'bg-slate-600'
+                  }`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${
+                    settings.showTutorials ? 'right-1' : 'left-1'
+                  }`}></div>
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-blue-200">Show Damage Numbers</span>
+                  <p className="text-slate-400 text-sm">Display damage numbers in combat</p>
+                </div>
+                <button 
+                  onClick={() => updateSetting('game', 'showDamageNumbers', !settings.game?.showDamageNumbers)}
+                  className={`w-12 h-6 rounded-full relative transition-colors ${
+                    settings.game?.showDamageNumbers ? 'bg-blue-600' : 'bg-slate-600'
+                  }`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${
+                    settings.game?.showDamageNumbers ? 'right-1' : 'left-1'
+                  }`}></div>
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-blue-200">Confirm Actions</span>
+                  <p className="text-slate-400 text-sm">Ask for confirmation before important actions</p>
+                </div>
+                <button 
+                  onClick={() => updateSetting('game', 'confirmActions', !settings.game?.confirmActions)}
+                  className={`w-12 h-6 rounded-full relative transition-colors ${
+                    settings.game?.confirmActions ? 'bg-blue-600' : 'bg-slate-600'
+                  }`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${
+                    settings.game?.confirmActions ? 'right-1' : 'left-1'
+                  }`}></div>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Dice Roller Settings */}
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-lg font-semibold text-white mb-4">Dice Roller Settings</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-blue-200">Sound Effects</span>
+                  <p className="text-slate-400 text-sm">Play sounds when rolling dice</p>
+                </div>
+                <button 
+                  onClick={() => updateSetting('diceRoller', 'soundEnabled', !settings.diceRoller?.soundEnabled)}
+                  className={`w-12 h-6 rounded-full relative transition-colors ${
+                    settings.diceRoller?.soundEnabled ? 'bg-blue-600' : 'bg-slate-600'
+                  }`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${
+                    settings.diceRoller?.soundEnabled ? 'right-1' : 'left-1'
+                  }`}></div>
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-blue-200">Haptic Feedback</span>
+                  <p className="text-slate-400 text-sm">Vibrate device when rolling dice</p>
+                </div>
+                <button 
+                  onClick={() => updateSetting('diceRoller', 'hapticEnabled', !settings.diceRoller?.hapticEnabled)}
+                  className={`w-12 h-6 rounded-full relative transition-colors ${
+                    settings.diceRoller?.hapticEnabled ? 'bg-blue-600' : 'bg-slate-600'
+                  }`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${
+                    settings.diceRoller?.hapticEnabled ? 'right-1' : 'left-1'
+                  }`}></div>
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-blue-200">Shake to Roll</span>
+                  <p className="text-slate-400 text-sm">Roll dice by shaking your device</p>
+                </div>
+                <button 
+                  onClick={() => updateSetting('diceRoller', 'shakeToRoll', !settings.diceRoller?.shakeToRoll)}
+                  className={`w-12 h-6 rounded-full relative transition-colors ${
+                    settings.diceRoller?.shakeToRoll ? 'bg-blue-600' : 'bg-slate-600'
+                  }`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${
+                    settings.diceRoller?.shakeToRoll ? 'right-1' : 'left-1'
+                  }`}></div>
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-blue-200">Show History</span>
+                  <p className="text-slate-400 text-sm">Display roll history in drawer</p>
+                </div>
+                <button 
+                  onClick={() => updateSetting('diceRoller', 'showHistory', !settings.diceRoller?.showHistory)}
+                  className={`w-12 h-6 rounded-full relative transition-colors ${
+                    settings.diceRoller?.showHistory ? 'bg-blue-600' : 'bg-slate-600'
+                  }`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${
+                    settings.diceRoller?.showHistory ? 'right-1' : 'left-1'
+                  }`}></div>
+                </button>
               </div>
             </div>
           </div>
