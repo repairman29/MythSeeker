@@ -5506,11 +5506,22 @@ const HelpWrapper: React.FC<{ user: any }> = ({ user }) => {
 
 // Page Components for each navigation item
 const CharactersPage: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
   const [characters, setCharacters] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCharacterCreation, setShowCharacterCreation] = useState(false);
   const [selectedCharacter, setSelectedCharacter] = useState<any>(null);
   const [showCharacterSheet, setShowCharacterSheet] = useState(false);
+  
+  // Define character classes
+  const classes = [
+    { name: 'Warrior', description: 'Mighty fighter with heavy armor and weapons', icon: '⚔️' },
+    { name: 'Mage', description: 'Powerful spellcaster with arcane magic', icon: '🔮' },
+    { name: 'Ranger', description: 'Skilled archer and wilderness expert', icon: '🏹' },
+    { name: 'Cleric', description: 'Divine healer and protector', icon: '⛪' },
+    { name: 'Rogue', description: 'Stealthy assassin and thief', icon: '🗡️' },
+    { name: 'Paladin', description: 'Holy warrior with divine powers', icon: '🛡️' }
+  ];
 
   useEffect(() => {
     const loadCharacters = async () => {
@@ -6211,6 +6222,7 @@ const CampaignsPage: React.FC<{ user: any }> = ({ user }) => {
 };
 
 const PartyPage: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [characters, setCharacters] = useState<any[]>([]);
   const [activeParty, setActiveParty] = useState<any>(null);
