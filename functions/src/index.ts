@@ -967,8 +967,20 @@ async function handleJoinGameSession(data: any, context: any) {
   const gameDoc = gameSnapshot.docs[0];
   const gameData = gameDoc.data();
 
+  // Check if game has already started
+  if (gameData.started) {
+    throw new Error('Game already started');
+  }
+
+  // Check if game is full
   if (gameData.players.length >= gameData.maxPlayers) {
     throw new Error('Game is full');
+  }
+
+  // Check if player is already in the game
+  const existingPlayer = gameData.players.find((p: any) => p.id === context.auth.uid);
+  if (existingPlayer) {
+    throw new Error('Player already in game');
   }
 
   const player = {

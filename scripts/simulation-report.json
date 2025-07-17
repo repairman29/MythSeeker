@@ -1,0 +1,94 @@
+{
+  "timestamp": "2025-07-17T17:24:30.987Z",
+  "success": 10,
+  "errors": 1,
+  "successRate": 90.9,
+  "performance": [
+    {
+      "action": "character_creation",
+      "user": "test-user-1",
+      "duration": 3970,
+      "success": true
+    },
+    {
+      "action": "character_creation",
+      "user": "test-user-2",
+      "duration": 281,
+      "success": true
+    },
+    {
+      "action": "character_creation",
+      "user": "test-user-3",
+      "duration": 372,
+      "success": true
+    },
+    {
+      "action": "campaign_setup",
+      "duration": 2572,
+      "success": true
+    },
+    {
+      "action": "ai_dm_response",
+      "player": "test-user-1",
+      "duration": 142,
+      "success": true
+    },
+    {
+      "action": "ai_dm_response",
+      "player": "test-user-2",
+      "duration": 132,
+      "success": true
+    },
+    {
+      "action": "ai_dm_response",
+      "player": "test-user-3",
+      "duration": 135,
+      "success": true
+    },
+    {
+      "action": "ai_dm_response",
+      "player": "test-user-1",
+      "duration": 143,
+      "success": true
+    },
+    {
+      "action": "ai_dm_response",
+      "player": "test-user-2",
+      "duration": 144,
+      "success": true
+    },
+    {
+      "action": "campaign_completion",
+      "duration": 163,
+      "success": true
+    }
+  ],
+  "gaps": [
+    {
+      "type": "multiplayer_realtime",
+      "description": "Real-time multiplayer features need WebSocket/Realtime DB integration",
+      "needed": [
+        "player_presence",
+        "live_chat",
+        "shared_state_sync"
+      ]
+    },
+    {
+      "type": "performance",
+      "description": "Critical endpoint latency",
+      "endpoints": [
+        {
+          "action": "character_creation",
+          "user": "test-user-1",
+          "duration": 3970,
+          "success": true
+        }
+      ]
+    }
+  ],
+  "recommendations": [
+    "Add WebSocket/Realtime DB for multiplayer",
+    "Optimize slow API endpoints",
+    "Critical: Some endpoints exceeded 3s!"
+  ]
+}
