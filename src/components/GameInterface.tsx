@@ -19,7 +19,7 @@ interface GameInterfaceProps {
   inputRef?: React.RefObject<HTMLInputElement>;
 }
 
-const GameInterface: React.FC<GameInterfaceProps> = React.memo(({
+const GameInterface: React.FC<GameInterfaceProps> = ({
   campaign,
   messages,
   inputMessage,
@@ -41,9 +41,16 @@ const GameInterface: React.FC<GameInterfaceProps> = React.memo(({
   const [diceResult, setDiceResult] = useState<number | null>(null);
   const [showWorldState, setShowWorldState] = useState(true);
 
-  // Use provided inputRef or create a local one
+  // Use provided inputRef or create a stable local one
   const localInputRef = useRef<HTMLInputElement>(null);
   const inputRef = propInputRef || localInputRef;
+
+  // Ensure input focus is maintained
+  useEffect(() => {
+    if (!isAIThinking && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isAIThinking, inputRef]);
 
   // Memoized tabs configuration
   const tabs = useMemo(() => [
@@ -136,22 +143,25 @@ const GameInterface: React.FC<GameInterfaceProps> = React.memo(({
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center space-x-2 mb-2">
-              <span className="font-semibold text-white text-lg">
-                {message.type === 'player' 
-                  ? character?.name || 'You'
-                  : message.type === 'dm'
-                  ? 'Dungeon Master'
-                  : message.playerName || 'Unknown'
-                }
-              </span>
-              <span className="text-xs text-gray-400 bg-black/20 px-2 py-1 rounded-full">
-                {new Date(message.timestamp).toLocaleTimeString()}
-              </span>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-2">
+                <span className="font-semibold text-white">
+                  {message.type === 'player' 
+                    ? character?.name || 'Player'
+                    : message.type === 'dm'
+                    ? 'Dungeon Master'
+                    : message.playerName || 'Unknown'
+                  }
+                </span>
+                <span className="text-xs text-gray-400">
+                  {message.timestamp ? new Date(message.timestamp).toLocaleTimeString() : ''}
+                </span>
+              </div>
             </div>
-            <div className="text-blue-100 whitespace-pre-wrap leading-relaxed text-base">{message.content}</div>
+            <div className="text-gray-200 leading-relaxed whitespace-pre-wrap">
+              {message.content}
+            </div>
             
-            {/* Enhanced Choices with Icons */}
             {message.choices && message.choices.length > 0 && (
               <div className="mt-4 space-y-2">
                 {message.choices.map((choice: string, choiceIndex: number) => {
@@ -191,7 +201,7 @@ const GameInterface: React.FC<GameInterfaceProps> = React.memo(({
     ));
   }, [messages, character, setInputMessage, sendMessage]);
 
-  // Memoized input handling
+  // Stable input handling functions
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setInputMessage(e.target.value);
   }, [setInputMessage]);
@@ -364,6 +374,7 @@ const GameInterface: React.FC<GameInterfaceProps> = React.memo(({
               placeholder="What would you like to do? (Be specific and creative!)"
               className="flex-1 bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white placeholder-blue-200 focus:outline-none focus:border-blue-400 transition-colors text-base"
               disabled={isAIThinking}
+              autoFocus
             />
             <button
               onClick={handleSendClick}
@@ -408,7 +419,7 @@ const GameInterface: React.FC<GameInterfaceProps> = React.memo(({
       )}
     </div>
   );
-});
+};
 
 GameInterface.displayName = 'GameInterface';
 

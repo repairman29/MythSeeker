@@ -2763,6 +2763,13 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
 
     const messagesContainerRef = useRef<HTMLDivElement>(null);
 
+    // Ensure input focus is maintained
+    useEffect(() => {
+      if (!isAIThinking && inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, [isAIThinking, inputRef]);
+
     // Enhanced quick actions with context awareness
     const quickActions = [
       "I examine my surroundings carefully for clues",
