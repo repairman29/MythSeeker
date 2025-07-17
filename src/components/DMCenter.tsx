@@ -956,6 +956,468 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
     </div>
   );
 
+  const renderWorldBuilder = () => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* World Map */}
+        <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+          <h3 className="text-lg font-semibold text-white mb-4">World Map</h3>
+          <div className="bg-slate-800 rounded-lg h-64 flex items-center justify-center border-2 border-dashed border-slate-600">
+            <div className="text-center">
+              <Map size={48} className="text-slate-400 mx-auto mb-2" />
+              <p className="text-slate-400 text-sm">Interactive World Map</p>
+              <p className="text-slate-500 text-xs">Click to add locations</p>
+            </div>
+          </div>
+          <div className="flex space-x-2 mt-4">
+            <button className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm">
+              Add Location
+            </button>
+            <button className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-white text-sm">
+              Generate Map
+            </button>
+            <button className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm">
+              Import Map
+            </button>
+          </div>
+        </div>
+
+        {/* World State */}
+        <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+          <h3 className="text-lg font-semibold text-white mb-4">World State</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center p-2 bg-slate-700/30 rounded">
+              <span className="text-blue-200">Current Location:</span>
+              <span className="text-white">Mystic Grove</span>
+            </div>
+            <div className="flex justify-between items-center p-2 bg-slate-700/30 rounded">
+              <span className="text-blue-200">Weather:</span>
+              <span className="text-white">Light Rain</span>
+            </div>
+            <div className="flex justify-between items-center p-2 bg-slate-700/30 rounded">
+              <span className="text-blue-200">Time of Day:</span>
+              <span className="text-white">Afternoon</span>
+            </div>
+            <div className="flex justify-between items-center p-2 bg-slate-700/30 rounded">
+              <span className="text-blue-200">Active Quests:</span>
+              <span className="text-white">3</span>
+            </div>
+            <div className="flex justify-between items-center p-2 bg-slate-700/30 rounded">
+              <span className="text-blue-200">Faction Relations:</span>
+              <span className="text-white">Stable</span>
+            </div>
+          </div>
+          <div className="flex space-x-2 mt-4">
+            <button className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm">
+              Update State
+            </button>
+            <button className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-white text-sm">
+              Random Event
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Location Builder */}
+      <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+        <h3 className="text-lg font-semibold text-white mb-4">Location Builder</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-blue-200 text-sm mb-2">Location Name</label>
+            <input
+              type="text"
+              placeholder="Enter location name..."
+              className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400"
+            />
+          </div>
+          <div>
+            <label className="block text-blue-200 text-sm mb-2">Type</label>
+            <select className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
+              <option>City</option>
+              <option>Town</option>
+              <option>Village</option>
+              <option>Dungeon</option>
+              <option>Forest</option>
+              <option>Mountain</option>
+              <option>Castle</option>
+              <option>Temple</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-blue-200 text-sm mb-2">Population</label>
+            <input
+              type="number"
+              placeholder="0"
+              className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400"
+            />
+          </div>
+        </div>
+        <div className="mt-4">
+          <label className="block text-blue-200 text-sm mb-2">Description</label>
+          <textarea
+            placeholder="Describe this location..."
+            className="w-full h-24 p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 resize-none"
+          />
+        </div>
+        <div className="flex space-x-2 mt-4">
+          <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white font-medium">
+            Create Location
+          </button>
+          <button className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white font-medium">
+            Generate Description
+          </button>
+        </div>
+      </div>
+
+      {/* Faction Management */}
+      <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+        <h3 className="text-lg font-semibold text-white mb-4">Faction Management</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <h4 className="font-medium text-blue-200 mb-3">Active Factions</h4>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-2 bg-slate-700/30 rounded">
+                <span className="text-white">Mystic Order</span>
+                <span className="text-green-400">Friendly</span>
+              </div>
+              <div className="flex items-center justify-between p-2 bg-slate-700/30 rounded">
+                <span className="text-white">Shadow Guild</span>
+                <span className="text-red-400">Hostile</span>
+              </div>
+              <div className="flex items-center justify-between p-2 bg-slate-700/30 rounded">
+                <span className="text-white">Merchant Council</span>
+                <span className="text-yellow-400">Neutral</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h4 className="font-medium text-blue-200 mb-3">Faction Relations</h4>
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <span className="text-white text-sm">Mystic Order ↔ Shadow Guild:</span>
+                <span className="text-red-400 text-sm">Hostile</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-white text-sm">Merchant Council ↔ Mystic Order:</span>
+                <span className="text-green-400 text-sm">Allied</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-white text-sm">Shadow Guild ↔ Merchant Council:</span>
+                <span className="text-yellow-400 text-sm">Neutral</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex space-x-2 mt-4">
+          <button className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm">
+            Add Faction
+          </button>
+          <button className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-white text-sm">
+            Update Relations
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAnalytics = () => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Key Metrics */}
+        <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+          <h3 className="text-lg font-semibold text-white mb-4">Player Engagement</h3>
+          <div className="space-y-3">
+            <div>
+              <span className="text-blue-200 text-sm">Session Attendance</span>
+              <p className="text-2xl font-bold text-white">94%</p>
+            </div>
+            <div>
+              <span className="text-blue-200 text-sm">Avg Session Length</span>
+              <p className="text-2xl font-bold text-white">3.2h</p>
+            </div>
+            <div>
+              <span className="text-blue-200 text-sm">Player Satisfaction</span>
+              <p className="text-2xl font-bold text-yellow-400">4.8/5</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+          <h3 className="text-lg font-semibold text-white mb-4">Story Progress</h3>
+          <div className="space-y-3">
+            <div>
+              <span className="text-blue-200 text-sm">Main Quest Progress</span>
+              <p className="text-2xl font-bold text-white">67%</p>
+            </div>
+            <div>
+              <span className="text-blue-200 text-sm">Side Quests Completed</span>
+              <p className="text-2xl font-bold text-white">12</p>
+            </div>
+            <div>
+              <span className="text-blue-200 text-sm">World Explored</span>
+              <p className="text-2xl font-bold text-green-400">23%</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+          <h3 className="text-lg font-semibold text-white mb-4">Combat Stats</h3>
+          <div className="space-y-3">
+            <div>
+              <span className="text-blue-200 text-sm">Encounters Run</span>
+              <p className="text-2xl font-bold text-white">28</p>
+            </div>
+            <div>
+              <span className="text-blue-200 text-sm">Avg Difficulty</span>
+              <p className="text-2xl font-bold text-orange-400">7.2/10</p>
+            </div>
+            <div>
+              <span className="text-blue-200 text-sm">Player Deaths</span>
+              <p className="text-2xl font-bold text-red-400">2</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+          <h3 className="text-lg font-semibold text-white mb-4">AI Performance</h3>
+          <div className="space-y-3">
+            <div>
+              <span className="text-blue-200 text-sm">Response Quality</span>
+              <p className="text-2xl font-bold text-green-400">4.6/5</p>
+            </div>
+            <div>
+              <span className="text-blue-200 text-sm">Memory Accuracy</span>
+              <p className="text-2xl font-bold text-blue-400">89%</p>
+            </div>
+            <div>
+              <span className="text-blue-200 text-sm">Adaptation Score</span>
+              <p className="text-2xl font-bold text-purple-400">92%</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Detailed Analytics */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Player Activity Timeline */}
+        <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+          <h3 className="text-lg font-semibold text-white mb-4">Player Activity Timeline</h3>
+          <div className="space-y-3">
+            <div className="flex items-center space-x-3">
+              <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+              <span className="text-blue-200 text-sm">Session 1: Character Creation & Intro</span>
+              <span className="text-gray-400 text-xs">2.5h</span>
+            </div>
+            <div className="flex items-center space-x-3">
+              <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
+              <span className="text-blue-200 text-sm">Session 2: First Combat & Exploration</span>
+              <span className="text-gray-400 text-xs">3.1h</span>
+            </div>
+            <div className="flex items-center space-x-3">
+              <div className="w-3 h-3 bg-purple-400 rounded-full"></div>
+              <span className="text-blue-200 text-sm">Session 3: NPC Interactions & Quests</span>
+              <span className="text-gray-400 text-xs">3.8h</span>
+            </div>
+            <div className="flex items-center space-x-3">
+              <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
+              <span className="text-blue-200 text-sm">Session 4: Major Plot Development</span>
+              <span className="text-gray-400 text-xs">4.2h</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Story Branching Analysis */}
+        <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+          <h3 className="text-lg font-semibold text-white mb-4">Story Branching Analysis</h3>
+          <div className="space-y-3">
+            <div>
+              <span className="text-blue-200 text-sm">Main Story Path</span>
+              <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                <div className="bg-blue-600 h-2 rounded-full" style={{ width: '67%' }}></div>
+              </div>
+            </div>
+            <div>
+              <span className="text-blue-200 text-sm">Side Quest Completion</span>
+              <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                <div className="bg-green-600 h-2 rounded-full" style={{ width: '45%' }}></div>
+              </div>
+            </div>
+            <div>
+              <span className="text-blue-200 text-sm">Character Development</span>
+              <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                <div className="bg-purple-600 h-2 rounded-full" style={{ width: '78%' }}></div>
+              </div>
+            </div>
+            <div>
+              <span className="text-blue-200 text-sm">World Exploration</span>
+              <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                <div className="bg-yellow-600 h-2 rounded-full" style={{ width: '23%' }}></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Export Options */}
+      <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+        <h3 className="text-lg font-semibold text-white mb-4">Export Analytics</h3>
+        <div className="flex space-x-4">
+          <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white font-medium flex items-center space-x-2">
+            <Download size={16} />
+            <span>Export Report</span>
+          </button>
+          <button className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white font-medium flex items-center space-x-2">
+            <BarChart3 size={16} />
+            <span>Generate Insights</span>
+          </button>
+          <button className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-white font-medium flex items-center space-x-2">
+            <FileText size={16} />
+            <span>Session Summary</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderMarketplace = () => (
+    <div className="space-y-6">
+      {/* Featured Content */}
+      <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+        <h3 className="text-lg font-semibold text-white mb-4">Featured Content</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+            <div className="flex items-center space-x-2 mb-2">
+              <Star className="text-yellow-400" size={16} />
+              <span className="text-white font-medium">Dragon's Lair Adventure</span>
+            </div>
+            <p className="text-blue-200 text-sm mb-2">Epic high-level adventure with custom dragon mechanics</p>
+            <div className="flex justify-between items-center">
+              <span className="text-green-400 text-sm">Free</span>
+              <button className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs">
+                Download
+              </button>
+            </div>
+          </div>
+          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+            <div className="flex items-center space-x-2 mb-2">
+              <Star className="text-yellow-400" size={16} />
+              <span className="text-white font-medium">Mystic NPC Pack</span>
+            </div>
+            <p className="text-blue-200 text-sm mb-2">20 unique NPCs with detailed backstories and motivations</p>
+            <div className="flex justify-between items-center">
+              <span className="text-green-400 text-sm">Free</span>
+              <button className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs">
+                Download
+              </button>
+            </div>
+          </div>
+          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+            <div className="flex items-center space-x-2 mb-2">
+              <Star className="text-yellow-400" size={16} />
+              <span className="text-white font-medium">Urban Campaign Setting</span>
+            </div>
+            <p className="text-blue-200 text-sm mb-2">Complete city setting with factions, politics, and intrigue</p>
+            <div className="flex justify-between items-center">
+              <span className="text-green-400 text-sm">Free</span>
+              <button className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs">
+                Download
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Community Content */}
+      <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+        <h3 className="text-lg font-semibold text-white mb-4">Community Content</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <h4 className="font-medium text-blue-200 mb-3">Top Rated</h4>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-2 bg-slate-700/30 rounded">
+                <span className="text-white text-sm">Goblin Cave Encounter</span>
+                <span className="text-yellow-400 text-sm">4.9★</span>
+              </div>
+              <div className="flex items-center justify-between p-2 bg-slate-700/30 rounded">
+                <span className="text-white text-sm">Magic Item Generator</span>
+                <span className="text-yellow-400 text-sm">4.8★</span>
+              </div>
+              <div className="flex items-center justify-between p-2 bg-slate-700/30 rounded">
+                <span className="text-white text-sm">Forest Exploration Pack</span>
+                <span className="text-yellow-400 text-sm">4.7★</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h4 className="font-medium text-blue-200 mb-3">Recently Added</h4>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-2 bg-slate-700/30 rounded">
+                <span className="text-white text-sm">Underwater Temple</span>
+                <span className="text-green-400 text-sm">New</span>
+              </div>
+              <div className="flex items-center justify-between p-2 bg-slate-700/30 rounded">
+                <span className="text-white text-sm">Steampunk City</span>
+                <span className="text-green-400 text-sm">New</span>
+              </div>
+              <div className="flex items-center justify-between p-2 bg-slate-700/30 rounded">
+                <span className="text-white text-sm">Vampire Hunt Quest</span>
+                <span className="text-green-400 text-sm">New</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Upload Your Content */}
+      <div className="bg-white/10 rounded-lg p-6 border border-white/20">
+        <h3 className="text-lg font-semibold text-white mb-4">Share Your Content</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-blue-200 text-sm mb-2">Content Title</label>
+            <input
+              type="text"
+              placeholder="Enter content title..."
+              className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400"
+            />
+          </div>
+          <div>
+            <label className="block text-blue-200 text-sm mb-2">Category</label>
+            <select className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
+              <option>Adventure</option>
+              <option>NPC Pack</option>
+              <option>Location</option>
+              <option>Magic Items</option>
+              <option>Monsters</option>
+              <option>Tools</option>
+            </select>
+          </div>
+        </div>
+        <div className="mt-4">
+          <label className="block text-blue-200 text-sm mb-2">Description</label>
+          <textarea
+            placeholder="Describe your content..."
+            className="w-full h-24 p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 resize-none"
+          />
+        </div>
+        <div className="mt-4">
+          <label className="block text-blue-200 text-sm mb-2">Upload File</label>
+          <input
+            type="file"
+            className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+          />
+        </div>
+        <div className="flex space-x-2 mt-4">
+          <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white font-medium">
+            Upload Content
+          </button>
+          <button className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white font-medium">
+            Preview
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'overview':
@@ -966,8 +1428,14 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
         return renderRulesEngine();
       case 'ai-brain':
         return renderAIBrain();
+      case 'world-builder':
+        return renderWorldBuilder();
       case 'session-tools':
         return renderSessionTools();
+      case 'analytics':
+        return renderAnalytics();
+      case 'marketplace':
+        return renderMarketplace();
       default:
         return (
           <div className="text-center py-12">
