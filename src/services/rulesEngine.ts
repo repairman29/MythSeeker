@@ -363,7 +363,7 @@ export class RulesEngine {
     };
 
     switch (spell.automation.type) {
-      case 'damage_spell':
+      case 'damage_spell': {
         if (target && spell.savingThrow) {
           const dc = 8 + caster.proficiencyBonus + spellcastingModifier;
           const saveResult = this.rollSavingThrow(target as Character, spell.savingThrow as keyof Character['stats'], dc);
@@ -380,31 +380,22 @@ export class RulesEngine {
           }
         }
         break;
-        
-      case 'healing_spell':
+      }
+      case 'healing_spell': {
         if (spell.healing) {
           const healingResult = this.rollSpellHealing(spell, effectiveLevel, spellcastingModifier);
           results.healing = healingResult;
         }
         break;
-        
-      case 'auto_hit_spell':
+      }
+      case 'auto_hit_spell': {
         if (spell.damage) {
           const damageResult = this.rollSpellDamage(spell, effectiveLevel, false);
           results.damage = damageResult;
         }
         break;
-        
-      case 'ranged_spell_attack':
-        if (target) {
-          const attackResult = this.rollAttack(caster, target, spellcastingModifier);
-          results.attack = attackResult;
-          
-          if (attackResult.success && spell.damage) {
-            const damageResult = this.rollSpellDamage(spell, effectiveLevel, attackResult.critical);
-            results.damage = damageResult;
-          }
-        }
+      }
+      default:
         break;
     }
 
@@ -833,7 +824,7 @@ ${monster.actions?.map(action => `***${action.name}.*** ${action.description || 
   validateAction(action: CombatAction, character: Character): { valid: boolean; reason?: string } {
     // Basic action validation
     switch (action.type) {
-      case 'spell':
+      case 'spell': {
         if (!action.spellId) {
           return { valid: false, reason: 'No spell specified' };
         }
@@ -845,11 +836,13 @@ ${monster.actions?.map(action => `***${action.name}.*** ${action.description || 
           return { valid: false, reason: 'Character cannot cast this spell' };
         }
         break;
-      case 'attack':
+      }
+      case 'attack': {
         if (!action.targetId) {
           return { valid: false, reason: 'No target specified for attack' };
         }
         break;
+      }
     }
     
     return { valid: true };

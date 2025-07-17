@@ -87,7 +87,7 @@ function toGameMessage(msg: Message): import("./multiplayerService").GameMessage
 export class CampaignService {
   private static instance: CampaignService;
   private campaigns: Map<string, CampaignData> = new Map();
-  private autoSaveTimers: Map<string, NodeJS.Timeout> = new Map();
+  private autoSaveTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   static getInstance(): CampaignService {
     if (!this.instance) {

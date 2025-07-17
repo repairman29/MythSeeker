@@ -3,7 +3,7 @@ import { MultiplayerGame, Player, GameMessage } from './multiplayer';
 class DemoMultiplayerService {
   private games: { [key: string]: MultiplayerGame } = {};
   private listeners: { [key: string]: (game: MultiplayerGame) => void } = {};
-  private interval: NodeJS.Timeout | null = null;
+  private interval: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     // Load games from localStorage

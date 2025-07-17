@@ -301,6 +301,18 @@ class FirebaseService {
     return characters.sort((a, b) => b.lastPlayed - a.lastPlayed);
   }
 
+  async getUserCampaigns(userId: string): Promise<GameSession[]> {
+    const q = query(
+      collection(db, 'games'),
+      where('hostId', '==', userId)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const campaigns = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as GameSession));
+    
+    return campaigns.sort((a, b) => b.lastActivity - a.lastActivity);
+  }
+
   async getCharacter(characterId: string): Promise<Character | null> {
     const docRef = doc(db, 'characters', characterId);
     const docSnap = await getDoc(docRef);

@@ -56,10 +56,10 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
             
             <h1 className="text-2xl font-bold text-white mb-4">Oops! Something went wrong</h1>
             <p className="text-red-200 mb-6">
-              We encountered an unexpected error. Don't worry, your progress is safe!
+              We&apos;re sorry, but something went wrong.
             </p>
 
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {import.meta.env.MODE === 'development' && this.state.error && (
               <details className="mb-6 text-left">
                 <summary className="text-red-300 cursor-pointer mb-2">Error Details (Development)</summary>
                 <div className="bg-black/20 rounded-lg p-4 text-xs text-red-200 overflow-auto max-h-40">

@@ -31,7 +31,12 @@ import {
 } from './services/analytics';
 import { CombatService } from './services/combatService';
 import { Combatant } from './components/CombatSystem';
-import { Swords, TrendingUp, Globe, HelpCircle, User, Book, Users, Sword, Plus, Edit, Trash2, Copy, ChevronDown, Send, ChevronRight, Home } from 'lucide-react';
+import { Swords, TrendingUp, Globe, HelpCircle, User, Book, Users, Sword, Plus, Edit, Trash2, Copy, ChevronDown, Send, ChevronRight, Home, Trophy } from 'lucide-react';
+import SuccessFeedback from './components/SuccessFeedback';
+import LandingPage from './components/LandingPage';
+import Dashboard from './components/Dashboard';
+import DiceRoller3D from './components/DiceRoller3D';
+import Navigation from './components/Navigation';
 
 // Lazy load components
 const NavBar = lazy(() => import('./components/NavBar'));
@@ -154,6 +159,9 @@ interface ToastMessage {
   message: string;
   type: 'success' | 'error' | 'info' | 'warning';
   icon?: React.ReactNode;
+  showIntroControls?: boolean;
+  onSkipIntro?: () => void;
+  onDontShowAgain?: () => void;
 }
 
 interface CombatAction {
@@ -260,7 +268,7 @@ const NavigationManager: React.FC<{
   return null; // This component doesn't render anything
 };
 
-const AIDungeonMaster = () => {
+const AIDungeonMaster = ({ initialScreen = 'welcome' }: { initialScreen?: string }) => {
   // Combat service instance
   const combatService = React.useMemo(() => new CombatService(), []);
   
@@ -296,7 +304,7 @@ const AIDungeonMaster = () => {
   const [isMobile, setIsMobile] = useState(false);
   
   // Game state
-  const [currentScreen, setCurrentScreen] = useState('welcome');
+  const [currentScreen, setCurrentScreen] = useState(initialScreen);
   const [playerName, setPlayerName] = useState('');
   const [character, setCharacter] = useState<any>(null);
   const [currentCampaign, setCurrentCampaign] = useState<MultiplayerGame | null>(null);
@@ -372,6 +380,9 @@ const AIDungeonMaster = () => {
   // Drawer tab state for right drawer
   const [activeDrawerTab, setActiveDrawerTab] = useState('chat');
 
+  // Persona update state
+  const [lastPersonaUpdate, setLastPersonaUpdate] = useState<number>(0);
+
   // Enhanced AI Dungeon Master System
   const [aiMemory, setAiMemory] = useState<any>({
     playerActions: [],
@@ -396,21 +407,54 @@ const AIDungeonMaster = () => {
   
   // Toast notification functions
   const addToast = (action: string, context?: any) => {
-    const toast = generateToastMessage(action, context);
-    setToastMessages(prev => [...prev, toast]);
+    // Only show toasts for meaningful gameplay achievements, not errors or info messages
+    const importantActions = [
+      'characterCreated', 
+      'campaignCreated', 
+      'campaignJoined', 
+      'levelUp', 
+      'achievementUnlocked',
+      'firstMessage',
+      'combatStarted',
+      'questCompleted',
+      'itemFound',
+      'npcInteraction',
+      'explorationMilestone'
+    ];
     
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => dismissToast(toast.id), 5000);
+    // Skip error, info, warning, success, goodbye, and other non-gameplay toasts
+    const skipActions = ['error', 'info', 'warning', 'success', 'goodbye', 'characterLoaded', 'campaignDeleted', 'ftueSkipped'];
     
-    // Show success feedback for certain actions
-    if (action === 'characterCreated') {
-      showSuccessFeedback('character');
-    } else if (action === 'campaignCreated') {
-      showSuccessFeedback('campaign');
-    } else if (action === 'campaignPaused') {
-      showSuccessFeedback('pause');
-    } else if (action === 'campaignResumed') {
-      showSuccessFeedback('resume');
+    if (importantActions.includes(action) && !skipActions.includes(action)) {
+      // Check if user has chosen to skip this intro
+      const skippedIntros = JSON.parse(localStorage.getItem('mythseeker_skipped_intros') || '[]');
+      if (skippedIntros.includes(action)) {
+        return; // Don't show this toast if user chose to skip it
+      }
+      
+      const toast = generateToastMessage(action, context);
+      
+      // Add intro controls for certain types of toasts
+      if (['characterCreated', 'campaignCreated', 'firstMessage', 'combatStarted'].includes(action)) {
+        toast.showIntroControls = true;
+        toast.onSkipIntro = () => {
+          console.log(`Skipped intro for ${action}`);
+        };
+        toast.onDontShowAgain = () => {
+          // Store preference in localStorage
+          const skippedIntros = JSON.parse(localStorage.getItem('mythseeker_skipped_intros') || '[]');
+          if (!skippedIntros.includes(action)) {
+            skippedIntros.push(action);
+            localStorage.setItem('mythseeker_skipped_intros', JSON.stringify(skippedIntros));
+          }
+          console.log(`Won't show ${action} intro again`);
+        };
+      }
+      
+      setToastMessages(prev => [...prev, toast]);
+      
+      // Auto-dismiss after 5 seconds
+      setTimeout(() => dismissToast(toast.id), 5000);
     }
   };
   
@@ -524,15 +568,18 @@ const AIDungeonMaster = () => {
               has_characters: characters.length > 0
             });
             
-            // If user has characters, show character selection or resume game
-            if (characters.length > 0) {
-              setCurrentScreen('character-select');
-              navigate('/characters');
-              analyticsService.trackPageView('character-select', 'MythSeeker - Character Selection');
-            } else {
-              setCurrentScreen('welcome');
-              navigate('/');
-              analyticsService.trackPageView('welcome', 'MythSeeker - Welcome');
+            // Don't automatically redirect - let the user navigate where they want
+            // Only set initial screen if we're not already on a specific route
+            if (location.pathname === '/') {
+              if (characters.length > 0) {
+                setCurrentScreen('dashboard');
+                navigate('/dashboard');
+                analyticsService.trackPageView('dashboard', 'MythSeeker - Dashboard');
+              } else {
+                setCurrentScreen('welcome');
+                navigate('/');
+                analyticsService.trackPageView('welcome', 'MythSeeker - Welcome');
+              }
             }
           } else {
             setCurrentScreen('welcome');
@@ -747,8 +794,7 @@ const AIDungeonMaster = () => {
       if (localCharacter) {
         console.log('Found character in local storage:', localCharacter.name);
         setCharacter(localCharacter);
-        setCurrentScreen('lobby');
-        navigate('/campaigns');
+        // Don't automatically navigate to campaigns - let the user choose
         addToast('characterLoaded', { character: localCharacter.name });
         return;
       }
@@ -764,8 +810,7 @@ const AIDungeonMaster = () => {
         if (character) {
           console.log('Successfully loaded character from Firebase:', character.name);
           setCharacter(character);
-          setCurrentScreen('lobby');
-          navigate('/campaigns');
+          // Don't automatically navigate to campaigns - let the user choose
           addToast('characterLoaded', { character: character.name });
         } else {
           console.log('Character not found in Firebase');
@@ -787,16 +832,17 @@ const AIDungeonMaster = () => {
       await firebaseService.signInWithGoogle();
       // Don't set loading to false here - it might be using redirect
       // The onAuthStateChanged listener will handle loading state
-      addToast('welcome', { message: 'Welcome to MythSeeker!' });
+      // Removed automatic welcome toast to reduce noise
     } catch (error) {
-      console.error('Error signing in:', error);
+      const err = error as any;
+      console.error('Error signing in:', err);
       // Handle specific authentication errors
-      if (error.code === 'auth/popup-blocked') {
+      if (err.code === 'auth/popup-blocked') {
         addToast('error', { message: 'Popup was blocked. Trying alternative sign-in method...' });
-      } else if (error.code === 'auth/popup-closed-by-user') {
+      } else if (err.code === 'auth/popup-closed-by-user') {
         addToast('info', { message: 'Sign-in was cancelled.' });
         setIsLoading(false);
-      } else if (error.code === 'auth/cancelled-popup-request') {
+      } else if (err.code === 'auth/cancelled-popup-request') {
         // Don't show error for cancelled popup requests (user might have closed it)
         setIsLoading(false);
       } else {
@@ -1215,7 +1261,8 @@ Start with a welcoming scene that introduces the magical academy setting and the
         }
       }
     } catch (error) {
-      console.error('Error loading campaigns:', error);
+      const err = error as Error;
+      console.error('Error loading campaigns:', err);
       // Fallback to empty array
       setCampaigns([]);
     }
@@ -1251,7 +1298,8 @@ Start with a welcoming scene that introduces the magical academy setting and the
       
       addToast('campaignDeleted', { message: 'Campaign deleted successfully' });
     } catch (error) {
-      console.error('Error deleting campaign:', error);
+      const err = error as Error;
+      console.error('Error deleting campaign:', err);
       addToast('error', { message: 'Failed to delete campaign' });
     }
   };
@@ -1288,7 +1336,8 @@ Start with a welcoming scene that introduces the magical academy setting and the
         addToast('campaignJoined', { campaign: joinedCampaign });
       }
     } catch (error) {
-      console.error('Error joining campaign:', error);
+      const err = error as Error;
+      console.error('Error joining campaign:', err);
       alert('Failed to join campaign. Please check the code and try again.');
     }
   };
@@ -1307,6 +1356,7 @@ Start with a welcoming scene that introduces the magical academy setting and the
   // Load campaigns on app start and when character changes
   useEffect(() => {
     loadCampaigns();
+    // Don't automatically set current campaign - let user choose
   }, [character, isAuthenticated]);
 
   // Load campaigns from localStorage on initial load (before authentication)
@@ -1674,7 +1724,7 @@ Start with a welcoming scene that introduces the magical academy setting and the
     try {
       // Use DynamicDMService for immersive campaign opening
       const theme = campaignThemes.find(t => t.name === campaign.theme) || campaignThemes[0];
-      const partyMembers = campaign.players?.map((p: any) => `${p.character.name} the ${p.character.class}`).join(', ') || 'the party';
+      const partyMembers = campaign.players?.map((p: any) => `${p.character?.name || 'Unknown'} the ${p.character?.class || 'Adventurer'}`).join(', ') || 'the party';
       const openingInput = `Begin the adventure. The party consists of: ${partyMembers}. Setting: ${theme.description}. Present an immersive opening scene with 3 action choices.`;
       const dynamicResponse = await dynamicDMService.processPlayerInput({
         message: openingInput,
@@ -1688,7 +1738,7 @@ Start with a welcoming scene that introduces the magical academy setting and the
         id: Date.now(),
         type: 'dm',
         content: dynamicResponse.narrative_text + (dynamicResponse.npc_dialogue ? `\n\n${dynamicResponse.npc_dialogue}` : ''),
-        choices: dynamicResponse.choices || ['Explore', 'Investigate', 'Ask questions'],
+        choices: (dynamicResponse as any).choices || ['Explore', 'Investigate', 'Ask questions'],
         timestamp: new Date(),
         atmosphere: dynamicResponse.mood_adjustment || { mood: 'dynamic', tension: 'medium' }
       };
@@ -1768,10 +1818,10 @@ Start with a welcoming scene that introduces the magical academy setting and the
     }
 
     // In resumeCampaign and anywhere setCurrentCampaign is called after loading a campaign:
-    if (campaign.dmCenterData) {
-      setDmCenterData(campaign.dmCenterData);
-    } else if (campaign.aiSettings) {
-      setDmCenterData({ aiSettings: campaign.aiSettings });
+    if ((campaign as any).dmCenterData) {
+      setDmCenterData((campaign as any).dmCenterData);
+    } else if ((campaign as any).aiSettings) {
+      setDmCenterData({ aiSettings: (campaign as any).aiSettings });
     }
     // Place this after setCurrentCampaign(campaign) or setCurrentCampaign(resumedCampaign) in resumeCampaign and similar places.
   };
@@ -3197,319 +3247,36 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
 
   // Main App Layout (for all other screens)
   return (
-    <div className={`main-container flex flex-col min-h-screen bg-gradient-to-br ${environments[currentEnvironment]} transition-all duration-1000 ${isMobile ? 'pb-16' : ''}`}>
-      {/* Success Feedback */}
-      {successFeedback && (
-        <SuccessFeedback
-          message={successFeedback.message}
-          icon={successFeedback.icon}
-          duration={successFeedback.duration}
-          onClose={() => setSuccessFeedback(null)}
+    <div className="h-full overflow-hidden">
+      {/* Error Boundary */}
+      <ErrorBoundary>
+        {/* Toast Notifications */}
+        <ToastNotifications 
+          messages={toastMessages} 
+          onDismiss={dismissToast} 
         />
-      )}
-      
-      {/* Toast Notifications */}
-      <ToastNotifications
-        messages={toastMessages}
-        onDismiss={dismissToast}
-      />
-
-      {/* Welcome Overlay */}
-      {showWelcomeOverlay && (
-        <WelcomeOverlay
-          character={character}
-          onStart={() => {
-            setShowWelcomeOverlay(false);
-            setCurrentScreen('lobby');
-            addToast('welcomeBack');
-          }}
-          onDismiss={() => {
-            setShowWelcomeOverlay(false);
-            setCurrentScreen('lobby');
-            addToast('ftueSkipped');
-          }}
-        />
-      )}
-
-      {/* Desktop Side NavBar */}
-      <div className="flex flex-1 overflow-hidden">
+        {/* Welcome Overlay */}
         <Suspense fallback={<LoadingSpinner />}>
-          <NavBar 
-            active={activeNav} 
-            onNavigate={handleNavChange} 
-            theme={currentEnvironment}
-            isMobile={false}
+          <WelcomeOverlay 
+            isOpen={showWelcomeOverlay} 
+            onClose={() => setShowWelcomeOverlay(false)}
+            onSkip={() => {
+              setShowWelcomeOverlay(false);
+              addToast('ftueSkipped');
+            }}
+            onStart={handleTutorialStart}
           />
         </Suspense>
-        {/* DM Center - Full width without drawer constraints */}
-        {currentScreen === 'dm-center' && (
-          <div className="flex-1 flex flex-col h-full">
-            {/* Top Bar */}
-            <Suspense fallback={<LoadingSpinner />}>
-              <TopBar 
-                onNewCampaign={handleNewCampaign}
-                isMobile={isMobile}
-                onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
-                currentScreen={currentScreen}
-                onHelpClick={() => setShowHelp(true)}
-              />
-            </Suspense>
-            {/* Navigation Manager for URL routing */}
-            <NavigationManager 
-              onScreenChange={setCurrentScreen}
-              currentScreen={currentScreen}
-            />
-            
-            {/* Breadcrumb Navigation */}
-            <Breadcrumb 
-              currentScreen={currentScreen}
-              currentCampaign={currentCampaign}
-              character={character}
-              onNavigate={handleBreadcrumbNavigate}
-            />
-            
-            {/* DM Center Content - Full Width */}
-            <main className="flex-1 overflow-auto">
-              <Suspense fallback={<LoadingSpinner />}>
-                <DMCenter 
-                  dmCenterData={dmCenterData}
-                  onUpdateDMCenter={(data) => {
-                    setDmCenterData(data);
-                    if (currentCampaign) {
-                      // Update campaign object in memory
-                      const updatedCampaign = { ...currentCampaign, dmCenterData: data, aiSettings: data.aiSettings };
-                      setCurrentCampaign(updatedCampaign);
-                      // Persist to local storage
-                      const savedCampaigns = JSON.parse(localStorage.getItem('mythseeker_campaigns') || '[]');
-                      const idx = savedCampaigns.findIndex((c: any) => c.id === updatedCampaign.id);
-                      if (idx >= 0) {
-                        savedCampaigns[idx] = updatedCampaign;
-                      } else {
-                        savedCampaigns.push(updatedCampaign);
-                      }
-                      localStorage.setItem('mythseeker_campaigns', JSON.stringify(savedCampaigns));
-                      // Persist to Firestore if multiplayer
-                      if (updatedCampaign.isMultiplayer && isAuthenticated && currentUser) {
-                        multiplayerService.updateCampaignState(updatedCampaign.id, { dmCenterData: data, aiSettings: data.aiSettings });
-                      }
-                    }
-                    if (currentScreen === 'game' || currentScreen === 'waiting') {
-                      setLastPersonaUpdate(Date.now());
-                      addToast('Persona updated', { message: 'AI DM persona/settings updated!' });
-                    }
-                  }}
-                  currentCampaign={currentCampaign}
-                />
-              </Suspense>
-            </main>
-          </div>
-        )}
-
-        {/* Regular layout with drawer for all other screens */}
-        {currentScreen !== 'dm-center' && (
-          <div className="flex flex-1 h-full">
-            {/* Main Content Container */}
-            <div className="flex-1 flex flex-col h-full">
-              {/* Top Bar */}
-              <Suspense fallback={<LoadingSpinner />}>
-                <TopBar 
-                  onNewCampaign={handleNewCampaign}
-                  isMobile={isMobile}
-                  onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
-                  currentScreen={currentScreen}
-                  onHelpClick={() => setShowHelp(true)}
-                />
-              </Suspense>
-              
-              {/* Main Content */}
-              <main className="flex-1 overflow-auto">
-                {/* Navigation Manager for URL routing */}
-                <NavigationManager 
-                  onScreenChange={setCurrentScreen}
-                  currentScreen={currentScreen}
-                />
-                
-                {/* Breadcrumb Navigation */}
-                <Breadcrumb 
-                  currentScreen={currentScreen}
-                  currentCampaign={currentCampaign}
-                  character={character}
-                  onNavigate={handleBreadcrumbNavigate}
-                />
-                
-                {/* Full-width screens that break out of constraints */}
-                {['character', 'waiting', 'game', 'combat', 'world', 'characters', 'character-select'].includes(currentScreen) && (
-                  <div className="w-full h-full">
-                    {renderFullWidthContent()}
-                  </div>
-                )}
-                
-                {/* Constrained width screens */}
-                {['dashboard', 'lobby', 'party', 'magic'].includes(currentScreen) && (
-                  <div className="px-4 lg:px-6 py-2">
-                    {/* Add subtle background pattern for better visual hierarchy */}
-                    <div className="relative min-h-full">
-                      <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-3xl pointer-events-none"></div>
-                      <div className="relative z-10">
-                    {currentScreen === 'dashboard' && (
-                    <div className="h-full flex items-center justify-center">
-                      <div className="text-center">
-                        <h2 className="text-3xl font-bold text-white mb-4">Dashboard</h2>
-                        <p className="text-blue-200 mb-6">Welcome to MythSeeker RPG!</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 w-full">
-                          {/* Quick Start Button */}
-                          <Tooltip content="Start playing immediately with a pre-made character and campaign">
-                            <button
-                              onClick={() => handleQuickStart()}
-                              className="p-6 bg-gradient-to-br from-green-600/20 to-blue-600/20 rounded-lg border-2 border-green-400/30 hover:border-green-400 hover:from-green-600/30 hover:to-blue-600/30 transition-all"
-                            >
-                              <div className="text-3xl mb-2">⚡</div>
-                              <h3 className="text-white font-semibold">Quick Start</h3>
-                              <p className="text-green-200 text-sm">Play in 30 seconds</p>
-                            </button>
-                          </Tooltip>
-                          {/* Tutorial Button */}
-                          <Tooltip content="Learn MythSeeker mechanics through guided gameplay">
-                            <button
-                              onClick={() => handleTutorialStart()}
-                              className="p-6 bg-gradient-to-br from-purple-600/20 to-blue-600/20 rounded-lg border-2 border-purple-400/30 hover:border-purple-400 hover:from-purple-600/30 hover:to-blue-600/30 transition-all"
-                            >
-                              <div className="text-3xl mb-2">📚</div>
-                              <h3 className="text-white font-semibold">Tutorial</h3>
-                              <p className="text-purple-200 text-sm">Learn the ropes</p>
-                            </button>
-                          </Tooltip>
-                          <Tooltip content="Create new campaigns or join existing ones">
-                            <button
-                              onClick={() => handleNavChange('campaigns')}
-                              className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
-                            >
-                              <Book size={32} className="text-blue-400 mx-auto mb-2" />
-                              <h3 className="text-white font-semibold">Campaigns</h3>
-                              <p className="text-blue-200 text-sm">Create or join campaigns</p>
-                            </button>
-                          </Tooltip>
-                          <Tooltip content="View and manage your characters">
-                            <button
-                              onClick={() => handleNavChange('characters')}
-                              className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
-                            >
-                              <User size={32} className="text-green-400 mx-auto mb-2" />
-                              <h3 className="text-white font-semibold">Characters</h3>
-                              <p className="text-blue-200 text-sm">Manage your characters</p>
-                            </button>
-                          </Tooltip>
-                          <Tooltip content="View your party members and their status">
-                            <button
-                              onClick={() => handleNavChange('party')}
-                              className="p-6 bg-white/10 rounded-lg border border-white/20 hover:bg-white/20 transition-all"
-                            >
-                              <Users size={32} className="text-purple-400 mx-auto mb-2" />
-                              <h3 className="text-white font-semibold">Party</h3>
-                              <p className="text-blue-200 text-sm">View party members</p>
-                            </button>
-                          </Tooltip>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {currentScreen === 'character' && (
-                    <CharacterCreation 
-                      playerName={currentUser?.displayName || ''}
-                      classes={classes}
-                      onCreateCharacter={createCharacter}
-                      joinCode={joinCode}
-                    />
-                  )}
-                  {currentScreen === 'lobby' && (
-                    <CampaignLobby 
-                      campaigns={campaigns}
-                      campaignThemes={campaignThemes}
-                      onCreateCampaign={createCampaign}
-                      character={character}
-                      onDeleteCampaign={deleteCampaign}
-                      onJoinCampaign={joinCampaign}
-                      onResumeCampaign={resumeCampaign}
-                      onPauseCampaign={pauseCampaign}
-                    />
-                  )}
-                  {currentScreen === 'waiting' && (
-                    <WaitingRoom 
-                      campaign={currentCampaign}
-                      onStart={startCampaign}
-                      onBack={() => setCurrentScreen('lobby')}
-                    />
-                  )}
-                  {currentScreen === 'game' && (
-                    <Gameplay
-                      campaign={currentCampaign}
-                      messages={messages}
-                      inputMessage={inputMessage}
-                      setInputMessage={setInputMessage}
-                      sendMessage={sendMessage}
-                      handleKeyPress={handleKeyPress}
-                      isAIThinking={isAIThinking}
-                      messagesEndRef={messagesEndRef}
-                      onStartCombat={startCombat}
-                      worldState={worldState}
-                      aiMemory={aiMemory}
-                      inputRef={gameInputRef}
-                    />
-                  )}
-                  {currentScreen === 'party' && (
-                    <div className="h-full p-6">
-                      <h2 className="text-2xl font-bold text-white mb-6">Party Management</h2>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {partyState.players.map((player) => (
-                          <div key={player.id} className="bg-white/10 rounded-lg p-4 border border-white/20">
-                            <h3 className="text-white font-semibold">{player.character?.name || player.name}</h3>
-                            <p className="text-blue-200 text-sm">{player.character?.class || 'Unknown Class'}</p>
-                            <p className="text-green-400 text-xs">Level {player.character?.level || 1}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {currentScreen === 'magic' && (
-                    <div className="h-full p-6">
-                      <h2 className="text-2xl font-bold text-white mb-6">Magic & Spells</h2>
-                      <div className="bg-white/10 rounded-lg p-6 border border-white/20">
-                        <p className="text-blue-200 mb-4">Spell system coming soon!</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="bg-black/20 rounded-lg p-4">
-                            <h3 className="text-white font-semibold mb-2">Known Spells</h3>
-                            <p className="text-blue-200">No spells learned yet</p>
-                          </div>
-                          <div className="bg-black/20 rounded-lg p-4">
-                            <h3 className="text-white font-semibold mb-2">Spell Slots</h3>
-                            <p className="text-blue-200">0 slots available</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Default case - show dashboard if no screen matches */}
-                  {!['dashboard', 'character', 'lobby', 'waiting', 'game', 'party', 'world', 'combat', 'magic', 'dm-center'].includes(currentScreen) && (
-                    <div className="h-full flex items-center justify-center">
-                      <div className="text-center">
-                        <h2 className="text-3xl font-bold text-white mb-4">Welcome to MythSeeker</h2>
-                        <p className="text-blue-200">Use the navigation to get started!</p>
-                      </div>
-                    </div>
-                  )}
-                    </div>
-                  </div>
-                </div>
-              )}
-              </main>
+        {/* Main Content Area */}
+        <div className="h-full overflow-hidden">
+          <main className="h-full overflow-hidden">
+            <div className="h-full">
+              <div className="h-full overflow-hidden">
+                {renderFullWidthContent()}
+              </div>
             </div>
-            
-
-          </div>
-        )}
-
+          </main>
+        </div>
         {/* Right Drawer - only for non-DM Center screens */}
         {currentScreen !== 'dm-center' && (
           <Suspense fallback={<LoadingSpinner />}>
@@ -3535,31 +3302,7 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
             />
           </Suspense>
         )}
-      </div>
-      {/* Right Drawer - Fixed positioning for both mobile and desktop */}
-      <Suspense fallback={<LoadingSpinner />}>
-        <RightDrawer
-          isOpen={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          activeTab={activeDrawerTab}
-          onTabChange={setActiveDrawerTab}
-          isMobile={isMobile}
-          campaign={currentCampaign}
-          messages={messages}
-          players={partyState.players}
-          worldState={worldState}
-          achievements={achievements}
-          onSendMessage={sendMultiplayerMessage}
-          onUpdateSettings={(settings) => {
-            console.log('Settings updated:', settings);
-          }}
-          drawerWidth={drawerWidth}
-          setDrawerWidth={setDrawerWidth}
-          minWidth={MIN_WIDTH}
-          maxWidth={MAX_WIDTH}
-        />
-      </Suspense>
-
+      </ErrorBoundary>
       {/* Floating Action Button - sets drawer tab and opens drawer */}
       <FloatingActionButton
         onToggleDrawer={() => setDrawerOpen(!drawerOpen)}
@@ -3572,16 +3315,6 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
         hasNotifications={messages.length > 0}
         notificationCount={messages.filter(m => m.type === 'system').length}
       />
-      {/* Mobile Navigation - Bottom */}
-      <Suspense fallback={<LoadingSpinner />}>
-        <NavBar 
-          active={activeNav} 
-          onNavigate={handleNavChange} 
-          theme={currentEnvironment}
-          isMobile={true}
-          onToggleMobile={() => setMobileNavOpen(!mobileNavOpen)}
-        />
-      </Suspense>
       {/* Simple Help Overlay */}
       <Suspense fallback={<LoadingSpinner />}>
         <SimpleHelp 
@@ -3598,11 +3331,6 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
           onAction={handleHelpAction}
         />
       </Suspense>
-      {lastPersonaUpdate > 0 && Date.now() - lastPersonaUpdate < 5000 && (
-        <div className="fixed top-4 right-4 z-50 bg-blue-700 text-white px-4 py-2 rounded shadow-lg animate-pulse">
-          AI DM Persona Updated!
-        </div>
-      )}
     </div>
   );
 };
@@ -4133,7 +3861,7 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
       switch (sortBy) {
         case 'name':
           return a.theme.localeCompare(b.theme);
-        case 'status':
+        case 'status': {
           const getStatusPriority = (campaign: any) => {
             if (!campaign.started) return 3;
             if (campaign.status === 'active') return 1;
@@ -4141,6 +3869,7 @@ const CampaignLobby = ({ campaigns, campaignThemes, onCreateCampaign, character,
             return 4;
           };
           return getStatusPriority(a) - getStatusPriority(b);
+        }
         case 'players':
           return (b.players?.length || 0) - (a.players?.length || 0);
         case 'date':
@@ -4717,7 +4446,7 @@ const WaitingRoom: React.FC<{ campaign: any, onStart: (campaign: any) => void, o
             <div className="flex-1">
               <h3 className="text-xl font-semibold text-orange-200 mb-2">Turn-Based Multiplayer</h3>
               <p className="text-orange-100 mb-3">
-                You can start this multiplayer campaign solo! Other players can join during the game when it's their turn. 
+                You can start this multiplayer campaign solo! Other players can join during the game when it&apos;s their turn. 
                 Perfect for turn-based gameplay where friends hop in and out as needed.
               </p>
               <div className="flex items-center space-x-2 text-sm text-orange-200">
@@ -4767,7 +4496,7 @@ const WaitingRoom: React.FC<{ campaign: any, onStart: (campaign: any) => void, o
             <h4 className="font-semibold mb-2">🎮 For Players</h4>
             <p className="text-sm text-blue-200">
               Even if the campaign has started, you can still join! Just use the campaign code and 
-              jump in when it's your turn or during a break in the action.
+              jump in when it&apos;s your turn or during a break in the action.
             </p>
           </div>
         </div>
@@ -4777,28 +4506,915 @@ const WaitingRoom: React.FC<{ campaign: any, onStart: (campaign: any) => void, o
 };
 
 export default function AppWrapper() {
+  const [user, setUser] = useState<any>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      setAuthChecked(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Handler for opening authentication (login/signup)
+  const handleOpenAuth = async () => {
+    try {
+      await firebaseService.signInWithGoogle();
+      console.log('Sign in successful');
+    } catch (error) {
+      console.error('Sign in error:', error);
+    }
+  };
+
+  if (!authChecked) {
+    return <LoadingSpinner />;
+  }
+
+  if (!user) {
+    return <LandingPage onOpenAuth={handleOpenAuth} />;
+  }
+
+  // If authenticated, render the full app with Dashboard integration
   return (
     <Router>
       {/* Skip to content link for accessibility */}
       <a href="#main-content" className="sr-only focus:not-sr-only absolute top-2 left-2 bg-blue-700 text-white px-4 py-2 rounded z-50">Skip to main content</a>
       <ErrorBoundary>
         <Routes>
-          <Route path="/" element={<AIDungeonMaster />} />
-          <Route path="/dashboard" element={<AIDungeonMaster />} />
-          <Route path="/characters" element={<AIDungeonMaster />} />
-          <Route path="/characters/create" element={<AIDungeonMaster />} />
-          <Route path="/campaigns" element={<AIDungeonMaster />} />
-          <Route path="/campaigns/:id" element={<AIDungeonMaster />} />
-          <Route path="/campaigns/:id/waiting" element={<AIDungeonMaster />} />
-          <Route path="/party" element={<AIDungeonMaster />} />
-          <Route path="/world" element={<AIDungeonMaster />} />
-          <Route path="/combat" element={<AIDungeonMaster />} />
-          <Route path="/magic" element={<AIDungeonMaster />} />
-          <Route path="/dm-center" element={<AIDungeonMaster />} />
-          <Route path="/profile" element={<AIDungeonMaster />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardWrapper user={user} />} />
+          <Route path="/game/*" element={<GameWrapper user={user} />} />
+          <Route path="/characters" element={<CharacterWrapper user={user} />} />
+          <Route path="/characters/create" element={<CharacterCreationWrapper user={user} />} />
+          <Route path="/campaigns" element={<CampaignWrapper user={user} />} />
+          <Route path="/campaigns/:id" element={<CampaignGameWrapper user={user} />} />
+          <Route path="/campaigns/:id/waiting" element={<WaitingRoomWrapper user={user} />} />
+          <Route path="/party" element={<PartyWrapper user={user} />} />
+          <Route path="/world" element={<WorldWrapper user={user} />} />
+          <Route path="/combat" element={<CombatWrapper user={user} />} />
+          <Route path="/magic" element={<MagicWrapper user={user} />} />
+          <Route path="/dm-center" element={<DMCenterWrapper user={user} />} />
+          <Route path="/profile" element={<ProfileWrapper user={user} />} />
+          <Route path="/achievements" element={<AchievementsWrapper user={user} />} />
+          <Route path="/settings" element={<SettingsWrapper user={user} />} />
+          <Route path="/help" element={<HelpWrapper user={user} />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </ErrorBoundary>
     </Router>
   );
 }
+
+// Dashboard Wrapper Component
+const DashboardWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [isDiceRollerOpen, setIsDiceRollerOpen] = useState(false);
+
+  useEffect(() => {
+    // Load user data
+    const loadUserData = async () => {
+      try {
+        const userCampaigns = await firebaseService.getUserCampaigns(user.uid);
+        const userCharacters = await firebaseService.getUserCharacters(user.uid);
+        setCampaigns(userCampaigns || []);
+        setCharacters(userCharacters || []);
+      } catch (error) {
+        console.error('Error loading user data:', error);
+      }
+    };
+    loadUserData();
+  }, [user.uid]);
+
+  const handleNavigate = (path: string) => {
+    navigate(path);
+  };
+
+  const handleCreateCampaign = () => {
+    navigate('/campaigns');
+  };
+
+  const handleCreateCharacter = () => {
+    navigate('/characters/create');
+  };
+
+  const handleJoinCampaign = () => {
+    navigate('/campaigns');
+  };
+
+  const handleResumeCampaign = (campaignId: string) => {
+    navigate(`/campaigns/${campaignId}`);
+  };
+
+  const handleOpenDiceRoller = () => {
+    setIsDiceRollerOpen(true);
+  };
+
+  const handleOpenProfile = () => {
+    navigate('/profile');
+  };
+
+  const handleOpenSettings = () => {
+    navigate('/settings');
+  };
+
+  const handleOpenAchievements = () => {
+    navigate('/achievements');
+  };
+
+  const handleOpenHelp = () => {
+    navigate('/help');
+  };
+
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <Dashboard
+          user={user}
+          campaigns={campaigns}
+          characters={characters}
+          onNavigate={handleNavigate}
+          onCreateCampaign={handleCreateCampaign}
+          onCreateCharacter={handleCreateCharacter}
+          onJoinCampaign={handleJoinCampaign}
+          onResumeCampaign={handleResumeCampaign}
+          onOpenDiceRoller={handleOpenDiceRoller}
+          onOpenProfile={handleOpenProfile}
+          onOpenSettings={handleOpenSettings}
+          onOpenAchievements={handleOpenAchievements}
+          onOpenHelp={handleOpenHelp}
+        />
+      </div>
+      {isDiceRollerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-white">Dice Roller</h2>
+              <button
+                onClick={() => setIsDiceRollerOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <DiceRoller3D />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Game Wrapper Component (for the main game interface)
+const GameWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <AIDungeonMaster />
+      </div>
+    </div>
+  );
+};
+
+// Character Wrapper Component
+const CharacterWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <CharactersPage user={user} />
+      </div>
+    </div>
+  );
+};
+
+// Character Creation Wrapper Component
+const CharacterCreationWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <AIDungeonMaster initialScreen="character" />
+      </div>
+    </div>
+  );
+};
+
+// Campaign Wrapper Component
+const CampaignWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <AIDungeonMaster initialScreen="lobby" />
+      </div>
+    </div>
+  );
+};
+
+// Campaign Game Wrapper Component
+const CampaignGameWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <AIDungeonMaster initialScreen="game" />
+      </div>
+    </div>
+  );
+};
+
+// Waiting Room Wrapper Component
+const WaitingRoomWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <AIDungeonMaster initialScreen="waiting" />
+      </div>
+    </div>
+  );
+};
+
+// Party Wrapper Component
+const PartyWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <PartyPage user={user} />
+      </div>
+    </div>
+  );
+};
+
+// World Wrapper Component
+const WorldWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <WorldPage user={user} />
+      </div>
+    </div>
+  );
+};
+
+// Combat Wrapper Component
+const CombatWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <CombatPage user={user} />
+      </div>
+    </div>
+  );
+};
+
+// Magic Wrapper Component
+const MagicWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <MagicPage user={user} />
+      </div>
+    </div>
+  );
+};
+
+// DM Center Wrapper Component
+const DMCenterWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <DMCenterPage user={user} />
+      </div>
+    </div>
+  );
+};
+
+// Profile Wrapper Component
+const ProfileWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <ProfilePage user={user} />
+      </div>
+    </div>
+  );
+};
+
+// Achievements Wrapper Component
+const AchievementsWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <AchievementsPage user={user} />
+      </div>
+    </div>
+  );
+};
+
+// Settings Wrapper Component
+const SettingsWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <SettingsPage user={user} />
+      </div>
+    </div>
+  );
+};
+
+// Help Wrapper Component
+const HelpWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-hidden">
+        <HelpPage user={user} />
+      </div>
+    </div>
+  );
+};
+
+// Page Components for each navigation item
+const CharactersPage: React.FC<{ user: any }> = ({ user }) => {
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadCharacters = async () => {
+      try {
+        const userCharacters = await firebaseService.getUserCharacters(user.uid);
+        setCharacters(userCharacters || []);
+      } catch (error) {
+        console.error('Error loading characters:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadCharacters();
+  }, [user.uid]);
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-8 h-8 border-4 border-blue-300/30 border-t-blue-400 rounded-full animate-spin mx-auto"></div>
+          <p className="text-blue-200">Loading characters...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 p-6 overflow-y-auto">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">Characters</h1>
+          <p className="text-blue-200">Manage your heroes and companions</p>
+        </div>
+        
+        {characters.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="w-24 h-24 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <User className="w-12 h-12 text-slate-400" />
+            </div>
+            <h3 className="text-xl font-semibold text-white mb-2">No Characters Yet</h3>
+            <p className="text-blue-200 mb-6">Create your first character to begin your adventure</p>
+            <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+              Create Character
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {characters.map((character) => (
+              <div key={character.id} className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50 hover:border-blue-500/50 transition-colors">
+                <div className="flex items-center space-x-4 mb-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold text-lg">{character.name?.charAt(0)}</span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">{character.name}</h3>
+                    <p className="text-blue-200 text-sm">{character.class}</p>
+                  </div>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Level</span>
+                    <span className="text-white">{character.level || 1}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">XP</span>
+                    <span className="text-white">{character.xp || 0}</span>
+                  </div>
+                </div>
+                <div className="mt-4 flex space-x-2">
+                  <button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm font-medium transition-colors">
+                    Play
+                  </button>
+                  <button className="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded text-sm font-medium transition-colors">
+                    Edit
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const PartyPage: React.FC<{ user: any }> = ({ user }) => {
+  return (
+    <div className="flex-1 p-6 overflow-y-auto">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">Party</h1>
+          <p className="text-blue-200">Team up with friends and coordinate adventures</p>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-xl font-semibold text-white mb-4">Active Party</h3>
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Users className="w-8 h-8 text-slate-400" />
+              </div>
+              <p className="text-blue-200">No active party</p>
+              <p className="text-slate-400 text-sm">Join or create a party to start playing together</p>
+            </div>
+          </div>
+          
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-xl font-semibold text-white mb-4">Party Invitations</h3>
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <User className="w-8 h-8 text-slate-400" />
+              </div>
+              <p className="text-blue-200">No pending invitations</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const WorldPage: React.FC<{ user: any }> = ({ user }) => {
+  return (
+    <div className="flex-1 p-6 overflow-y-auto">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">World</h1>
+          <p className="text-blue-200">Explore the realm and discover its secrets</p>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-xl font-semibold text-white mb-4">World Map</h3>
+            <div className="aspect-video bg-slate-700/30 rounded-lg flex items-center justify-center">
+              <div className="text-center">
+                <Globe className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+                <p className="text-blue-200">Interactive world map coming soon</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="space-y-6">
+            <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+              <h3 className="text-lg font-semibold text-white mb-4">Current Location</h3>
+              <p className="text-blue-200">Not in any location</p>
+            </div>
+            
+            <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+              <h3 className="text-lg font-semibold text-white mb-4">Discovered Areas</h3>
+              <p className="text-slate-400 text-sm">No areas discovered yet</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CombatPage: React.FC<{ user: any }> = ({ user }) => {
+  return (
+    <div className="flex-1 p-6 overflow-y-auto">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">Combat</h1>
+          <p className="text-blue-200">Battle system & tactical combat tools</p>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-xl font-semibold text-white mb-4">Combat Simulator</h3>
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Sword className="w-8 h-8 text-slate-400" />
+              </div>
+              <p className="text-blue-200">Practice combat scenarios</p>
+              <button className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors">
+                Start Combat
+              </button>
+            </div>
+          </div>
+          
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-xl font-semibold text-white mb-4">Combat History</h3>
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trophy className="w-8 h-8 text-slate-400" />
+              </div>
+              <p className="text-blue-200">No combat history</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MagicPage: React.FC<{ user: any }> = ({ user }) => {
+  return (
+    <div className="flex-1 p-6 overflow-y-auto">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">Magic</h1>
+          <p className="text-blue-200">Spells, abilities, and magical resources</p>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-xl font-semibold text-white mb-4">Spell Library</h3>
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Swords className="w-8 h-8 text-slate-400" />
+              </div>
+              <p className="text-blue-200">Browse and learn spells</p>
+              <button className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors">
+                Explore Spells
+              </button>
+            </div>
+          </div>
+          
+          <div className="space-y-6">
+            <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+              <h3 className="text-lg font-semibold text-white mb-4">Known Spells</h3>
+              <p className="text-slate-400 text-sm">No spells learned yet</p>
+            </div>
+            
+            <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+              <h3 className="text-lg font-semibold text-white mb-4">Spell Slots</h3>
+              <p className="text-slate-400 text-sm">No spell slots available</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const DMCenterPage: React.FC<{ user: any }> = ({ user }) => {
+  return (
+    <div className="flex-1 p-6 overflow-y-auto">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">DM Center</h1>
+          <p className="text-blue-200">Dungeon Master tools and resources</p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-lg font-semibold text-white mb-4">Campaign Builder</h3>
+            <p className="text-blue-200 mb-4">Create and manage campaigns</p>
+            <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors">
+              Create Campaign
+            </button>
+          </div>
+          
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-lg font-semibold text-white mb-4">NPC Generator</h3>
+            <p className="text-blue-200 mb-4">Generate NPCs and characters</p>
+            <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors">
+              Generate NPC
+            </button>
+          </div>
+          
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-lg font-semibold text-white mb-4">Initiative Tracker</h3>
+            <p className="text-blue-200 mb-4">Track combat initiative</p>
+            <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors">
+              Start Tracker
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ProfilePage: React.FC<{ user: any }> = ({ user }) => {
+  return (
+    <div className="flex-1 p-6 overflow-y-auto">
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">Profile</h1>
+          <p className="text-blue-200">Your account settings and preferences</p>
+        </div>
+        
+        <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+          <div className="flex items-center space-x-6 mb-8">
+            <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-blue-600 rounded-full flex items-center justify-center">
+              {user?.photoURL ? (
+                <img src={user.photoURL} alt={user.displayName} className="w-20 h-20 rounded-full" />
+              ) : (
+                <User className="w-10 h-10 text-white" />
+              )}
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-white">{user?.displayName || 'Adventurer'}</h2>
+              <p className="text-blue-200">{user?.email}</p>
+              <p className="text-slate-400 text-sm">Member since {user?.metadata?.creationTime ? new Date(user.metadata.creationTime).toLocaleDateString() : 'Unknown'}</p>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-4">Account Settings</h3>
+              <div className="space-y-3">
+                <button className="w-full text-left p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                  <span className="text-white">Edit Profile</span>
+                </button>
+                <button className="w-full text-left p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                  <span className="text-white">Change Password</span>
+                </button>
+                <button className="w-full text-left p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                  <span className="text-white">Privacy Settings</span>
+                </button>
+              </div>
+            </div>
+            
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-4">Game Statistics</h3>
+              <div className="space-y-3">
+                <div className="p-3 bg-slate-700/50 rounded-lg">
+                  <span className="text-slate-400 text-sm">Campaigns Played</span>
+                  <p className="text-white font-semibold">0</p>
+                </div>
+                <div className="p-3 bg-slate-700/50 rounded-lg">
+                  <span className="text-slate-400 text-sm">Characters Created</span>
+                  <p className="text-white font-semibold">0</p>
+                </div>
+                <div className="p-3 bg-slate-700/50 rounded-lg">
+                  <span className="text-slate-400 text-sm">Total Play Time</span>
+                  <p className="text-white font-semibold">0 hours</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AchievementsPage: React.FC<{ user: any }> = ({ user }) => {
+  return (
+    <div className="flex-1 p-6 overflow-y-auto">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">Achievements</h1>
+          <p className="text-blue-200">Track your progress and accomplishments</p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trophy className="w-8 h-8 text-slate-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">First Steps</h3>
+              <p className="text-blue-200 text-sm mb-4">Create your first character</p>
+              <div className="w-full bg-slate-700 rounded-full h-2">
+                <div className="bg-blue-600 h-2 rounded-full" style={{ width: '0%' }}></div>
+              </div>
+              <p className="text-slate-400 text-xs mt-2">0% Complete</p>
+            </div>
+          </div>
+          
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Book className="w-8 h-8 text-slate-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">Storyteller</h3>
+              <p className="text-blue-200 text-sm mb-4">Complete your first campaign</p>
+              <div className="w-full bg-slate-700 rounded-full h-2">
+                <div className="bg-blue-600 h-2 rounded-full" style={{ width: '0%' }}></div>
+              </div>
+              <p className="text-slate-400 text-xs mt-2">0% Complete</p>
+            </div>
+          </div>
+          
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Sword className="w-8 h-8 text-slate-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">Warrior</h3>
+              <p className="text-blue-200 text-sm mb-4">Win your first combat</p>
+              <div className="w-full bg-slate-700 rounded-full h-2">
+                <div className="bg-blue-600 h-2 rounded-full" style={{ width: '0%' }}></div>
+              </div>
+              <p className="text-slate-400 text-xs mt-2">0% Complete</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SettingsPage: React.FC<{ user: any }> = ({ user }) => {
+  return (
+    <div className="flex-1 p-6 overflow-y-auto">
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">Settings</h1>
+          <p className="text-blue-200">App preferences and configuration</p>
+        </div>
+        
+        <div className="space-y-6">
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-lg font-semibold text-white mb-4">Game Settings</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-blue-200">Sound Effects</span>
+                <button className="w-12 h-6 bg-blue-600 rounded-full relative">
+                  <div className="w-4 h-4 bg-white rounded-full absolute top-1 right-1"></div>
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-blue-200">Music</span>
+                <button className="w-12 h-6 bg-slate-600 rounded-full relative">
+                  <div className="w-4 h-4 bg-white rounded-full absolute top-1 left-1"></div>
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-blue-200">Notifications</span>
+                <button className="w-12 h-6 bg-blue-600 rounded-full relative">
+                  <div className="w-4 h-4 bg-white rounded-full absolute top-1 right-1"></div>
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-lg font-semibold text-white mb-4">Display Settings</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-blue-200">Theme</span>
+                <select className="bg-slate-700 text-white px-3 py-2 rounded border border-slate-600">
+                  <option>Dark</option>
+                  <option>Light</option>
+                  <option>Auto</option>
+                </select>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-blue-200">Font Size</span>
+                <select className="bg-slate-700 text-white px-3 py-2 rounded border border-slate-600">
+                  <option>Small</option>
+                  <option>Medium</option>
+                  <option>Large</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const HelpPage: React.FC<{ user: any }> = ({ user }) => {
+  return (
+    <div className="flex-1 p-6 overflow-y-auto">
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">Help & Support</h1>
+          <p className="text-blue-200">Support & documentation</p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-lg font-semibold text-white mb-4">Getting Started</h3>
+            <div className="space-y-3">
+              <button className="w-full text-left p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                <span className="text-white">Quick Start Guide</span>
+              </button>
+              <button className="w-full text-left p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                <span className="text-white">Character Creation</span>
+              </button>
+              <button className="w-full text-left p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                <span className="text-white">First Campaign</span>
+              </button>
+            </div>
+          </div>
+          
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-lg font-semibold text-white mb-4">Support</h3>
+            <div className="space-y-3">
+              <button className="w-full text-left p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                <span className="text-white">FAQ</span>
+              </button>
+              <button className="w-full text-left p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                <span className="text-white">Contact Support</span>
+              </button>
+              <button className="w-full text-left p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                <span className="text-white">Bug Report</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

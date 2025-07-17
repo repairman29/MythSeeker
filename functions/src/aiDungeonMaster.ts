@@ -10,7 +10,7 @@ const secretClient = new SecretManagerServiceClient();
 // Enhanced rate limiting configuration
 const RATE_LIMITS = {
   aiDungeonMaster: { requests:15windowMs: 60000 }, // 15 requests per minute
-  aiDungeonMasterPremium: { requests:30 windowMs: 60000// 30 requests per minute for premium users
+  aiDungeonMasterPremium: { requests:30 windowMs: 60// 30 requests per minute for premium users
 };
 
 // Helper to access secrets with caching

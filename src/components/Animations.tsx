@@ -179,7 +179,7 @@ export const ScreenTransition: React.FC<{
     switch (type) {
       case 'fade':
         return 'opacity-0 bg-black';
-      case 'slide':
+      case 'slide': {
         const directionClasses = {
           left: 'translate-x-full',
           right: '-translate-x-full',
@@ -187,6 +187,7 @@ export const ScreenTransition: React.FC<{
           down: '-translate-y-full'
         };
         return `${directionClasses[direction]} bg-gradient-to-br from-blue-900 to-purple-900`;
+      }
       case 'zoom':
         return 'scale-0 bg-black';
       default:

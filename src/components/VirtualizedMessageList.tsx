@@ -18,12 +18,7 @@ interface VirtualizedMessageListProps {
   className?: string;
 }
 
-const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
-  messages,
-  character,
-  onChoiceSelect,
-  className = ''
-}) => {
+const VirtualizedMessageListComponent: React.FC<VirtualizedMessageListProps> = (props) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const [parentHeight, setParentHeight] = useState(0);
 
@@ -42,7 +37,7 @@ const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
 
   // Virtualizer for performance
   const rowVirtualizer = useVirtualizer({
-    count: messages.length,
+    count: props.messages.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 100, // Estimated height per message
     overscan: 5, // Number of items to render outside viewport
@@ -68,7 +63,7 @@ const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
           <div className="flex-shrink-0">
             {isPlayer ? (
               <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                {character?.name?.charAt(0) || 'P'}
+                {props.character?.name?.charAt(0) || 'P'}
               </div>
             ) : isDM ? (
               <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-white text-sm">
@@ -84,7 +79,7 @@ const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
             <div className="flex items-center space-x-2 mb-1">
               <span className="font-semibold text-white">
                 {isPlayer 
-                  ? character?.name || 'You'
+                  ? props.character?.name || 'You'
                   : isDM
                   ? 'Dungeon Master'
                   : message.playerName || 'Unknown'
@@ -102,7 +97,7 @@ const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
                 {message.choices.map((choice: string, choiceIndex: number) => (
                   <button
                     key={choiceIndex}
-                    onClick={() => onChoiceSelect?.(choice)}
+                    onClick={() => props.onChoiceSelect?.(choice)}
                     className="block w-full text-left p-2 bg-white/10 hover:bg-white/20 rounded border border-white/20 transition-colors text-sm"
                   >
                     {choice}
@@ -114,12 +109,12 @@ const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
         </div>
       </div>
     );
-  }, [character, onChoiceSelect]);
+  }, [props.character, props.onChoiceSelect]);
 
   return (
     <div 
       ref={parentRef}
-      className={`overflow-auto ${className}`}
+      className={`overflow-auto ${props.className}`}
       style={{ height: '100%' }}
     >
       <div
@@ -130,7 +125,7 @@ const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
         }}
       >
         {rowVirtualizer.getVirtualItems().map((virtualRow: any) => {
-          const message = messages[virtualRow.index];
+          const message = props.messages[virtualRow.index];
           return (
             <div
               key={virtualRow.key}
@@ -151,5 +146,11 @@ const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
     </div>
   );
 };
+
+const VirtualizedMessageList = React.memo(VirtualizedMessageListComponent, (prevProps, nextProps) => {
+  return prevProps.messages.length === nextProps.messages.length;
+});
+
+VirtualizedMessageList.displayName = 'VirtualizedMessageList';
 
 export default VirtualizedMessageList; 

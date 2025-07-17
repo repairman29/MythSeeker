@@ -1,4 +1,12 @@
+/// <reference lib="dom" />
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+
+// Type for IntersectionObserverInit
+type IntersectionObserverInit = {
+  root?: Element | null;
+  rootMargin?: string;
+  threshold?: number | number[];
+};
 
 // Debounce hook for expensive operations
 export const useDebounce = <T>(value: T, delay: number): T => {

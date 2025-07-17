@@ -361,7 +361,7 @@ const CombatSystem: React.FC<CombatSystemProps> = ({
             <h3 className="text-lg font-bold">Combat - Turn {currentTurn}</h3>
             {activeCombatant && (
               <p className="text-blue-200">
-                {activeCombatant.name}'s turn
+                {activeCombatant.name}&apos;s turn
                 {!isPlayerTurn && ' (AI thinking...)'}
               </p>
             )}

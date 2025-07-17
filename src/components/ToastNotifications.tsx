@@ -12,6 +12,9 @@ export interface ToastMessage {
     label: string;
     onClick: () => void;
   };
+  showIntroControls?: boolean;
+  onSkipIntro?: () => void;
+  onDontShowAgain?: () => void;
 }
 
 interface ToastNotificationsProps {
@@ -31,6 +34,7 @@ const ToastNotifications: React.FC<ToastNotificationsProps> = ({ messages, onDis
 
 const Toast: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void }> = ({ toast, onDismiss }) => {
   const [isVisible, setIsVisible] = useState(false);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
 
   useEffect(() => {
     setIsVisible(true);
@@ -41,6 +45,16 @@ const Toast: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void }> 
 
     return () => clearTimeout(timer);
   }, [toast.id, toast.duration, onDismiss]);
+
+  const handleSkipIntro = () => {
+    if (dontShowAgain && toast.onDontShowAgain) {
+      toast.onDontShowAgain();
+    } else if (toast.onSkipIntro) {
+      toast.onSkipIntro();
+    }
+    setIsVisible(false);
+    setTimeout(() => onDismiss(toast.id), 300);
+  };
 
   const getIcon = () => {
     if (toast.icon) return toast.icon;
@@ -96,6 +110,28 @@ const Toast: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void }> 
               >
                 {toast.action.label}
               </button>
+            )}
+            {toast.showIntroControls && (
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id={`dont-show-${toast.id}`}
+                    checked={dontShowAgain}
+                    onChange={(e) => setDontShowAgain(e.target.checked)}
+                    className="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor={`dont-show-${toast.id}`} className="text-xs text-white/80">
+                    Don't show me again
+                  </label>
+                </div>
+                <button
+                  onClick={handleSkipIntro}
+                  className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-xs font-medium transition-colors"
+                >
+                  Skip Intro
+                </button>
+              </div>
             )}
           </div>
           <button

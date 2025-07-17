@@ -33,6 +33,7 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isLoading, setIsLoading] = useState(false);
+  const [lastPersonaUpdate, setLastPersonaUpdate] = useState<number>(0);
 
   // Main navigation tabs for DM Center
   const tabs = [
@@ -101,11 +102,11 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
           <div className="space-y-3 text-sm">
             <div className="flex items-center space-x-3">
               <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-              <span className="text-blue-200">Created "Ancient Dragon" encounter</span>
+              <span className="text-blue-200">Created &quot;Ancient Dragon&quot; encounter</span>
             </div>
             <div className="flex items-center space-x-3">
               <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-              <span className="text-blue-200">Updated "Tavern Keeper" NPC personality</span>
+              <span className="text-blue-200">Updated &quot;Tavern Keeper&quot; NPC personality</span>
             </div>
             <div className="flex items-center space-x-3">
               <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
@@ -212,7 +213,7 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
           <div className="space-y-3 mb-4">
             <div className="p-3 bg-black/20 rounded-lg">
               <div className="flex justify-between items-start mb-2">
-                <h4 className="font-medium text-white">Dragon's Lair</h4>
+                <h4 className="font-medium text-white">Dragon&apos;s Lair</h4>
                 <span className="text-xs bg-red-600 px-2 py-1 rounded text-white">Hard</span>
               </div>
               <p className="text-sm text-gray-300">Ancient red dragon in volcanic cave</p>
@@ -555,7 +556,7 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
           </div>
           <div className="mt-4 p-3 bg-white/10 rounded border border-white/20">
             <p className="text-xs text-gray-300 italic">
-              "Advanced AI features are now active! Experience enhanced NPC interactions, smarter combat, and deeper world persistence."
+              &quot;Advanced AI features are now active! Experience enhanced NPC interactions, smarter combat, and deeper world persistence.&quot;
             </p>
           </div>
         </div>
@@ -571,7 +572,7 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
           </div>
           <div className="mt-4 p-3 bg-white/10 rounded border border-white/20">
             <p className="text-xs text-gray-300 italic">
-              "These settings will be applied to all new campaigns and can be adjusted during gameplay."
+              &quot;These settings will be applied to all new campaigns and can be adjusted during gameplay.&quot;
             </p>
           </div>
         </div>
@@ -662,8 +663,8 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
           <div className="space-y-2">
             <h4 className="font-medium text-blue-200">Conditions</h4>
             <div className="text-sm text-gray-300 space-y-1">
-              <div>Blinded: Can't see</div>
-              <div>Charmed: Can't attack charmer</div>
+              <div>Blinded: Can&apos;t see</div>
+              <div>Charmed: Can&apos;t attack charmer</div>
               <div>Frightened: Disadvantage on rolls</div>
               <div>Prone: Speed 0, melee adv/disadv</div>
             </div>
@@ -713,7 +714,7 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center space-x-3">
               <span className="text-4xl">🧙‍♂️</span>
-              <span>DM Center</span>
+              <span>DM&apos;s Center</span>
             </h1>
             <p className="text-blue-200 mt-1">Command center for the ultimate AI Dungeon Master experience</p>
           </div>
