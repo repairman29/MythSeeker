@@ -60,7 +60,7 @@ const DiceRoller3D: React.FC<DiceRoller3DProps> = ({ isOpen, onClose, onRollComp
   const animationFrameId = useRef<number | null>(null);
 
   // Sound effect
-  const diceSound = useRef<Tone.Sampler | null>(null);
+  const diceSound = useRef<Tone.Oscillator | null>(null);
 
   // Shake detection variables
   const lastAcceleration = useRef({ x: 0, y: 0, z: 0 });
@@ -215,16 +215,13 @@ const DiceRoller3D: React.FC<DiceRoller3DProps> = ({ isOpen, onClose, onRollComp
     return () => observer.disconnect();
   }, [isOpen]);
 
-  // Initialize Tone.js Sampler for dice sound
+  // Initialize Tone.js for dice sound
   useEffect(() => {
     if (!diceSound.current) {
-      diceSound.current = new Tone.Sampler({
-        urls: {
-          C3: "https://cdn.jsdelivr.net/gh/Tonejs/Tone.js/examples/audio/casio/c3.mp3", // Placeholder sound
-        },
-        onload: () => {
-          console.log("Dice sound loaded!");
-        },
+      // Create a simple oscillator for dice sound instead of loading external files
+      diceSound.current = new Tone.Oscillator({
+        frequency: 200,
+        type: "sine"
       }).toDestination();
     }
   }, []);
@@ -232,7 +229,13 @@ const DiceRoller3D: React.FC<DiceRoller3DProps> = ({ isOpen, onClose, onRollComp
   const playDiceSound = useCallback(() => {
     if (diceSound.current) {
       Tone.start(); // Ensure audio context is started
-      diceSound.current.triggerAttackRelease("C3", "8n");
+      // Create a quick dice roll sound effect
+      const now = Tone.now();
+      diceSound.current.frequency.setValueAtTime(200, now);
+      diceSound.current.frequency.exponentialRampTo(50, 0.3, now);
+      diceSound.current.volume.setValueAtTime(-10, now);
+      diceSound.current.volume.linearRampTo(-20, 0.3, now);
+      diceSound.current.start(now).stop(now + 0.3);
     }
   }, []);
 
