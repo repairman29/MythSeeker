@@ -9,8 +9,8 @@ const secretClient = new SecretManagerServiceClient();
 
 // Enhanced rate limiting configuration
 const RATE_LIMITS = {
-  aiDungeonMaster: { requests:15windowMs: 60000 }, // 15 requests per minute
-  aiDungeonMasterPremium: { requests:30 windowMs: 60// 30 requests per minute for premium users
+  aiDungeonMaster: { requests: 15, windowMs: 60000 }, // 15 requests per minute
+  aiDungeonMasterPremium: { requests: 30, windowMs: 60000 } // 30 requests per minute for premium users
 };
 
 // Helper to access secrets with caching
@@ -83,8 +83,10 @@ Ensure your response is valid JSON and maintains the immersive RPG experience.`;
       }]
     }],
     generationConfig: {
-      temperature: 0.8, maxOutputTokens: 2048
-      topP:0.9, topK: 40
+      temperature: 0.8,
+      maxOutputTokens: 2048,
+      topP: 0.9,
+      topK: 40
     },
     safetySettings: [
       {
@@ -166,7 +168,8 @@ function logAIRequest(userId: string, campaignId: string, promptLength: number, 
     success,
     error: error || null,
     model: 'gemini-pro',
-    version: 1.0 };
+    version: 1.0
+  };
   
   // Log to Firestore for monitoring
   db.collection('ai_logs').add(logEntry).catch(err => {
@@ -236,7 +239,7 @@ export const aiDungeonMaster = functions.https.onCall(async (data, context) => {
     ]);
 
     const rules = rulesSnap.exists ? rulesSnap.data()?.content || '' : '';
-    const history = historySnap.exists ? historySnap.data()?.content || ''; 
+    const history = historySnap.exists ? historySnap.data()?.content || '' : '';
     const worldState = worldStateSnap.exists ? worldStateSnap.data() || {} : {};
 
     // Enhanced context composition

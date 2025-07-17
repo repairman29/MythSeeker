@@ -4794,7 +4794,7 @@ const WorldWrapper: React.FC<{ user: any }> = ({ user }) => {
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
       <div className="flex-1 overflow-hidden">
-        <WorldPage user={user} />
+        <AIDungeonMaster initialScreen="world" />
       </div>
     </div>
   );
@@ -4810,7 +4810,7 @@ const CombatWrapper: React.FC<{ user: any }> = ({ user }) => {
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
       <div className="flex-1 overflow-hidden">
-        <CombatPage user={user} />
+        <AIDungeonMaster initialScreen="combat" />
       </div>
     </div>
   );
@@ -4826,7 +4826,7 @@ const MagicWrapper: React.FC<{ user: any }> = ({ user }) => {
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
       <div className="flex-1 overflow-hidden">
-        <MagicPage user={user} />
+        <AIDungeonMaster initialScreen="magic" />
       </div>
     </div>
   );
@@ -4842,7 +4842,7 @@ const DMCenterWrapper: React.FC<{ user: any }> = ({ user }) => {
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
       <div className="flex-1 overflow-hidden">
-        <DMCenterPage user={user} />
+        <AIDungeonMaster initialScreen="dm-center" />
       </div>
     </div>
   );

@@ -11,39 +11,37 @@ const secretClient = new secret_manager_1.SecretManagerServiceClient();
 // Enhanced rate limiting configuration
 const RATE_LIMITS = {
     aiDungeonMaster: { requests: 15, windowMs: 60000 },
-    aiDungeonMasterPremium: { requests: 30, windowMs: 60000 // 30 requests per minute for premium users
-    },
-    // Helper to access secrets with caching
-    const: secretCache = new Map(),
-    function: getSecret(secretName, string), Promise() {
-        var _a, _b;
-        const cacheKey = secretName;
-        const now = Date.now();
-        // Check cache first
-        const cached = secretCache.get(cacheKey);
-        if (cached && cached.expires > now) {
-            return cached.value;
-        }
-        try {
-            const [version] = await secretClient.accessSecretVersion({
-                name: `projects/${process.env.GCLOUD_PROJECT}/secrets/${secretName}/versions/latest`
-            });
-            const value = ((_b = (_a = version.payload) === null || _a === void 0 ? void 0 : _a.data) === null || _b === void 0 ? void 0 : _b.toString()) || '';
-            // Cache for1ur
-            secretCache.set(cacheKey, { value, expires: now + 3600000 });
-            return value;
-        }
-        catch (error) {
-            console.error(`Failed to access secret ${secretName}:`, error);
-            throw new Error(`Secret access failed: ${secretName}`);
-        }
+    aiDungeonMasterPremium: { requests: 30, windowMs: 60000 } // 30 requests per minute for premium users
+};
+// Helper to access secrets with caching
+const secretCache = new Map();
+async function getSecret(secretName) {
+    var _a, _b;
+    const cacheKey = secretName;
+    const now = Date.now();
+    // Check cache first
+    const cached = secretCache.get(cacheKey);
+    if (cached && cached.expires > now) {
+        return cached.value;
     }
-    // Enhanced Vertex AI Gemini Pro integration
-    ,
-    // Enhanced Vertex AI Gemini Pro integration
-    function: callVertexAIGeminiPro(prompt, string, context, string, apiKey, string), Promise() {
-        // Enhanced prompt engineering for better RPG responses
-        const enhancedPrompt = `You are an expert AI Dungeon Master for a tabletop RPG game. You must respond with engaging, dynamic storytelling that adapts to player actions.
+    try {
+        const [version] = await secretClient.accessSecretVersion({
+            name: `projects/${process.env.GCLOUD_PROJECT}/secrets/${secretName}/versions/latest`
+        });
+        const value = ((_b = (_a = version.payload) === null || _a === void 0 ? void 0 : _a.data) === null || _b === void 0 ? void 0 : _b.toString()) || '';
+        // Cache for1ur
+        secretCache.set(cacheKey, { value, expires: now + 3600000 });
+        return value;
+    }
+    catch (error) {
+        console.error(`Failed to access secret ${secretName}:`, error);
+        throw new Error(`Secret access failed: ${secretName}`);
+    }
+}
+// Enhanced Vertex AI Gemini Pro integration
+async function callVertexAIGeminiPro(prompt, context, apiKey) {
+    // Enhanced prompt engineering for better RPG responses
+    const enhancedPrompt = `You are an expert AI Dungeon Master for a tabletop RPG game. You must respond with engaging, dynamic storytelling that adapts to player actions.
 
 CONTEXT:
 ${context}
@@ -74,101 +72,102 @@ Respond with a JSON object containing:
 }
 
 Ensure your response is valid JSON and maintains the immersive RPG experience.`;
-        const requestBody = {
-            contents: [{
-                    parts: [{
-                            text: enhancedPrompt
-                        }]
-                }],
-            generationConfig: {
-                temperature: 0.8, maxOutputTokens: 2048,
-                topP: 0.9, topK: 40
+    const requestBody = {
+        contents: [{
+                parts: [{
+                        text: enhancedPrompt
+                    }]
+            }],
+        generationConfig: {
+            temperature: 0.8,
+            maxOutputTokens: 2048,
+            topP: 0.9,
+            topK: 40
+        },
+        safetySettings: [
+            {
+                category: "HARM_CATEGORY_HARASSMENT",
+                threshold: "BLOCK_MEDIUM_AND_ABOVE"
             },
-            safetySettings: [
-                {
-                    category: "HARM_CATEGORY_HARASSMENT",
-                    threshold: "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                    category: "HARM_CATEGORY_HATE_SPEECH",
-                    threshold: "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                    category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                    threshold: "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                    category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-                    threshold: "BLOCK_MEDIUM_AND_ABOVE"
-                }
-            ]
-        };
-        try {
-            const response = await (0, node_fetch_1.default)(`https://us-central1-aiplatform.googleapis.com/v1/projects/${process.env.GCLOUD_PROJECT}/locations/us-central1/publishers/google/models/gemini-pro:generateContent`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`,
-                    'User-Agent': 'MythSeeker-AI-DM/10'
-                },
-                body: JSON.stringify(requestBody)
-            });
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Vertex AI API error:', response.status, errorText);
-                throw new Error(`Vertex AI API error: ${response.status} - ${errorText}`);
+            {
+                category: "HARM_CATEGORY_HATE_SPEECH",
+                threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+                category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                threshold: "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+                category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+                threshold: "BLOCK_MEDIUM_AND_ABOVE"
             }
-            const data = await response.json();
-            if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-                const content = data.candidates[0].content.parts[0].text;
-                // Validate JSON response
-                try {
-                    const parsed = JSON.parse(content);
-                    if (parsed.narrative && parsed.choices) {
-                        return content;
+        ]
+    };
+    try {
+        const response = await (0, node_fetch_1.default)(`https://us-central1-aiplatform.googleapis.com/v1/projects/${process.env.GCLOUD_PROJECT}/locations/us-central1/publishers/google/models/gemini-pro:generateContent`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+                'User-Agent': 'MythSeeker-AI-DM/10'
+            },
+            body: JSON.stringify(requestBody)
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Vertex AI API error:', response.status, errorText);
+            throw new Error(`Vertex AI API error: ${response.status} - ${errorText}`);
+        }
+        const data = await response.json();
+        if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+            const content = data.candidates[0].content.parts[0].text;
+            // Validate JSON response
+            try {
+                const parsed = JSON.parse(content);
+                if (parsed.narrative && parsed.choices) {
+                    return content;
+                }
+            }
+            catch (parseError) {
+                // If not valid JSON, wrap in proper format
+                return JSON.stringify({
+                    narrative: content,
+                    choices: ["Continue exploring", "Ask questions", "Take action", "Rest and recover"],
+                    atmosphere: {
+                        mood: "neutral",
+                        tension: "medium",
+                        environmentalDetails: "The adventure continues..."
                     }
-                }
-                catch (parseError) {
-                    // If not valid JSON, wrap in proper format
-                    return JSON.stringify({
-                        narrative: content,
-                        choices: ["Continue exploring", "Ask questions", "Take action", "Rest and recover"],
-                        atmosphere: {
-                            mood: "neutral",
-                            tension: "medium",
-                            environmentalDetails: "The adventure continues..."
-                        }
-                    });
-                }
+                });
             }
-            throw new Error('Invalid response format from Vertex AI');
         }
-        catch (error) {
-            console.error('Vertex AI call failed:', error);
-            throw error;
-        }
+        throw new Error('Invalid response format from Vertex AI');
     }
-    // Enhanced error handling and logging
-    ,
-    // Enhanced error handling and logging
-    function: logAIRequest(userId, string, campaignId, string, promptLength, number, responseTime, number, success, boolean, error ?  : string)
-}, { const: logEntry = {
-    timestamp: init_1.default.firestore.FieldValue.serverTimestamp(),
-    userId,
-    campaignId,
-    promptLength,
-    responseTime,
-    success,
-    error: error || null,
-    model: 'gemini-pro',
-    version: 1.0
-} };
-// Log to Firestore for monitoring
-db.collection('ai_logs').add(logEntry).catch(err => {
-    console.error('Failed to log AI request:', err);
-});
-// Also log to console for immediate debugging
-console.log('AI Request Log:', logEntry);
+    catch (error) {
+        console.error('Vertex AI call failed:', error);
+        throw error;
+    }
+}
+// Enhanced error handling and logging
+function logAIRequest(userId, campaignId, promptLength, responseTime, success, error) {
+    const logEntry = {
+        timestamp: init_1.default.firestore.FieldValue.serverTimestamp(),
+        userId,
+        campaignId,
+        promptLength,
+        responseTime,
+        success,
+        error: error || null,
+        model: 'gemini-pro',
+        version: 1.0
+    };
+    // Log to Firestore for monitoring
+    db.collection('ai_logs').add(logEntry).catch(err => {
+        console.error('Failed to log AI request:', err);
+    });
+    // Also log to console for immediate debugging
+    console.log('AI Request Log:', logEntry);
+}
 // Main enhanced function
 exports.aiDungeonMaster = functions.https.onCall(async (data, context) => {
     var _a, _b, _c, _d, _e, _f;
@@ -216,7 +215,7 @@ exports.aiDungeonMaster = functions.https.onCall(async (data, context) => {
             campaignRef.collection('worldState').doc('current').get()
         ]);
         const rules = rulesSnap.exists ? ((_e = rulesSnap.data()) === null || _e === void 0 ? void 0 : _e.content) || '' : '';
-        const history = historySnap.exists ? ((_f = historySnap.data()) === null || _f === void 0 ? void 0 : _f.content) || '' : ;
+        const history = historySnap.exists ? ((_f = historySnap.data()) === null || _f === void 0 ? void 0 : _f.content) || '' : '';
         const worldState = worldStateSnap.exists ? worldStateSnap.data() || {} : {};
         // Enhanced context composition
         const contextText = `CAMPAIGN RULES:
