@@ -7045,6 +7045,11 @@ const MagicPage: React.FC<{ user: any }> = ({ user }) => {
         const userCharacters = await firebaseService.getUserCharacters(user.uid);
         setCharacters(userCharacters || []);
         
+        // Auto-select the first character if available
+        if (userCharacters && userCharacters.length > 0 && !selectedCharacter) {
+          setSelectedCharacter(userCharacters[0]);
+        }
+        
         // Load comprehensive spells from data
         const spellsData = JSON.parse(localStorage.getItem('mythseeker_spells') || '[]');
         if (spellsData.length === 0) {
@@ -7111,6 +7116,13 @@ const MagicPage: React.FC<{ user: any }> = ({ user }) => {
     };
     loadMagicData();
   }, [user.uid]);
+
+  // Auto-select first character when characters are loaded
+  useEffect(() => {
+    if (characters.length > 0 && !selectedCharacter) {
+      setSelectedCharacter(characters[0]);
+    }
+  }, [characters, selectedCharacter]);
 
   const handleLearnSpell = (spell: any) => {
     if (!selectedCharacter) {
