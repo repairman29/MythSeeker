@@ -4799,7 +4799,7 @@ const GameWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden md:pb-0 pb-20">
+      <div className="flex-1 overflow-auto md:pb-0 pb-20">
         <AIDungeonMaster initialScreen="game" />
       </div>
     </div>
@@ -4851,7 +4851,7 @@ const CharacterWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <CharactersPage user={user} />
       </div>
       
@@ -4877,7 +4877,7 @@ const CharacterCreationWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <AIDungeonMaster initialScreen="character" />
       </div>
     </div>
@@ -4929,7 +4929,7 @@ const CampaignWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <CampaignsPage user={user} />
       </div>
       
@@ -4955,7 +4955,7 @@ const CampaignGameWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <AIDungeonMaster initialScreen="game" />
       </div>
     </div>
@@ -4971,7 +4971,7 @@ const WaitingRoomWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <AIDungeonMaster initialScreen="waiting" />
       </div>
     </div>
@@ -5023,7 +5023,7 @@ const PartyWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <PartyPage user={user} />
       </div>
       
@@ -5085,7 +5085,7 @@ const WorldWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <AIDungeonMaster initialScreen="world" />
       </div>
       
@@ -5147,7 +5147,7 @@ const CombatWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <AIDungeonMaster initialScreen="combat" />
       </div>
       
@@ -5209,7 +5209,7 @@ const MagicWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <AIDungeonMaster initialScreen="magic" />
       </div>
       
@@ -5271,7 +5271,7 @@ const DMCenterWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <DMCenterPage user={user} />
       </div>
       
@@ -5333,7 +5333,7 @@ const ProfileWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <ProfilePage user={user} />
       </div>
       
@@ -5395,7 +5395,7 @@ const AchievementsWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <AchievementsPage user={user} />
       </div>
       
@@ -5457,7 +5457,7 @@ const SettingsWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <SettingsPage user={user} />
       </div>
       
@@ -5519,7 +5519,7 @@ const HelpWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <HelpPage user={user} />
       </div>
       
@@ -5804,6 +5804,16 @@ const CampaignsPage: React.FC<{ user: any }> = ({ user }) => {
   const [showJoinCampaign, setShowJoinCampaign] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
   const [joinCode, setJoinCode] = useState('');
+
+  // Campaign themes definition
+  const campaignThemes = [
+    { name: 'Classic Fantasy', description: 'Dragons, magic, and heroic quests in a medieval world', icon: '🏰', bg: 'fantasy' },
+    { name: 'Sci-Fi Adventure', description: 'Space exploration, alien encounters, and futuristic technology', icon: '🚀', bg: 'scifi' },
+    { name: 'Horror Mystery', description: 'Dark secrets, supernatural threats, and psychological tension', icon: '👻', bg: 'horror' },
+    { name: 'Urban Fantasy', description: 'Magic hidden in the modern world, supernatural creatures in cities', icon: '🌃', bg: 'urban' },
+    { name: 'Post-Apocalyptic', description: 'Surviving in a world after civilization has collapsed', icon: '☢️', bg: 'apocalypse' },
+    { name: 'Pirate Adventure', description: 'High seas, treasure hunting, and swashbuckling action', icon: '🏴‍☠️', bg: 'pirate' }
+  ];
 
   useEffect(() => {
     loadCampaigns();
