@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Sword, Shield, Zap, Heart, Star, X, Play, Users, Map, Book } from 'lucide-react';
+import { Sparkles, Sword, Shield, Zap, Heart, Star, X, Play, Users, Map, Book, Check } from 'lucide-react';
 
 interface WelcomeOverlayProps {
   character: any;
@@ -10,6 +10,7 @@ interface WelcomeOverlayProps {
 const WelcomeOverlay: React.FC<WelcomeOverlayProps> = ({ character, onStart, onDismiss }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
 
   useEffect(() => {
     setIsVisible(true);
@@ -45,11 +46,35 @@ const WelcomeOverlay: React.FC<WelcomeOverlayProps> = ({ character, onStart, onD
     if (currentStep < welcomeSteps.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
-      onStart();
+      handleStart();
     }
   };
 
   const handleSkip = () => {
+    handleDismiss();
+  };
+
+  const handleStart = () => {
+    // Save preference if "don't show again" is checked
+    if (dontShowAgain) {
+      const skippedIntros = JSON.parse(localStorage.getItem('mythseeker_skipped_intros') || '[]');
+      if (!skippedIntros.includes('welcomeOverlay')) {
+        skippedIntros.push('welcomeOverlay');
+        localStorage.setItem('mythseeker_skipped_intros', JSON.stringify(skippedIntros));
+      }
+    }
+    onStart();
+  };
+
+  const handleDismiss = () => {
+    // Save preference if "don't show again" is checked
+    if (dontShowAgain) {
+      const skippedIntros = JSON.parse(localStorage.getItem('mythseeker_skipped_intros') || '[]');
+      if (!skippedIntros.includes('welcomeOverlay')) {
+        skippedIntros.push('welcomeOverlay');
+        localStorage.setItem('mythseeker_skipped_intros', JSON.stringify(skippedIntros));
+      }
+    }
     onDismiss();
   };
 
@@ -64,8 +89,9 @@ const WelcomeOverlay: React.FC<WelcomeOverlayProps> = ({ character, onStart, onD
       >
         {/* Close button */}
         <button
-          onClick={handleSkip}
-          className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
+          onClick={handleDismiss}
+          className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors p-1 hover:bg-white/10 rounded"
+          title="Close"
         >
           <X className="w-6 h-6" />
         </button>
@@ -98,6 +124,26 @@ const WelcomeOverlay: React.FC<WelcomeOverlayProps> = ({ character, onStart, onD
                 }`}
               />
             ))}
+          </div>
+
+          {/* Don't show again checkbox */}
+          <div className="flex items-center justify-center space-x-2 mb-6">
+            <button
+              onClick={() => setDontShowAgain(!dontShowAgain)}
+              className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                dontShowAgain 
+                  ? 'bg-white border-white' 
+                  : 'border-white/60 hover:border-white'
+              }`}
+            >
+              {dontShowAgain && <Check className="w-2.5 h-2.5 text-gray-900" />}
+            </button>
+            <label 
+              onClick={() => setDontShowAgain(!dontShowAgain)}
+              className="text-white/80 text-sm cursor-pointer hover:text-white transition-colors"
+            >
+              Don't show this welcome again
+            </label>
           </div>
 
           {/* Action buttons */}

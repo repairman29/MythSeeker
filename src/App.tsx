@@ -405,6 +405,12 @@ const AIDungeonMaster = ({ initialScreen = 'welcome' }: { initialScreen?: string
     addToast(type);
   };
   
+  // Check if welcome overlay should be shown
+  const shouldShowWelcomeOverlay = () => {
+    const skippedIntros = JSON.parse(localStorage.getItem('mythseeker_skipped_intros') || '[]');
+    return !skippedIntros.includes('welcomeOverlay');
+  };
+
   // Toast notification functions
   const addToast = (action: string, context?: any) => {
     // Only show toasts for meaningful gameplay achievements, not errors or info messages
@@ -575,6 +581,11 @@ const AIDungeonMaster = ({ initialScreen = 'welcome' }: { initialScreen?: string
                 setCurrentScreen('dashboard');
                 navigate('/dashboard');
                 analyticsService.trackPageView('dashboard', 'MythSeeker - Dashboard');
+                
+                // Show welcome overlay for new characters if user hasn't skipped it
+                if (shouldShowWelcomeOverlay()) {
+                  setShowWelcomeOverlay(true);
+                }
               } else {
                 setCurrentScreen('welcome');
                 navigate('/');
@@ -1640,6 +1651,11 @@ Start with a welcoming scene that introduces the magical academy setting and the
 
     // Save character to Firebase
     saveCharacter(newCharacter);
+    
+    // Show welcome overlay for new characters if user hasn't skipped it
+    if (shouldShowWelcomeOverlay()) {
+      setShowWelcomeOverlay(true);
+    }
   };
 
   const createCampaign = async (theme: any, customPrompt = '', isMultiplayer = true) => {
@@ -3263,7 +3279,6 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
               onStart={handleTutorialStart}
               onDismiss={() => {
                 setShowWelcomeOverlay(false);
-                addToast('ftueSkipped');
               }}
             />
           </Suspense>

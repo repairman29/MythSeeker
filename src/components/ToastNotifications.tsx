@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sword, Shield, Sparkles, Heart, Star, Zap, Crown, Target, Users, Map, Book, Award, Flame, Eye, Crosshair } from 'lucide-react';
+import { X, Sword, Shield, Sparkles, Heart, Star, Zap, Crown, Target, Users, Map, Book, Award, Flame, Eye, Crosshair, Check } from 'lucide-react';
 
 export interface ToastMessage {
   id: string;
@@ -35,16 +35,23 @@ const ToastNotifications: React.FC<ToastNotificationsProps> = ({ messages, onDis
 const Toast: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void }> = ({ toast, onDismiss }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   useEffect(() => {
     setIsVisible(true);
-    const timer = setTimeout(() => {
-      setIsVisible(false);
-      setTimeout(() => onDismiss(toast.id), 300);
-    }, toast.duration || 4000);
+    
+    // Only auto-dismiss if not hovered and no intro controls
+    if (!toast.showIntroControls) {
+      const timer = setTimeout(() => {
+        if (!isHovered) {
+          setIsVisible(false);
+          setTimeout(() => onDismiss(toast.id), 300);
+        }
+      }, toast.duration || 4000);
 
-    return () => clearTimeout(timer);
-  }, [toast.id, toast.duration, onDismiss]);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.id, toast.duration, onDismiss, toast.showIntroControls, isHovered]);
 
   const handleSkipIntro = () => {
     if (dontShowAgain && toast.onDontShowAgain) {
@@ -52,6 +59,11 @@ const Toast: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void }> 
     } else if (toast.onSkipIntro) {
       toast.onSkipIntro();
     }
+    setIsVisible(false);
+    setTimeout(() => onDismiss(toast.id), 300);
+  };
+
+  const handleDismiss = () => {
     setIsVisible(false);
     setTimeout(() => onDismiss(toast.id), 300);
   };
@@ -93,7 +105,9 @@ const Toast: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void }> 
       className={`${getBgColor()} text-white rounded-lg shadow-lg border border-white/20 backdrop-blur-sm transform transition-all duration-300 ${
         isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
       }`}
-      style={{ minWidth: '300px', maxWidth: '400px' }}
+      style={{ minWidth: '320px', maxWidth: '420px' }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
       <div className="p-4">
         <div className="flex items-start space-x-3">
@@ -112,34 +126,46 @@ const Toast: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void }> 
               </button>
             )}
             {toast.showIntroControls && (
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 space-y-3 border-t border-white/20 pt-3">
                 <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id={`dont-show-${toast.id}`}
-                    checked={dontShowAgain}
-                    onChange={(e) => setDontShowAgain(e.target.checked)}
-                    className="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <label htmlFor={`dont-show-${toast.id}`} className="text-xs text-white/80">
+                  <button
+                    onClick={() => setDontShowAgain(!dontShowAgain)}
+                    className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                      dontShowAgain 
+                        ? 'bg-white border-white' 
+                        : 'border-white/60 hover:border-white'
+                    }`}
+                  >
+                    {dontShowAgain && <Check className="w-2.5 h-2.5 text-gray-900" />}
+                  </button>
+                  <label 
+                    onClick={() => setDontShowAgain(!dontShowAgain)}
+                    className="text-xs text-white/80 cursor-pointer hover:text-white transition-colors"
+                  >
                     Don't show me again
                   </label>
                 </div>
-                <button
-                  onClick={handleSkipIntro}
-                  className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-xs font-medium transition-colors"
-                >
-                  Skip Intro
-                </button>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handleSkipIntro}
+                    className="flex-1 px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded text-xs font-medium transition-colors"
+                  >
+                    Skip Intro
+                  </button>
+                  <button
+                    onClick={handleDismiss}
+                    className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded text-xs font-medium transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </div>
             )}
           </div>
           <button
-            onClick={() => {
-              setIsVisible(false);
-              setTimeout(() => onDismiss(toast.id), 300);
-            }}
-            className="flex-shrink-0 text-white/70 hover:text-white transition-colors"
+            onClick={handleDismiss}
+            className="flex-shrink-0 text-white/70 hover:text-white transition-colors p-1 hover:bg-white/10 rounded"
+            title="Dismiss"
           >
             <X className="w-4 h-4" />
           </button>
@@ -202,85 +228,90 @@ export const generateToastMessage = (action: string, context?: any): ToastMessag
     ],
     levelUp: [
       {
-        title: "⭐ Level Up!",
-        message: "You've grown stronger! Your enemies are getting nervous... and your party is getting jealous.",
+        title: "📈 Level Up!",
+        message: "You've grown stronger! Time to face bigger challenges... and bigger monsters!",
         type: 'achievement' as const
       },
       {
-        title: "🚀 Power Surge!",
-        message: "Level up achieved! You're now officially too powerful for your own good.",
+        title: "🌟 Power Gained!",
+        message: "A new level of power awaits! Your enemies will tremble... or at least roll higher initiative.",
         type: 'achievement' as const
       }
     ],
     achievementUnlocked: [
       {
         title: "🏆 Achievement Unlocked!",
-        message: "You've done something noteworthy! Or at least something the game decided to track.",
+        message: "You've accomplished something special! Your legend grows with each milestone.",
+        type: 'achievement' as const
+      },
+      {
+        title: "⭐ Milestone Reached!",
+        message: "Another badge of honor earned! Your character's story becomes more legendary.",
         type: 'achievement' as const
       }
     ],
-    ftueSkipped: [
+    questCompleted: [
       {
-        title: "🎯 Self-Taught Hero!",
-        message: "You skipped the tutorial! Bold move. Let's see if you can figure out the inventory system...",
-        type: 'fun' as const
-      },
-      {
-        title: "🚀 Trial by Fire!",
-        message: "No tutorial needed! You're either a genius or about to learn some painful lessons.",
-        type: 'fun' as const
-      }
-    ],
-    welcomeBack: [
-      {
-        title: "👋 Welcome Back, Adventurer!",
-        message: "Your quest awaits! The AI DM has been plotting your demise... I mean, your adventure!",
-        type: 'fun' as const
-      },
-      {
-        title: "🌟 Return of the Hero!",
-        message: "Back in the saddle! Your character sheet misses you, and your party needs your healing spells.",
-        type: 'fun' as const
-      }
-    ],
-    campaignPaused: [
-      {
-        title: "⏸️ Campaign Paused!",
-        message: "Your adventure is on hold! The world waits patiently for your return... or does it?",
-        type: 'warning' as const
-      },
-      {
-        title: "🛑 Adventure Suspended!",
-        message: "Campaign paused! Your party is frozen in time, probably mid-sentence. How dramatic!",
-        type: 'warning' as const
-      }
-    ],
-    campaignResumed: [
-      {
-        title: "▶️ Adventure Resumed!",
-        message: "Back to the action! Your party springs back to life, ready to continue their epic quest!",
+        title: "✅ Quest Complete!",
+        message: "Another adventure finished! The realm is a little safer... or more dangerous, depending on your choices.",
         type: 'success' as const
       },
       {
-        title: "🚀 Campaign Restarted!",
-        message: "The adventure continues! Time to pick up where you left off and make some more questionable decisions!",
+        title: "🎯 Mission Accomplished!",
+        message: "Quest objectives achieved! Time to collect your rewards and plan the next adventure.",
         type: 'success' as const
+      }
+    ],
+    itemFound: [
+      {
+        title: "💎 Treasure Discovered!",
+        message: "A valuable find! Let's hope it's not cursed... or if it is, that the curse is at least interesting.",
+        type: 'fun' as const
+      },
+      {
+        title: "🔍 Loot Acquired!",
+        message: "Your search has paid off! Another piece of equipment to make you more formidable.",
+        type: 'fun' as const
+      }
+    ],
+    npcInteraction: [
+      {
+        title: "👥 New Friend Made!",
+        message: "You've met someone interesting! NPCs remember how you treat them... choose wisely.",
+        type: 'fun' as const
+      },
+      {
+        title: "🤝 Social Success!",
+        message: "A successful interaction! Your reputation in this area has improved.",
+        type: 'success' as const
+      }
+    ],
+    explorationMilestone: [
+      {
+        title: "🗺️ New Territory!",
+        message: "You've discovered a new area! The map of your adventures grows larger.",
+        type: 'fun' as const
+      },
+      {
+        title: "🌟 Exploration Bonus!",
+        message: "Your curiosity has been rewarded! New locations mean new opportunities.",
+        type: 'fun' as const
       }
     ]
   };
 
   const messages = funMessages[action as keyof typeof funMessages] || [
     {
-      title: "🎮 Action Completed!",
-      message: "Something happened! The game noticed and decided to tell you about it.",
-      type: 'info' as const
+      title: "🎉 Achievement!",
+      message: "Something wonderful has happened!",
+      type: 'fun' as const
     }
   ];
 
   const selectedMessage = messages[Math.floor(Math.random() * messages.length)];
   
   return {
-    id: `${action}-${Date.now()}`,
+    id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
     ...selectedMessage,
     duration: 5000
   };
