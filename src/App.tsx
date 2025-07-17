@@ -4735,7 +4735,7 @@ const DashboardWrapper: React.FC<{ user: any }> = ({ user }) => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1">
         <Dashboard
           user={user}
           campaigns={campaigns}

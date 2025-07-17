@@ -276,7 +276,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 text-white">
+    <div className="h-full overflow-y-auto bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 text-white">
       {/* Header */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20"></div>
@@ -393,40 +393,41 @@ const Dashboard: React.FC<DashboardProps> = ({
                   <Play className="w-5 h-5 mr-2 text-green-400" />
                   Active Campaigns
                 </h3>
-                {activeCampaigns.length > 0 ? (
-                  <div className="space-y-3">
-                    {activeCampaigns.slice(0, 3).map((campaign) => (
-                      <div
-                        key={campaign.id}
-                        className="p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700/70 transition-colors cursor-pointer"
-                        onClick={() => onResumeCampaign(campaign.id)}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <h4 className="font-medium text-sm">{campaign.theme}</h4>
-                          <span className={`px-2 py-1 rounded-full text-xs ${
-                            campaign.status === 'active' 
-                              ? 'bg-green-500/20 text-green-400' 
-                              : 'bg-yellow-500/20 text-yellow-400'
-                          }`}>
-                            {campaign.status === 'active' ? 'Active' : 'Waiting'}
-                          </span>
-                        </div>
-                        <p className="text-slate-400 text-xs">
-                          {campaign.players?.length || 0} players • {campaign.lastActivity || 'Recently active'}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6">
-                    <Book className="w-12 h-12 mx-auto text-slate-500 mb-3" />
-                    <p className="text-slate-400 text-sm mb-3">No active campaigns</p>
+                {activeCampaigns.length === 0 ? (
+                  <div className="text-center py-4">
+                    <Book className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                    <p className="text-slate-300 text-sm mb-3">No active campaigns</p>
                     <button
                       onClick={onCreateCampaign}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors"
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
                     >
-                      Start New Campaign
+                      Create Campaign
                     </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {activeCampaigns.slice(0, 3).map((campaign) => (
+                      <div key={campaign.id} className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-sm truncate">{campaign.name}</h4>
+                          <p className="text-xs text-slate-400">{campaign.theme}</p>
+                        </div>
+                        <button
+                          onClick={() => onResumeCampaign(campaign.id)}
+                          className="ml-2 p-1.5 bg-green-600 hover:bg-green-700 rounded text-white transition-colors"
+                        >
+                          <Play className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    {activeCampaigns.length > 3 && (
+                      <button
+                        onClick={() => onNavigate('/campaigns')}
+                        className="w-full text-center text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                      >
+                        View all {activeCampaigns.length} campaigns
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -434,13 +435,13 @@ const Dashboard: React.FC<DashboardProps> = ({
               {/* Recent Activity */}
               <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
                 <h3 className="text-lg font-semibold mb-4 flex items-center">
-                  <Clock className="w-5 h-5 mr-2 text-blue-400" />
+                  <Clock className="w-5 h-5 mr-2 text-orange-400" />
                   Recent Activity
                 </h3>
                 <div className="space-y-3">
                   {recentActivity.map((activity, index) => (
-                    <div key={index} className="flex items-center space-x-3 p-2 hover:bg-slate-700/30 rounded-lg transition-colors">
-                      <div className="p-2 bg-slate-700/50 rounded-lg">
+                    <div key={index} className="flex items-start space-x-3">
+                      <div className="p-1.5 bg-slate-700/50 rounded-lg">
                         {activity.icon}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -449,6 +450,46 @@ const Dashboard: React.FC<DashboardProps> = ({
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              {/* Quick Settings */}
+              <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
+                <h3 className="text-lg font-semibold mb-4 flex items-center">
+                  <Settings className="w-5 h-5 mr-2 text-slate-400" />
+                  Quick Settings
+                </h3>
+                <div className="space-y-3">
+                  <button
+                    onClick={onOpenDiceRoller}
+                    className="w-full flex items-center justify-between p-3 bg-slate-700/30 rounded-lg hover:bg-slate-700/50 transition-colors"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Target className="w-4 h-4 text-green-400" />
+                      <span className="text-sm">Dice Roller</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </button>
+                  <button
+                    onClick={onOpenProfile}
+                    className="w-full flex items-center justify-between p-3 bg-slate-700/30 rounded-lg hover:bg-slate-700/50 transition-colors"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <User className="w-4 h-4 text-blue-400" />
+                      <span className="text-sm">Profile</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </button>
+                  <button
+                    onClick={onOpenAchievements}
+                    className="w-full flex items-center justify-between p-3 bg-slate-700/30 rounded-lg hover:bg-slate-700/50 transition-colors"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Trophy className="w-4 h-4 text-yellow-400" />
+                      <span className="text-sm">Achievements</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </button>
                 </div>
               </div>
 
@@ -487,46 +528,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                     <span className="font-semibold">{stats.campaignsCompleted}</span>
                   </div>
-                </div>
-              </div>
-
-              {/* Quick Settings */}
-              <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-                <h3 className="text-lg font-semibold mb-4 flex items-center">
-                  <Settings className="w-5 h-5 mr-2 text-slate-400" />
-                  Quick Settings
-                </h3>
-                <div className="space-y-3">
-                  <button
-                    onClick={onOpenProfile}
-                    className="w-full flex items-center justify-between p-3 hover:bg-slate-700/50 rounded-lg transition-colors"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <User className="w-4 h-4" />
-                      <span className="text-sm">Profile</span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
-                  </button>
-                  <button
-                    onClick={onOpenSettings}
-                    className="w-full flex items-center justify-between p-3 hover:bg-slate-700/50 rounded-lg transition-colors"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <Settings className="w-4 h-4" />
-                      <span className="text-sm">Settings</span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
-                  </button>
-                  <button
-                    onClick={onOpenHelp}
-                    className="w-full flex items-center justify-between p-3 hover:bg-slate-700/50 rounded-lg transition-colors"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <MessageSquare className="w-4 h-4" />
-                      <span className="text-sm">Help & Support</span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
-                  </button>
                 </div>
               </div>
             </div>
