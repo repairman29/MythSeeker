@@ -6893,9 +6893,59 @@ const CombatPage: React.FC<{ user: any }> = ({ user }) => {
     loadData();
   }, [user.uid]);
 
-  const handleStartCombat = (character: any) => {
+  // Combat state management
+  const [combatState, setCombatState] = useState<any>(null);
+  const [combatLoading, setCombatLoading] = useState(false);
+
+  const handleStartCombat = async (character: any) => {
     setSelectedCharacter(character);
-    setShowCombatSystem(true);
+    setCombatLoading(true);
+    
+    try {
+      // Start combat with backend
+      const result = await firebaseService.startCombat({
+        gameId: 'test-combat',
+        enemies: [
+          { name: 'Goblin', health: 10, armorClass: 12, initiative: 10 }
+        ]
+      });
+
+      if (result.success) {
+        setCombatState(result.combatState);
+        setShowCombatSystem(true);
+      } else {
+        console.error('Failed to start combat:', result.error);
+      }
+    } catch (error) {
+      console.error('Combat initialization error:', error);
+    } finally {
+      setCombatLoading(false);
+    }
+  };
+
+  const handleCombatAction = async (action: any) => {
+    if (!combatState) return;
+
+    try {
+      const result = await firebaseService.resolveCombatAction({
+        combatId: combatState.id,
+        action
+      });
+
+      if (result.success) {
+        setCombatState(result.combatState);
+        
+        // Check if combat ended
+        if (result.combatState.status === 'completed') {
+          handleCombatEnd({
+            victory: result.combatState.participants.some((p: any) => p.type === 'player' && p.health > 0),
+            enemies: result.combatState.participants.filter((p: any) => p.type === 'enemy')
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Combat action error:', error);
+    }
   };
 
   const handleCombatEnd = (result: any) => {
@@ -6914,6 +6964,20 @@ const CombatPage: React.FC<{ user: any }> = ({ user }) => {
     localStorage.setItem('mythseeker_combat_history', JSON.stringify(newHistory));
     setShowCombatSystem(false);
     setSelectedCharacter(null);
+    setCombatState(null);
+  };
+
+  const handleEndCombat = async () => {
+    if (!combatState) return;
+
+    try {
+      await firebaseService.endCombat({ combatId: combatState.id });
+      setCombatState(null);
+      setShowCombatSystem(false);
+      setSelectedCharacter(null);
+    } catch (error) {
+      console.error('End combat error:', error);
+    }
   };
 
   if (isLoading) {
@@ -6942,11 +7006,35 @@ const CombatPage: React.FC<{ user: any }> = ({ user }) => {
             <h1 className="text-3xl font-bold text-white mb-2">Combat Simulator</h1>
             <p className="text-blue-200">Fighting as {selectedCharacter.name}</p>
           </div>
-          <CombatSystem 
-            playerCharacter={selectedCharacter}
-            onCombatEnd={handleCombatEnd}
-            onExit={() => setShowCombatSystem(false)}
-          />
+          {combatLoading ? (
+            <div className="text-center py-8">
+              <div className="w-8 h-8 border-4 border-blue-300/30 border-t-blue-400 rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-blue-200">Initializing combat...</p>
+            </div>
+          ) : combatState ? (
+            <CombatSystem 
+              combatants={combatState.participants}
+              battleMap={combatState.battleMap || {
+                width: 12,
+                height: 8,
+                tiles: Array(8).fill(null).map(() => Array(12).fill(null).map(() => ({
+                  type: 'floor' as const,
+                  elevation: 0,
+                  cover: 0,
+                  occupied: false
+                })))
+              }}
+              currentTurn={combatState.round}
+              activeCombatantId={combatState.turnOrder[combatState.currentTurn]}
+              onAction={handleCombatAction}
+              onEndCombat={handleEndCombat}
+              isPlayerTurn={combatState.participants.find((p: any) => p.id === combatState.turnOrder[combatState.currentTurn])?.type === 'player'}
+            />
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-red-400">Failed to load combat state</p>
+            </div>
+          )}
         </div>
       </div>
     );

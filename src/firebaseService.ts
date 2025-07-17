@@ -530,38 +530,97 @@ class FirebaseService {
   }
 
   async completeCampaign(gameId: string, campaignData: any): Promise<void> {
-    const currentUser = this.getCurrentUser();
-    
-    if (!currentUser) {
-      throw new Error('User must be authenticated');
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('User not authenticated');
+
+      const { httpsCallable } = await import('firebase/functions');
+      const { getFunctions } = await import('firebase/functions');
+      const functions = getFunctions(app);
+      
+      const completeCampaignFunction = httpsCallable(functions, 'completeCampaign');
+      await completeCampaignFunction({ gameId, campaignData });
+    } catch (error) {
+      console.error('Error completing campaign:', error);
+      throw error;
     }
+  }
 
-    const gameDoc = doc(db, 'games', gameId);
-    const gameSnap = await getDoc(gameDoc);
-    
-    if (!gameSnap.exists()) {
-      throw new Error('Game not found');
+  // Combat methods
+  async startCombat(data: { gameId: string; enemies: any[] }): Promise<{ success: boolean; combatState?: any; error?: string }> {
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('User not authenticated');
+
+      const { httpsCallable } = await import('firebase/functions');
+      const { getFunctions } = await import('firebase/functions');
+      const functions = getFunctions(app);
+      
+      const startCombatFunction = httpsCallable(functions, 'startCombat');
+      const result = await startCombatFunction(data);
+      
+      return { success: true, combatState: result.data };
+    } catch (error: any) {
+      console.error('Error starting combat:', error);
+      return { success: false, error: error.message };
     }
+  }
 
-    const gameData = gameSnap.data() as GameSession;
+  async getCombatState(combatId: string): Promise<{ success: boolean; combatState?: any; error?: string }> {
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('User not authenticated');
 
-    // Save campaign history
-    await addDoc(collection(db, 'campaigns'), {
-      gameId,
-      hostId: gameData.hostId,
-      participants: gameData.players.map(p => p.id),
-      theme: gameData.theme,
-      startedAt: gameData.createdAt,
-      completedAt: Date.now(),
-      duration: Date.now() - gameData.createdAt,
-      messages: gameData.messages,
-      campaignData
-    });
+      const { httpsCallable } = await import('firebase/functions');
+      const { getFunctions } = await import('firebase/functions');
+      const functions = getFunctions(app);
+      
+      const getCombatStateFunction = httpsCallable(functions, 'getCombatState');
+      const result = await getCombatStateFunction({ combatId });
+      
+      return { success: true, combatState: result.data };
+    } catch (error: any) {
+      console.error('Error getting combat state:', error);
+      return { success: false, error: error.message };
+    }
+  }
 
-    // Mark game as completed
-    await updateDoc(gameDoc, {
-      completedAt: Date.now()
-    });
+  async resolveCombatAction(data: { combatId: string; action: any }): Promise<{ success: boolean; combatState?: any; error?: string }> {
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('User not authenticated');
+
+      const { httpsCallable } = await import('firebase/functions');
+      const { getFunctions } = await import('firebase/functions');
+      const functions = getFunctions(app);
+      
+      const resolveCombatActionFunction = httpsCallable(functions, 'resolveCombatAction');
+      const result = await resolveCombatActionFunction(data);
+      
+      return { success: true, combatState: result.data };
+    } catch (error: any) {
+      console.error('Error resolving combat action:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async endCombat(data: { combatId: string }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('User not authenticated');
+
+      const { httpsCallable } = await import('firebase/functions');
+      const { getFunctions } = await import('firebase/functions');
+      const functions = getFunctions(app);
+      
+      const endCombatFunction = httpsCallable(functions, 'endCombat');
+      await endCombatFunction(data);
+      
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error ending combat:', error);
+      return { success: false, error: error.message };
+    }
   }
 
   // User stats management
