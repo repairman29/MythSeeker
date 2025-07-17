@@ -31,12 +31,13 @@ import {
 } from './services/analytics';
 import { CombatService } from './services/combatService';
 import { Combatant } from './components/CombatSystem';
-import { Swords, TrendingUp, Globe, HelpCircle, User, Book, Users, Sword, Plus, Edit, Trash2, Copy, ChevronDown, Send, ChevronRight, Home, Trophy } from 'lucide-react';
+import { Swords, TrendingUp, Globe, HelpCircle, User, Book, Users, Sword, Plus, Edit, Trash2, Copy, ChevronDown, Send, ChevronRight, Home, Trophy, ArrowLeft } from 'lucide-react';
 import SuccessFeedback from './components/SuccessFeedback';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import DiceRoller3D from './components/DiceRoller3D';
 import Navigation from './components/Navigation';
+import CharacterSheet from './components/CharacterSheet';
 
 // Lazy load components
 const NavBar = lazy(() => import('./components/NavBar'));
@@ -4932,6 +4933,9 @@ const HelpWrapper: React.FC<{ user: any }> = ({ user }) => {
 const CharactersPage: React.FC<{ user: any }> = ({ user }) => {
   const [characters, setCharacters] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showCharacterCreation, setShowCharacterCreation] = useState(false);
+  const [selectedCharacter, setSelectedCharacter] = useState<any>(null);
+  const [showCharacterSheet, setShowCharacterSheet] = useState(false);
 
   useEffect(() => {
     const loadCharacters = async () => {
@@ -4940,12 +4944,79 @@ const CharactersPage: React.FC<{ user: any }> = ({ user }) => {
         setCharacters(userCharacters || []);
       } catch (error) {
         console.error('Error loading characters:', error);
+        // Fallback to local storage
+        const localCharacters = JSON.parse(localStorage.getItem('mythseeker_characters') || '[]');
+        setCharacters(localCharacters);
       } finally {
         setIsLoading(false);
       }
     };
     loadCharacters();
   }, [user.uid]);
+
+  const handleCreateCharacter = (characterData: any) => {
+    const newCharacter = {
+      ...characterData,
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString(),
+      lastPlayed: new Date().toISOString(),
+      experience: 0,
+      level: 1,
+      health: 100,
+      maxHealth: 100,
+      mana: 50,
+      maxMana: 50,
+      inventory: [],
+      equipment: {},
+      spells: [],
+      abilities: [],
+      status: 'active'
+    };
+
+    setCharacters(prev => [...prev, newCharacter]);
+    setShowCharacterCreation(false);
+    
+    // Save to Firebase if authenticated
+    if (user) {
+      firebaseService.saveCharacter(user.uid, newCharacter);
+    } else {
+      // Save to local storage
+      const localCharacters = JSON.parse(localStorage.getItem('mythseeker_characters') || '[]');
+      localCharacters.push(newCharacter);
+      localStorage.setItem('mythseeker_characters', JSON.stringify(localCharacters));
+    }
+  };
+
+  const handlePlayCharacter = (character: any) => {
+    setSelectedCharacter(character);
+    // Navigate to campaign lobby with this character
+    navigate('/campaigns');
+  };
+
+  const handleEditCharacter = (character: any) => {
+    setSelectedCharacter(character);
+    setShowCharacterSheet(true);
+  };
+
+  const handleDeleteCharacter = async (characterId: string) => {
+    if (window.confirm('Are you sure you want to delete this character? This action cannot be undone.')) {
+      setCharacters(prev => prev.filter(c => c.id !== characterId));
+      
+      // Remove from Firebase if authenticated
+      if (user) {
+        try {
+          await firebaseService.deleteCharacter(user.uid, characterId);
+        } catch (error) {
+          console.error('Error deleting character from Firebase:', error);
+        }
+      } else {
+        // Remove from local storage
+        const localCharacters = JSON.parse(localStorage.getItem('mythseeker_characters') || '[]');
+        const updatedCharacters = localCharacters.filter((c: any) => c.id !== characterId);
+        localStorage.setItem('mythseeker_characters', JSON.stringify(updatedCharacters));
+      }
+    }
+  };
 
   if (isLoading) {
     return (
@@ -4958,12 +5029,75 @@ const CharactersPage: React.FC<{ user: any }> = ({ user }) => {
     );
   }
 
+  if (showCharacterCreation) {
+    return (
+      <div className="flex-1 p-6 overflow-y-auto">
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-6">
+            <button 
+              onClick={() => setShowCharacterCreation(false)}
+              className="text-blue-400 hover:text-blue-300 flex items-center space-x-2 mb-4"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to Characters</span>
+            </button>
+            <h1 className="text-3xl font-bold text-white mb-2">Create Character</h1>
+            <p className="text-blue-200">Forge your hero and begin your adventure</p>
+          </div>
+          <CharacterCreation 
+            playerName={user?.displayName || 'Adventurer'}
+            classes={classes}
+            onCreateCharacter={handleCreateCharacter}
+            joinCode=""
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (showCharacterSheet && selectedCharacter) {
+    return (
+      <div className="flex-1 p-6 overflow-y-auto">
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-6">
+            <button 
+              onClick={() => setShowCharacterSheet(false)}
+              className="text-blue-400 hover:text-blue-300 flex items-center space-x-2 mb-4"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to Characters</span>
+            </button>
+            <h1 className="text-3xl font-bold text-white mb-2">Character Sheet</h1>
+            <p className="text-blue-200">Manage your character's details and progression</p>
+          </div>
+          <CharacterSheet 
+            character={selectedCharacter}
+            onSave={(updatedCharacter) => {
+              setCharacters(prev => prev.map(c => c.id === updatedCharacter.id ? updatedCharacter : c));
+              setShowCharacterSheet(false);
+            }}
+            onClose={() => setShowCharacterSheet(false)}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 p-6 overflow-y-auto">
       <div className="max-w-6xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Characters</h1>
-          <p className="text-blue-200">Manage your heroes and companions</p>
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">Characters</h1>
+            <p className="text-blue-200">Manage your heroes and companions</p>
+          </div>
+          <button 
+            onClick={() => setShowCharacterCreation(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center space-x-2"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Create Character</span>
+          </button>
         </div>
         
         {characters.length === 0 ? (
@@ -4973,7 +5107,10 @@ const CharactersPage: React.FC<{ user: any }> = ({ user }) => {
             </div>
             <h3 className="text-xl font-semibold text-white mb-2">No Characters Yet</h3>
             <p className="text-blue-200 mb-6">Create your first character to begin your adventure</p>
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+            <button 
+              onClick={() => setShowCharacterCreation(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+            >
               Create Character
             </button>
           </div>
@@ -4985,26 +5122,49 @@ const CharactersPage: React.FC<{ user: any }> = ({ user }) => {
                   <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
                     <span className="text-white font-bold text-lg">{character.name?.charAt(0)}</span>
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <h3 className="text-lg font-semibold text-white">{character.name}</h3>
                     <p className="text-blue-200 text-sm">{character.class}</p>
                   </div>
+                  <button
+                    onClick={() => handleDeleteCharacter(character.id)}
+                    className="text-slate-400 hover:text-red-400 transition-colors p-1"
+                    title="Delete character"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
-                <div className="space-y-2 text-sm">
+                <div className="space-y-2 text-sm mb-4">
                   <div className="flex justify-between">
                     <span className="text-slate-400">Level</span>
                     <span className="text-white">{character.level || 1}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">XP</span>
-                    <span className="text-white">{character.xp || 0}</span>
+                    <span className="text-white">{character.experience || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Health</span>
+                    <span className="text-white">{character.health || 100}/{character.maxHealth || 100}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Last Played</span>
+                    <span className="text-white text-xs">
+                      {character.lastPlayed ? new Date(character.lastPlayed).toLocaleDateString() : 'Never'}
+                    </span>
                   </div>
                 </div>
-                <div className="mt-4 flex space-x-2">
-                  <button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm font-medium transition-colors">
+                <div className="flex space-x-2">
+                  <button 
+                    onClick={() => handlePlayCharacter(character)}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm font-medium transition-colors"
+                  >
                     Play
                   </button>
-                  <button className="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded text-sm font-medium transition-colors">
+                  <button 
+                    onClick={() => handleEditCharacter(character)}
+                    className="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded text-sm font-medium transition-colors"
+                  >
                     Edit
                   </button>
                 </div>
@@ -5054,6 +5214,50 @@ const PartyPage: React.FC<{ user: any }> = ({ user }) => {
 };
 
 const WorldPage: React.FC<{ user: any }> = ({ user }) => {
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [selectedCharacter, setSelectedCharacter] = useState<any>(null);
+  const [showWorldMap, setShowWorldMap] = useState(false);
+  const [worldState, setWorldState] = useState<any>({
+    currentLocation: 'Starting Village',
+    discoveredAreas: ['Starting Village', 'Forest Path'],
+    weather: 'Clear',
+    timeOfDay: 'Day',
+    npcs: [
+      { id: '1', name: 'Village Elder', location: 'Starting Village', status: 'friendly' },
+      { id: '2', name: 'Mysterious Traveler', location: 'Forest Path', status: 'neutral' }
+    ]
+  });
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Load user's characters
+        const userCharacters = await firebaseService.getUserCharacters(user.uid);
+        setCharacters(userCharacters || []);
+        
+        // Load world state from localStorage
+        const savedWorldState = JSON.parse(localStorage.getItem('mythseeker_world_state') || '{}');
+        if (Object.keys(savedWorldState).length > 0) {
+          setWorldState(savedWorldState);
+        }
+      } catch (error) {
+        console.error('Error loading world data:', error);
+      }
+    };
+    loadData();
+  }, [user.uid]);
+
+  const handleExploreWorld = (character: any) => {
+    setSelectedCharacter(character);
+    setShowWorldMap(true);
+  };
+
+  const handleWorldUpdate = (updates: any) => {
+    const newWorldState = { ...worldState, ...updates };
+    setWorldState(newWorldState);
+    localStorage.setItem('mythseeker_world_state', JSON.stringify(newWorldState));
+  };
+
   return (
     <div className="flex-1 p-6 overflow-y-auto">
       <div className="max-w-6xl mx-auto">
@@ -5063,25 +5267,108 @@ const WorldPage: React.FC<{ user: any }> = ({ user }) => {
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* World Map */}
           <div className="lg:col-span-2 bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
             <h3 className="text-xl font-semibold text-white mb-4">World Map</h3>
-            <div className="aspect-video bg-slate-700/30 rounded-lg flex items-center justify-center">
-              <div className="text-center">
-                <Globe className="w-16 h-16 text-slate-400 mx-auto mb-4" />
-                <p className="text-blue-200">Interactive world map coming soon</p>
+            {characters.length === 0 ? (
+              <div className="aspect-video bg-slate-700/30 rounded-lg flex items-center justify-center">
+                <div className="text-center">
+                  <User className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+                  <p className="text-blue-200 mb-4">No characters available</p>
+                  <button 
+                    onClick={() => navigate('/characters')}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors"
+                  >
+                    Create Character
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : showWorldMap && selectedCharacter ? (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <p className="text-blue-200">Exploring as {selectedCharacter.name}</p>
+                  <button 
+                    onClick={() => setShowWorldMap(false)}
+                    className="text-blue-400 hover:text-blue-300"
+                  >
+                    Close Map
+                  </button>
+                </div>
+                <WorldMap 
+                  character={selectedCharacter}
+                  worldState={worldState}
+                  onWorldUpdate={handleWorldUpdate}
+                />
+              </div>
+            ) : (
+              <div className="aspect-video bg-slate-700/30 rounded-lg flex items-center justify-center">
+                <div className="text-center">
+                  <Globe className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+                  <p className="text-blue-200 mb-4">Choose a character to explore</p>
+                  <div className="space-y-2">
+                    {characters.map((character) => (
+                      <button 
+                        key={character.id}
+                        onClick={() => handleExploreWorld(character)}
+                        className="block w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors"
+                      >
+                        Explore as {character.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           
+          {/* World Info */}
           <div className="space-y-6">
             <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
               <h3 className="text-lg font-semibold text-white mb-4">Current Location</h3>
-              <p className="text-blue-200">Not in any location</p>
+              <p className="text-blue-200">{worldState.currentLocation}</p>
+              <p className="text-slate-400 text-sm mt-2">Weather: {worldState.weather}</p>
+              <p className="text-slate-400 text-sm">Time: {worldState.timeOfDay}</p>
             </div>
             
             <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
               <h3 className="text-lg font-semibold text-white mb-4">Discovered Areas</h3>
-              <p className="text-slate-400 text-sm">No areas discovered yet</p>
+              {worldState.discoveredAreas?.length > 0 ? (
+                <div className="space-y-2">
+                  {worldState.discoveredAreas.map((area: string, index: number) => (
+                    <div key={index} className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                      <span className="text-blue-200 text-sm">{area}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-slate-400 text-sm">No areas discovered yet</p>
+              )}
+            </div>
+
+            <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+              <h3 className="text-lg font-semibold text-white mb-4">Known NPCs</h3>
+              {worldState.npcs?.length > 0 ? (
+                <div className="space-y-2">
+                  {worldState.npcs.map((npc: any) => (
+                    <div key={npc.id} className="flex justify-between items-center">
+                      <div>
+                        <p className="text-blue-200 text-sm font-medium">{npc.name}</p>
+                        <p className="text-slate-400 text-xs">{npc.location}</p>
+                      </div>
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        npc.status === 'friendly' ? 'bg-green-600/20 text-green-400' :
+                        npc.status === 'neutral' ? 'bg-yellow-600/20 text-yellow-400' :
+                        'bg-red-600/20 text-red-400'
+                      }`}>
+                        {npc.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-slate-400 text-sm">No NPCs encountered yet</p>
+              )}
             </div>
           </div>
         </div>
@@ -5091,6 +5378,90 @@ const WorldPage: React.FC<{ user: any }> = ({ user }) => {
 };
 
 const CombatPage: React.FC<{ user: any }> = ({ user }) => {
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [selectedCharacter, setSelectedCharacter] = useState<any>(null);
+  const [showCombatSystem, setShowCombatSystem] = useState(false);
+  const [combatHistory, setCombatHistory] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Load user's characters
+        const userCharacters = await firebaseService.getUserCharacters(user.uid);
+        setCharacters(userCharacters || []);
+        
+        // Load combat history from localStorage
+        const history = JSON.parse(localStorage.getItem('mythseeker_combat_history') || '[]');
+        setCombatHistory(history);
+      } catch (error) {
+        console.error('Error loading combat data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, [user.uid]);
+
+  const handleStartCombat = (character: any) => {
+    setSelectedCharacter(character);
+    setShowCombatSystem(true);
+  };
+
+  const handleCombatEnd = (result: any) => {
+    // Save combat result to history
+    const newHistory = [
+      {
+        id: Date.now(),
+        character: selectedCharacter?.name || 'Unknown',
+        result: result,
+        timestamp: new Date().toISOString()
+      },
+      ...combatHistory
+    ].slice(0, 10); // Keep last 10 combats
+    
+    setCombatHistory(newHistory);
+    localStorage.setItem('mythseeker_combat_history', JSON.stringify(newHistory));
+    setShowCombatSystem(false);
+    setSelectedCharacter(null);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-8 h-8 border-4 border-blue-300/30 border-t-blue-400 rounded-full animate-spin mx-auto"></div>
+          <p className="text-blue-200">Loading combat tools...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (showCombatSystem && selectedCharacter) {
+    return (
+      <div className="flex-1 p-6 overflow-y-auto">
+        <div className="max-w-6xl mx-auto">
+          <div className="mb-6">
+            <button 
+              onClick={() => setShowCombatSystem(false)}
+              className="text-blue-400 hover:text-blue-300 flex items-center space-x-2 mb-4"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to Combat</span>
+            </button>
+            <h1 className="text-3xl font-bold text-white mb-2">Combat Simulator</h1>
+            <p className="text-blue-200">Fighting as {selectedCharacter.name}</p>
+          </div>
+          <CombatSystem 
+            playerCharacter={selectedCharacter}
+            onCombatEnd={handleCombatEnd}
+            onExit={() => setShowCombatSystem(false)}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 p-6 overflow-y-auto">
       <div className="max-w-6xl mx-auto">
@@ -5100,27 +5471,73 @@ const CombatPage: React.FC<{ user: any }> = ({ user }) => {
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Combat Simulator */}
           <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
             <h3 className="text-xl font-semibold text-white mb-4">Combat Simulator</h3>
-            <div className="text-center py-8">
-              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Sword className="w-8 h-8 text-slate-400" />
+            {characters.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <User className="w-8 h-8 text-slate-400" />
+                </div>
+                <p className="text-blue-200 mb-4">No characters available</p>
+                <button 
+                  onClick={() => navigate('/characters')}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors"
+                >
+                  Create Character
+                </button>
               </div>
-              <p className="text-blue-200">Practice combat scenarios</p>
-              <button className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors">
-                Start Combat
-              </button>
-            </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-blue-200 mb-4">Choose a character to start combat:</p>
+                {characters.map((character) => (
+                  <div key={character.id} className="flex justify-between items-center p-3 bg-slate-700/30 rounded">
+                    <div>
+                      <p className="text-white font-medium">{character.name}</p>
+                      <p className="text-blue-200 text-sm">Level {character.level || 1} {character.class}</p>
+                    </div>
+                    <button 
+                      onClick={() => handleStartCombat(character)}
+                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-medium transition-colors"
+                    >
+                      Fight
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           
+          {/* Combat History */}
           <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
             <h3 className="text-xl font-semibold text-white mb-4">Combat History</h3>
-            <div className="text-center py-8">
-              <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Trophy className="w-8 h-8 text-slate-400" />
+            {combatHistory.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Trophy className="w-8 h-8 text-slate-400" />
+                </div>
+                <p className="text-blue-200">No combat history</p>
+                <p className="text-slate-400 text-sm">Start a combat to see your results here</p>
               </div>
-              <p className="text-blue-200">No combat history</p>
-            </div>
+            ) : (
+              <div className="space-y-3">
+                {combatHistory.map((combat) => (
+                  <div key={combat.id} className="p-3 bg-slate-700/30 rounded">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-white font-medium">{combat.character}</p>
+                        <p className="text-blue-200 text-sm">
+                          {combat.result.victory ? 'Victory' : 'Defeat'} - {combat.result.enemies?.length || 0} enemies
+                        </p>
+                      </div>
+                      <span className="text-slate-400 text-xs">
+                        {new Date(combat.timestamp).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -5169,6 +5586,49 @@ const MagicPage: React.FC<{ user: any }> = ({ user }) => {
 };
 
 const DMCenterPage: React.FC<{ user: any }> = ({ user }) => {
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Load user's characters
+        const userCharacters = await firebaseService.getUserCharacters(user.uid);
+        setCharacters(userCharacters || []);
+        
+        // Load user's campaigns
+        const userCampaigns = await firebaseService.getUserCampaigns(user.uid);
+        setCampaigns(userCampaigns || []);
+      } catch (error) {
+        console.error('Error loading DM data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, [user.uid]);
+
+  const handleCreateCampaign = () => {
+    navigate('/campaigns');
+  };
+
+  const handleStartGame = (character: any) => {
+    // Set character and navigate to game
+    navigate('/game', { state: { character } });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-8 h-8 border-4 border-blue-300/30 border-t-blue-400 rounded-full animate-spin mx-auto"></div>
+          <p className="text-blue-200">Loading DM tools...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 p-6 overflow-y-auto">
       <div className="max-w-6xl mx-auto">
@@ -5177,29 +5637,96 @@ const DMCenterPage: React.FC<{ user: any }> = ({ user }) => {
           <p className="text-blue-200">Dungeon Master tools and resources</p>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Campaign Management */}
           <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
-            <h3 className="text-lg font-semibold text-white mb-4">Campaign Builder</h3>
-            <p className="text-blue-200 mb-4">Create and manage campaigns</p>
-            <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors">
-              Create Campaign
-            </button>
+            <h3 className="text-xl font-semibold text-white mb-4">Campaign Management</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-blue-200">Active Campaigns</span>
+                <span className="text-white font-semibold">{campaigns.filter(c => c.status === 'active').length}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-blue-200">Total Campaigns</span>
+                <span className="text-white font-semibold">{campaigns.length}</span>
+              </div>
+              <button 
+                onClick={handleCreateCampaign}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors"
+              >
+                Create New Campaign
+              </button>
+            </div>
           </div>
-          
+
+          {/* Character Management */}
           <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
-            <h3 className="text-lg font-semibold text-white mb-4">NPC Generator</h3>
-            <p className="text-blue-200 mb-4">Generate NPCs and characters</p>
-            <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors">
-              Generate NPC
-            </button>
+            <h3 className="text-xl font-semibold text-white mb-4">Character Management</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-blue-200">Total Characters</span>
+                <span className="text-white font-semibold">{characters.length}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-blue-200">Active Characters</span>
+                <span className="text-white font-semibold">{characters.filter(c => c.status === 'active').length}</span>
+              </div>
+              <button 
+                onClick={() => navigate('/characters')}
+                className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-medium transition-colors"
+              >
+                Manage Characters
+              </button>
+            </div>
           </div>
-          
+
+          {/* Quick Actions */}
           <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
-            <h3 className="text-lg font-semibold text-white mb-4">Initiative Tracker</h3>
-            <p className="text-blue-200 mb-4">Track combat initiative</p>
-            <button className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors">
-              Start Tracker
-            </button>
+            <h3 className="text-xl font-semibold text-white mb-4">Quick Actions</h3>
+            <div className="space-y-3">
+              <button 
+                onClick={() => navigate('/combat')}
+                className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-medium transition-colors"
+              >
+                Combat Simulator
+              </button>
+              <button 
+                onClick={() => navigate('/world')}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded font-medium transition-colors"
+              >
+                World Builder
+              </button>
+              <button 
+                onClick={() => navigate('/magic')}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded font-medium transition-colors"
+              >
+                Spell Library
+              </button>
+            </div>
+          </div>
+
+          {/* Recent Activity */}
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <h3 className="text-xl font-semibold text-white mb-4">Recent Activity</h3>
+            <div className="space-y-3">
+              {campaigns.slice(0, 3).map((campaign) => (
+                <div key={campaign.id} className="flex justify-between items-center p-3 bg-slate-700/30 rounded">
+                  <div>
+                    <p className="text-white font-medium">{campaign.name || campaign.theme}</p>
+                    <p className="text-blue-200 text-sm">{campaign.status}</p>
+                  </div>
+                  <button 
+                    onClick={() => handleStartGame(campaign)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                  >
+                    Resume
+                  </button>
+                </div>
+              ))}
+              {campaigns.length === 0 && (
+                <p className="text-slate-400 text-sm">No recent activity</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
