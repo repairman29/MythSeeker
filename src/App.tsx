@@ -4859,7 +4859,7 @@ const DMCenterWrapper: React.FC<{ user: any }> = ({ user }) => {
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
       <div className="flex-1 overflow-hidden">
-        <AIDungeonMaster initialScreen="dm-center" />
+        <DMCenterPage user={user} />
       </div>
     </div>
   );
@@ -6413,6 +6413,7 @@ const MagicPage: React.FC<{ user: any }> = ({ user }) => {
 };
 
 const DMCenterPage: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
   const [characters, setCharacters] = useState<any[]>([]);
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
