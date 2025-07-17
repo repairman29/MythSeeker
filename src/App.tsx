@@ -5797,14 +5797,6 @@ const CampaignsPage: React.FC<{ user: any }> = ({ user }) => {
   const [showJoinCampaign, setShowJoinCampaign] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
   const [joinCode, setJoinCode] = useState('');
-  const [campaignThemes] = useState([
-    { name: 'Fantasy Adventure', description: 'Epic quests in magical realms', icon: '🏰' },
-    { name: 'Sci-Fi Exploration', description: 'Space exploration and alien encounters', icon: '🚀' },
-    { name: 'Mystery Detective', description: 'Solve crimes and uncover secrets', icon: '🔍' },
-    { name: 'Horror Survival', description: 'Survive supernatural threats', icon: '👻' },
-    { name: 'Post-Apocalyptic', description: 'Rebuild civilization after disaster', icon: '🌆' },
-    { name: 'Steampunk', description: 'Victorian era with advanced technology', icon: '⚙️' }
-  ]);
 
   useEffect(() => {
     loadCampaigns();
@@ -5833,25 +5825,12 @@ const CampaignsPage: React.FC<{ user: any }> = ({ user }) => {
     }
   };
 
-  const handleCreateCampaign = async (theme: any, customPrompt: string, isMultiplayer: boolean) => {
-    try {
-      const campaignData = {
-        theme: theme.name,
-        background: theme.name.toLowerCase().replace(/\s+/g, '-'),
-        customPrompt,
-        maxPlayers: isMultiplayer ? 6 : 1,
-        players: []
-      };
-
-      const { gameId, code } = await firebaseService.createGameSession(campaignData);
-      await loadCampaigns();
-      setShowCreateCampaign(false);
-      
-      // Navigate to the new campaign using React Router
-      navigate(`/game`, { state: { campaignId: gameId, joinCode: code } });
-    } catch (error) {
-      console.error('Error creating campaign:', error);
-    }
+  const handleCreateCampaign = async (gameId: string, code: string) => {
+    await loadCampaigns();
+    setShowCreateCampaign(false);
+    
+    // Navigate to the new campaign using React Router
+    navigate(`/game`, { state: { campaignId: gameId, joinCode: code } });
   };
 
   const handleJoinCampaign = async () => {
@@ -6129,81 +6108,11 @@ const CampaignsPage: React.FC<{ user: any }> = ({ user }) => {
 
       {/* Create Campaign Modal */}
       {showCreateCampaign && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-lg p-6 w-full max-w-2xl space-y-4">
-            <h3 className="text-xl font-semibold text-white">Create New Campaign</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-blue-200 mb-2">Campaign Theme</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {campaignThemes.map((theme) => (
-                    <button
-                      key={theme.name}
-                      onClick={() => setSelectedCampaign(theme)}
-                      className={`p-4 rounded-lg text-left transition-colors border-2 ${
-                        selectedCampaign?.name === theme.name 
-                          ? 'bg-blue-600 border-blue-400' 
-                          : 'bg-slate-700 hover:bg-slate-600 border-slate-600'
-                      }`}
-                    >
-                      <div className="text-3xl mb-2">{theme.icon}</div>
-                      <div className="text-sm font-medium text-white">{theme.name}</div>
-                      <div className="text-xs text-gray-300">{theme.description}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {selectedCampaign && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-blue-200 mb-2">
-                      Custom Campaign Prompt (Optional)
-                    </label>
-                    <textarea
-                      placeholder="Describe your campaign setting, special rules, or story elements..."
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 resize-none"
-                      rows={3}
-                      maxLength={500}
-                    />
-                  </div>
-
-                  <div className="flex items-center space-x-3">
-                    <label className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        defaultChecked={true}
-                        className="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-blue-200">Multiplayer enabled</span>
-                    </label>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex space-x-3">
-              <button
-                onClick={() => {
-                  setShowCreateCampaign(false);
-                  setSelectedCampaign(null);
-                }}
-                className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
-              >
-                Cancel
-              </button>
-              {selectedCampaign && (
-                <button
-                  onClick={() => handleCreateCampaign(selectedCampaign, '', true)}
-                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
-                >
-                  Create Campaign
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        <CampaignCreator
+          user={user}
+          onClose={() => setShowCreateCampaign(false)}
+          onCampaignCreated={handleCreateCampaign}
+        />
       )}
 
       {/* Join Campaign Modal */}
