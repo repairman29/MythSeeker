@@ -1040,6 +1040,202 @@ MOOD: 0
       }
     };
   }
+
+  /**
+   * Generate AI-driven quest based on context
+   */
+  async generateQuest(prompt: string, context: any): Promise<string> {
+    console.log('AI Service: generateQuest() called');
+    
+    try {
+      // Simulate AI processing time for quest generation
+      await new Promise(resolve => setTimeout(resolve,20 + Math.random() * 300));
+      
+      // Generate quest based on context
+      const quest = this.generateDynamicQuest(prompt, context);
+      
+      return JSON.stringify(quest);
+    } catch (error) {
+      console.error('Error generating quest:', error);
+      return JSON.stringify(this.generateFallbackQuest());
+    }
+  }
+
+  /**
+   * Generate a dynamic quest based on context
+   */
+  private generateDynamicQuest(prompt: string, context: any): any {
+    const { playerLevel, playerLocation, playerActions, worldState } = context;
+    
+    // Analyze recent actions to determine quest type
+    const recentActions = playerActions?.slice(-5) || [];
+    const hasCombat = recentActions.some((action: any) => action.type === 'kill');
+    const hasExploration = recentActions.some((action: any) => action.type === 'explore');
+    const hasSocial = recentActions.some((action: any) => action.type === 'talk');
+    
+    // Determine quest type based on recent actions
+    let questType = 'side';
+    let difficulty = 'medium';
+    let objectives: any[] = [];
+    
+    if (hasCombat) {
+      questType = 'main';
+      difficulty = 'hard';
+      objectives = [
+        {
+          type: 'investigate',
+          description: 'Investigate the source of recent attacks',
+          target: 'threat_source',
+          quantity: 1
+        },
+        {
+          type: 'collect',
+          description: 'Gather evidence of the threat',
+          target: 'evidence',
+          quantity: 3
+        }
+      ];
+    } else if (hasExploration) {
+      questType = 'side';
+      difficulty = 'medium';
+      objectives = [
+        {
+          type: 'explore',
+          description: 'Map the newly discovered area',
+          target: 'new_area',
+          quantity: 1
+        },
+        {
+          type: 'collect',
+          description: 'Gather rare resources from the area',
+          target: 'rare_resources',
+          quantity: 5
+        }
+      ];
+    } else if (hasSocial) {
+      questType = 'faction';
+      difficulty = 'easy';
+      objectives = [
+        {
+          type: 'talk',
+          description: 'Strengthen relationships with local NPCs',
+          target: 'local_npcs',
+          quantity: 2
+        },
+        {
+          type: 'deliver',
+          description: 'Deliver important message',
+          target: 'important_message',
+          quantity: 1
+        }
+      ];
+    } else {
+      // Default quest
+      objectives = [
+        {
+          type: 'explore',
+          description: 'Explore the surrounding area',
+          target: 'surrounding_area',
+          quantity: 1
+        },
+        {
+          type: 'collect',
+          description: 'Gather basic resources',
+          target: 'basic_resources',
+          quantity: 3
+        }
+      ];
+    }
+    
+    // Generate quest title and description
+    const questTitles = [
+      'The Hidden Threat',
+      'Secrets of the Land',
+      'Alliance Building',
+      'Resource Gathering',
+      'Exploration Mission'
+    ];
+    
+    const questDescriptions = [
+      'Recent events have revealed a hidden danger that requires your attention.',
+      'The land holds many secrets waiting to be discovered.',
+      'Building alliances with local factions could prove beneficial.',
+      'Gathering resources is essential for survival and progress.',
+      'Exploring new areas may reveal valuable opportunities.'
+    ];
+    
+    const titleIndex = Math.floor(Math.random() * questTitles.length);
+    
+    return {
+      title: questTitles[titleIndex],
+      description: questDescriptions[titleIndex],
+      type: questType,
+      difficulty: difficulty,
+      objectives: objectives,
+      rewards: {
+        experience: playerLevel * 50,
+        gold: playerLevel * 25,
+        items: [
+          {
+            name: 'Quest Reward',
+            quantity: 1,
+            rarity: 'common'
+          }
+        ],
+        reputation: { 'Local_Faction': 10 }
+      },
+      reasoning: 'Generated based on recent player actions and current context',
+      relevance: 0.8,
+      complexity: 2,
+      estimatedDuration: 20,
+      riskLevel: 'medium',
+      potentialOutcomes: [
+        {
+          condition: 'success',
+          consequences: [
+            {
+              type: 'reputation',
+              target: 'Local_Faction',
+              value: 10,
+              description: 'Improved standing with local faction'
+            }
+          ],
+          probability: 0.7
+        }
+      ]
+    };
+  }
+
+  /**
+   * Generate fallback quest when AI fails
+   */
+  private generateFallbackQuest(): any {
+    return {
+      title: 'Basic Quest',
+      description: 'A simple quest to help you get started.',
+      type: 'side',
+      difficulty: 'easy',
+      objectives: [
+        {
+          type: 'explore',
+          description: 'Explore the area',
+          target: 'area',
+          quantity: 1
+        }
+      ],
+      rewards: {
+        experience: 50,
+        gold: 25,
+        items: []
+      },
+      reasoning: 'Fallback quest generated due to AI error,',
+      relevance: 0.5,
+      complexity: 1,
+      estimatedDuration: 10,
+      riskLevel: 'low',
+      potentialOutcomes: []
+    };
+  }
 }
 
 // Create and export the AI service instance

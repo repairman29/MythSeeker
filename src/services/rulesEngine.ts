@@ -301,7 +301,7 @@ export class RulesEngine {
     const modifier = abilityModifier + proficiencyBonus + weaponBonus;
     
     const result = this.rollDice(20, 1, modifier, advantage, disadvantage);
-    const targetAC = 'armorClass' in target ? target.armorClass : target.armorClass;
+    const targetAC = target.armorClass;
     result.success = result.total >= targetAC;
     result.description = `Attack Roll: ${result.description} vs AC ${targetAC} - ${result.success ? 'Hit!' : 'Miss'}`;
     

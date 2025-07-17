@@ -4,7 +4,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth, firebaseService, Character, UserProfile as UserProfileType } from './firebaseService';
 import UserProfileComponent from './UserProfile';
 import { aiService } from './services/aiService';
-import { DynamicDMService } from './services/dynamicDMService';
+import { dynamicDMService } from './services/dynamicDMService';
 import { MultiplayerGame, Player } from './services/multiplayerService';
 import { npcService } from './services/npcService';
 import Tooltip from './components/Tooltip';
@@ -500,7 +500,7 @@ const AIDungeonMaster = () => {
             
             // Load user's characters with retry logic
             console.log('Loading characters for user:', firebaseUser.uid);
-            let characters = [];
+            let characters: any[] = [];
             retryCount = 0;
             
             while (retryCount < 3) {
@@ -1508,7 +1508,7 @@ Start with a welcoming scene that introduces the magical academy setting and the
     // Equipment bonuses
     if (character.equipment) {
       Object.values(character.equipment).forEach((item: any) => {
-        if (item && equipmentTypes[item.type] && equipmentTypes[item.type][item.name]) {
+        if (item && item.type && item.name && equipmentTypes[item.type] && equipmentTypes[item.type][item.name]) {
           const itemStats = equipmentTypes[item.type][item.name];
           Object.keys(itemStats).forEach((stat: string) => {
             if (stat !== 'durability' && stat !== 'rarity' && stat !== 'price' && stat !== 'range') {
@@ -1766,6 +1766,14 @@ Start with a welcoming scene that introduces the magical academy setting and the
         console.error('Error updating campaign status:', error);
       }
     }
+
+    // In resumeCampaign and anywhere setCurrentCampaign is called after loading a campaign:
+    if (campaign.dmCenterData) {
+      setDmCenterData(campaign.dmCenterData);
+    } else if (campaign.aiSettings) {
+      setDmCenterData({ aiSettings: campaign.aiSettings });
+    }
+    // Place this after setCurrentCampaign(campaign) or setCurrentCampaign(resumedCampaign) in resumeCampaign and similar places.
   };
 
   const [chatError, setChatError] = useState<string | null>(null);
@@ -1821,7 +1829,7 @@ Start with a welcoming scene that introduces the magical academy setting and the
       // Process the enhanced response
       const dmResponse = {
         narrative: dynamicResponse.narrative_text,
-        choices: ['Continue', 'Investigate', 'Ask questions', 'Take action'],
+        choices: (dynamicResponse.follow_up_prompts || ['Explore', 'Investigate', 'Ask questions']),
         atmosphere: {
           mood: 'dynamic',
           tension: 'medium',
@@ -3267,6 +3275,24 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
                   dmCenterData={dmCenterData}
                   onUpdateDMCenter={(data) => {
                     setDmCenterData(data);
+                    if (currentCampaign) {
+                      // Update campaign object in memory
+                      const updatedCampaign = { ...currentCampaign, dmCenterData: data, aiSettings: data.aiSettings };
+                      setCurrentCampaign(updatedCampaign);
+                      // Persist to local storage
+                      const savedCampaigns = JSON.parse(localStorage.getItem('mythseeker_campaigns') || '[]');
+                      const idx = savedCampaigns.findIndex((c: any) => c.id === updatedCampaign.id);
+                      if (idx >= 0) {
+                        savedCampaigns[idx] = updatedCampaign;
+                      } else {
+                        savedCampaigns.push(updatedCampaign);
+                      }
+                      localStorage.setItem('mythseeker_campaigns', JSON.stringify(savedCampaigns));
+                      // Persist to Firestore if multiplayer
+                      if (updatedCampaign.isMultiplayer && isAuthenticated && currentUser) {
+                        multiplayerService.updateCampaignState(updatedCampaign.id, { dmCenterData: data, aiSettings: data.aiSettings });
+                      }
+                    }
                     if (currentScreen === 'game' || currentScreen === 'waiting') {
                       setLastPersonaUpdate(Date.now());
                       addToast('Persona updated', { message: 'AI DM persona/settings updated!' });

@@ -5,6 +5,7 @@ import { ErrorHandler, ErrorUtils } from '../lib/errorHandler';
 import { CampaignValidator, VALIDATION_LIMITS } from '../lib/validation';
 import { multiplayerService } from './multiplayerService';
 import { aiService } from './aiService';
+import { Timestamp } from 'firebase/firestore';
 
 // Constants to eliminate magic numbers
 export const CAMPAIGN_CONSTANTS = {
@@ -29,8 +30,8 @@ export interface CampaignData {
   isMultiplayer: boolean;
   maxPlayers: number;
   status?: 'active' | 'paused' | 'completed';
-  createdAt?: number;
-  lastActivity?: number;
+  createdAt?: number | Date | import("firebase/firestore").Timestamp;
+  lastActivity?: number | Date | import("firebase/firestore").Timestamp;
   participants?: Record<string, boolean>; // For Firebase compatibility
 }
 
@@ -40,21 +41,44 @@ export interface Player {
   character: any;
   isHost: boolean;
   isOnline: boolean;
+  lastSeen?: number | Date | import("firebase/firestore").Timestamp;
   status: 'ready' | 'not-ready' | 'in-game' | 'away';
-  lastSeen?: number;
+  position?: { x: number; y: number };
+  health?: number;
+  mana?: number;
 }
 
 export interface Message {
-  id: number | string;
+  id: string;
   type: 'player' | 'dm' | 'system';
   content: string;
   character?: string;
   playerId?: string;
   playerName?: string;
-  timestamp: Date | number;
+  timestamp: number | Date | import("firebase/firestore").Timestamp;
+  campaignId?: string;
   choices?: string[];
   atmosphere?: string;
   worldStateUpdates?: any;
+}
+
+function toGameMessage(msg: Message): import("./multiplayerService").GameMessage {
+  let ts: Timestamp;
+  if (msg.timestamp instanceof Timestamp) {
+    ts = msg.timestamp;
+  } else if (msg.timestamp instanceof Date) {
+    ts = Timestamp.fromDate(msg.timestamp);
+  } else if (typeof msg.timestamp === 'number') {
+    ts = Timestamp.fromMillis(msg.timestamp);
+  } else {
+    ts = Timestamp.now();
+  }
+  return {
+    ...msg,
+    id: msg.id.toString(),
+    timestamp: ts,
+    campaignId: msg.campaignId || ''
+  };
 }
 
 /**
@@ -185,7 +209,7 @@ export class CampaignService {
       // Create player message
       const playerMessage: Message = {
         ...validation.sanitizedData,
-        id: Date.now(),
+        id: Date.now().toString(),
         timestamp: new Date()
       } as Message;
 
@@ -196,7 +220,7 @@ export class CampaignService {
       const updatedCampaign: CampaignData = {
         ...campaign,
         messages: [...campaign.messages, playerMessage, dmResponse],
-        lastActivity: Date.now()
+        lastActivity: new Date()
       };
 
       await this.saveCampaign(updatedCampaign);
@@ -303,7 +327,7 @@ export class CampaignService {
       try {
         const dmResponse = JSON.parse(aiResult.data);
         return {
-          id: Date.now(),
+          id: Date.now().toString(),
           type: 'dm',
           content: dmResponse.narrative,
           choices: dmResponse.choices,
@@ -329,7 +353,7 @@ export class CampaignService {
       try {
         const dmResponse = JSON.parse(aiResult.data);
         return {
-          id: Date.now() + 1,
+          id: (Date.now() + 1).toString(),
           type: 'dm',
           content: dmResponse.narrative,
           choices: dmResponse.choices,
@@ -375,7 +399,7 @@ export class CampaignService {
 
   private createFallbackMessage(campaign: CampaignData): Message {
     return {
-      id: Date.now(),
+      id: Date.now().toString(),
       type: 'dm',
       content: `Welcome to your ${campaign.theme} adventure! Your journey begins at the threshold of destiny.`,
       choices: ['Explore ahead', 'Gather information', 'Prepare equipment'],
@@ -385,7 +409,7 @@ export class CampaignService {
 
   private createContinuationMessage(): Message {
     return {
-      id: Date.now() + 1,
+      id: (Date.now() + 1).toString(),
       type: 'dm',
       content: `The adventure continues... (AI temporarily unavailable)`,
       choices: ['Continue forward', 'Investigate surroundings', 'Take a moment to plan'],
@@ -419,9 +443,9 @@ export class CampaignService {
     if (campaign.isMultiplayer && campaign.id) {
       try {
         await multiplayerService.updateCampaignState(campaign.id, {
-          messages: campaign.messages,
+          messages: campaign.messages.map(toGameMessage),
           started: campaign.started,
-          lastActivity: Date.now()
+          lastActivity: Timestamp.fromDate(new Date())
         });
       } catch (error) {
         console.warn('Failed to sync to Firebase, but local save succeeded:', error);

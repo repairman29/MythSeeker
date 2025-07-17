@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Sword, Shield, Zap, Heart, Target, Move, X, RotateCcw, Play, Pause, SkipForward } from 'lucide-react';
+import { Sword, Shield, Zap, Heart, Target, Move, X, RotateCcw, Play, Pause, SkipForward, Eye, Mountain, Shield as ShieldIcon } from 'lucide-react';
 
 export interface Combatant {
   id: string;
@@ -70,6 +70,63 @@ interface CombatSystemProps {
   isPlayerTurn: boolean;
 }
 
+// --- Advanced Combat Utilities ---
+
+// Bresenham's line algorithm for grid-based line-of-sight
+function hasLineOfSight(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  battleMap: BattleMap
+): boolean {
+  let x0 = from.x, y0 = from.y;
+  let x1 = to.x, y1 = to.y;
+  const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1;
+  const sy = y0 < y1 ? 1 : -1;
+  let err = dx - dy;
+
+  while (!(x0 === x1 && y0 === y1)) {
+    if (battleMap.tiles[y0][x0].type === 'wall' || battleMap.tiles[y0][x0].cover >= 2) {
+      return false; // Blocked by wall or heavy cover
+    }
+    const e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; x0 += sx; }
+    if (e2 < dx) { err += dx; y0 += sy; }
+  }
+  return true;
+}
+
+// Check if a tile provides cover from a given attacker position
+function getCoverLevel(
+  tile: { x: number; y: number },
+  attacker: { x: number; y: number },
+  battleMap: BattleMap
+): number {
+  // Simple: return the cover value of the tile (0 = none, 1 = partial, 2 = full)
+  // Can be extended to directional cover in the future
+  return battleMap.tiles[tile.y][tile.x].cover;
+}
+
+// Check if a tile is high ground relative to another
+function isHighGround(
+  tile: { x: number; y: number },
+  reference: { x: number; y: number },
+  battleMap: BattleMap
+): boolean {
+  return battleMap.tiles[tile.y][tile.x].elevation > battleMap.tiles[reference.y][reference.x].elevation;
+}
+
+// Movement penalty for terrain
+function getMovementCost(
+  tile: { x: number; y: number },
+  battleMap: BattleMap
+): number {
+  const t = battleMap.tiles[tile.y][tile.x];
+  if (t.type === 'difficult') return 2;
+  if (t.type === 'hazard') return 3;
+  return 1;
+}
+
 const CombatSystem: React.FC<CombatSystemProps> = ({
   combatants,
   battleMap,
@@ -84,7 +141,9 @@ const CombatSystem: React.FC<CombatSystemProps> = ({
   const [selectedAction, setSelectedAction] = useState<'move' | 'attack' | 'skill' | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const [validMoves, setValidMoves] = useState<Array<{ x: number; y: number }>>([]);
-  const [validTargets, setValidTargets] = useState<Array<{ x: number; y: number }>>([]);
+  const [validTargets, setValidTargets] = useState<Array<{ x: number; y: number; cover?: number }>>([]);
+  const [showTacticalInfo, setShowTacticalInfo] = useState(false);
+  const [tacticalOverlay, setTacticalOverlay] = useState<'cover' | 'elevation' | 'movement' | null>(null);
 
   const activeCombatant = combatants.find(c => c.id === activeCombatantId);
 
@@ -133,9 +192,9 @@ const CombatSystem: React.FC<CombatSystemProps> = ({
     return moves;
   }, [battleMap]);
 
-  // Calculate valid targets for attacks/skills
+  // Calculate valid targets for attacks/skills (now with LoS and cover)
   const calculateValidTargets = useCallback((combatant: Combatant, skillId?: string) => {
-    const targets: Array<{ x: number; y: number }> = [];
+    const targets: Array<{ x: number; y: number; cover?: number }> = [];
     const skill = skillId ? combatant.skills[skillId] : null;
     const range = skill?.range || combatant.reach;
     
@@ -148,12 +207,16 @@ const CombatSystem: React.FC<CombatSystemProps> = ({
             c.position.x === x && c.position.y === y && c.id !== combatant.id
           );
           if (targetCombatant) {
-            targets.push({ x, y });
+            // Check line of sight
+            if (hasLineOfSight(combatant.position, { x, y }, battleMap)) {
+              // Optionally, annotate cover for overlays/AI
+              const cover = getCoverLevel({ x, y }, combatant.position, battleMap);
+              targets.push({ x, y, cover });
+            }
           }
         }
       }
     }
-    
     return targets;
   }, [combatants, battleMap]);
 
@@ -200,10 +263,12 @@ const CombatSystem: React.FC<CombatSystemProps> = ({
     setSelectedSkill(null);
   };
 
+  // Enhanced tile class with tactical overlays
   const getTileClass = (x: number, y: number) => {
     const tile = battleMap.tiles[y][x];
-    let classes = 'w-8 h-8 border border-gray-600 cursor-pointer transition-all';
+    let classes = 'w-8 h-8 border border-gray-600 cursor-pointer transition-all relative';
     
+    // Base tile styling
     if (hoveredTile?.x === x && hoveredTile?.y === y) {
       classes += ' bg-blue-400/50';
     } else if (validMoves.some(move => move.x === x && move.y === y)) {
@@ -226,8 +291,59 @@ const CombatSystem: React.FC<CombatSystemProps> = ({
           break;
       }
     }
+
+    // Tactical overlay styling
+    if (tacticalOverlay === 'cover' && tile.cover > 0) {
+      const coverIntensity = tile.cover === 1 ? 400 : 700;
+      classes += ` bg-orange-${coverIntensity}/30`;
+    } else if (tacticalOverlay === 'elevation' && tile.elevation > 0) {
+      const elevationIntensity = Math.min(tile.elevation * 20, 60);
+      classes += ` bg-purple-${elevationIntensity}/30`;
+    } else if (tacticalOverlay === 'movement') {
+      const cost = getMovementCost({ x, y }, battleMap);
+      if (cost > 1) {
+        const costIntensity = cost === 2 ? 400 : 700;
+        classes += ` bg-yellow-${costIntensity}/30`;
+      }
+    }
     
     return classes;
+  };
+
+  // Get tactical tooltip content
+  const getTacticalTooltip = (x: number, y: number) => {
+    const tile = battleMap.tiles[y][x];
+    const combatant = combatants.find(c => c.position.x === x && c.position.y === y);
+    const info = [];
+
+    // Tile information
+    info.push(`Tile: ${tile.type}`);
+    if (tile.elevation > 0) info.push(`Elevation: +${tile.elevation}`);
+    if (tile.cover > 0) info.push(`Cover: ${tile.cover === 1 ? 'Partial' : 'Full'}`);
+    
+    const moveCost = getMovementCost({ x, y }, battleMap);
+    if (moveCost > 1) info.push(`Movement Cost: ${moveCost}`);
+
+    // Combatant information
+    if (combatant) {
+      info.push(`\n${combatant.name} (${combatant.type})`);
+      info.push(`Health: ${combatant.health}/${combatant.maxHealth}`);
+      info.push(`AC: ${combatant.stats.armorClass}`);
+      
+      // Tactical analysis if active combatant exists
+      if (activeCombatant && activeCombatant.id !== combatant.id) {
+        const hasLoS = hasLineOfSight(activeCombatant.position, { x, y }, battleMap);
+        const cover = getCoverLevel({ x, y }, activeCombatant.position, battleMap);
+        const isHigh = isHighGround({ x, y }, activeCombatant.position, battleMap);
+        
+        info.push(`\nTactical:`);
+        info.push(`Line of Sight: ${hasLoS ? 'Yes' : 'No'}`);
+        if (cover > 0) info.push(`Cover from you: ${cover === 1 ? 'Partial' : 'Full'}`);
+        if (isHigh) info.push('High Ground');
+      }
+    }
+
+    return info.join('\n');
   };
 
   const getCombatantIcon = (combatant: Combatant) => {
@@ -251,6 +367,45 @@ const CombatSystem: React.FC<CombatSystemProps> = ({
             )}
           </div>
           <div className="flex space-x-2">
+            {/* Tactical Overlay Controls */}
+            <div className="flex space-x-1">
+              <button
+                onClick={() => setTacticalOverlay(tacticalOverlay === 'cover' ? null : 'cover')}
+                className={`px-2 py-1 rounded text-xs flex items-center space-x-1 ${
+                  tacticalOverlay === 'cover' 
+                    ? 'bg-orange-600 text-white hover:bg-orange-700' 
+                    : 'bg-white/20 text-white hover:bg-white/30'
+                } transition-all`}
+                title="Show Cover"
+              >
+                <ShieldIcon size={12} />
+                <span>Cover</span>
+              </button>
+              <button
+                onClick={() => setTacticalOverlay(tacticalOverlay === 'elevation' ? null : 'elevation')}
+                className={`px-2 py-1 rounded text-xs flex items-center space-x-1 ${
+                  tacticalOverlay === 'elevation' 
+                    ? 'bg-purple-600 text-white hover:bg-purple-700' 
+                    : 'bg-white/20 text-white hover:bg-white/30'
+                } transition-all`}
+                title="Show Elevation"
+              >
+                <Mountain size={12} />
+                <span>Height</span>
+              </button>
+              <button
+                onClick={() => setTacticalOverlay(tacticalOverlay === 'movement' ? null : 'movement')}
+                className={`px-2 py-1 rounded text-xs flex items-center space-x-1 ${
+                  tacticalOverlay === 'movement' 
+                    ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
+                    : 'bg-white/20 text-white hover:bg-white/30'
+                } transition-all`}
+                title="Show Movement Cost"
+              >
+                <Move size={12} />
+                <span>Move</span>
+              </button>
+            </div>
             <button
               onClick={onEndCombat}
               className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition-all"
@@ -264,7 +419,7 @@ const CombatSystem: React.FC<CombatSystemProps> = ({
       <div className="flex-1 flex">
         {/* Battle Map */}
         <div className="flex-1 p-4">
-          <div className="bg-black/20 rounded-lg p-4">
+          <div className="bg-black/20 rounded-lg p-4 relative">
             <div className="grid gap-1" style={{
               gridTemplateColumns: `repeat(${battleMap.width}, 1fr)`,
               width: 'fit-content'
@@ -277,6 +432,7 @@ const CombatSystem: React.FC<CombatSystemProps> = ({
                     onClick={() => handleTileClick(x, y)}
                     onMouseEnter={() => setHoveredTile({ x, y })}
                     onMouseLeave={() => setHoveredTile(null)}
+                    title={getTacticalTooltip(x, y)}
                   >
                     {/* Combatant on this tile */}
                     {combatants.map(combatant => {
@@ -284,21 +440,89 @@ const CombatSystem: React.FC<CombatSystemProps> = ({
                         return (
                           <div
                             key={combatant.id}
-                            className={`w-full h-full flex items-center justify-center text-lg cursor-pointer ${
+                            className={`w-full h-full flex items-center justify-center text-lg cursor-pointer relative ${
                               combatant.id === activeCombatantId ? 'ring-2 ring-yellow-400' : ''
                             } ${combatant.health <= 0 ? 'opacity-50' : ''}`}
                             onClick={() => handleCombatantClick(combatant)}
                           >
                             {getCombatantIcon(combatant)}
+                            
+                            {/* Health bar overlay */}
+                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/50">
+                              <div 
+                                className="h-full bg-green-500"
+                                style={{ width: `${(combatant.health / combatant.maxHealth) * 100}%` }}
+                              />
+                            </div>
+                            
+                            {/* Status effect indicators */}
+                            {combatant.statusEffects.length > 0 && (
+                              <div className="absolute -top-1 right-1 w-3 h-3 bg-red-500 rounded-full text-xs flex items-center justify-center text-white">
+                                {combatant.statusEffects.length}
+                              </div>
+                            )}
                           </div>
                         );
                       }
                       return null;
                     })}
+                    
+                    {/* Tactical indicators */}
+                    {tacticalOverlay && (
+                      <div className="absolute top-0 right-0 text-xs">
+                        {tacticalOverlay === 'cover' && tile.cover > 0 && (
+                          <div className="bg-orange-500/30 text-white px-1 rounded">
+                            {tile.cover}
+                          </div>
+                        )}
+                        {tacticalOverlay === 'elevation' && tile.elevation > 0 && (
+                          <div className="bg-purple-500/30 text-white px-1 rounded">
+                            +{tile.elevation}
+                          </div>
+                        )}
+                        {tacticalOverlay === 'movement' && getMovementCost({ x, y }, battleMap) > 1 && (
+                          <div className="bg-yellow-500/30 text-black px-1 rounded">
+                            {getMovementCost({ x, y }, battleMap)}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))
               )}
             </div>
+            
+            {/* Legend */}
+            {tacticalOverlay && (
+              <div className="absolute top-2 right-2 bg-black/80 text-white text-xs p-2 rounded">
+                <div className="font-semibold mb-1">
+                  {tacticalOverlay === 'cover' && (
+                    <>
+                      <div className="flex items-center space-x-1">
+                        <div className="w-3 h-3 border border-orange-500"></div>
+                        <span>Partial Cover</span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <div className="w-3 h-3 border border-orange-700"></div>
+                        <span>Full Cover</span>
+                      </div>
+                    </>
+                  )}
+                  {tacticalOverlay === 'elevation' && (
+                    <div className="flex items-center space-x-1">
+                      <div className="w-3 h-3 border border-purple-500"></div>
+                      <span>High Ground</span>
+                    </div>
+                  )}
+                  {tacticalOverlay === 'movement' && (
+                    <div className="flex items-center space-x-1">
+                      <div className="w-3 h-3 border border-yellow-500"></div>
+                      <span>Difficult Terrain</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -310,15 +534,42 @@ const CombatSystem: React.FC<CombatSystemProps> = ({
               <div className="bg-white/10 rounded-lg p-3">
                 <h4 className="text-white font-semibold">{activeCombatant.name}</h4>
                 <div className="text-sm text-blue-200">
-                  <div>Health: {activeCombatant.health}/{activeCombatant.maxHealth}</div>
-                  {activeCombatant.mana !== undefined && (
-                    <div>Mana: {activeCombatant.mana}/{activeCombatant.maxMana}</div>
-                  )}
-                  <div className="mt-2">
-                    <div>Move: {activeCombatant.currentActionPoints.move}</div>
-                    <div>Action: {activeCombatant.currentActionPoints.action}</div>
-                    <div>Bonus: {activeCombatant.currentActionPoints.bonus}</div>
+                  <div className="flex items-center space-x-2">
+                    <Heart size={14} />
+                    <span>Health: {activeCombatant.health}/{activeCombatant.maxHealth}</span>
                   </div>
+                  {activeCombatant.mana !== undefined && (
+                    <div className="flex items-center space-x-2">
+                      <Zap size={14} />
+                      <span>Mana: {activeCombatant.mana}/{activeCombatant.maxMana}</span>
+                    </div>
+                  )}
+                  <div className="mt-2 space-y-1">
+                    <div className="flex items-center space-x-2">
+                      <Move size={14} />
+                      <span>Move: {activeCombatant.currentActionPoints.move}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Sword size={14} />
+                      <span>Action: {activeCombatant.currentActionPoints.action}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Zap size={14} />
+                      <span>Bonus: {activeCombatant.currentActionPoints.bonus}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Status Effects */}
+                  {activeCombatant.statusEffects.length > 0 && (
+                    <div className="mt-2">
+                      <div className="text-xs text-yellow-200 font-semibold">Status Effects:</div>
+                      {activeCombatant.statusEffects.map((effect, index) => (
+                        <div key={index} className="text-xs text-red-200">
+                          {effect.name} ({effect.duration} turns)
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -366,7 +617,7 @@ const CombatSystem: React.FC<CombatSystemProps> = ({
 
               {/* Skills List */}
               {selectedAction === 'skill' && (
-                <div className="space-y-1">
+                <div className="space-y-1 max-h-32 overflow-y-auto">
                   {Object.entries(activeCombatant.skills).map(([skillId, skill]: [string, any]) => (
                     <button
                       key={skillId}
@@ -379,6 +630,9 @@ const CombatSystem: React.FC<CombatSystemProps> = ({
                     >
                       <div className="font-semibold">{skill.name}</div>
                       <div className="text-xs text-blue-200">{skill.description}</div>
+                      {skill.range && (
+                        <div className="text-xs text-green-200">Range: {skill.range}</div>
+                      )}
                     </button>
                   ))}
                 </div>

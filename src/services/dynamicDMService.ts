@@ -1,5 +1,6 @@
 import { firebaseService } from '../firebaseService';
 import { aiService } from './aiService';
+import { NPCService } from './npcService';
 
 // Types for the Dynamic DM System
 export interface PlayerInput {
@@ -121,9 +122,11 @@ export class DynamicDMService {
   private sentimentKeywords: Record<string, string[]> = {};
   private intentPatterns: Record<string, RegExp[]> = {};
   private entityMatchers: Record<string, RegExp> = {};
+  private npcService: NPCService;
 
   constructor() {
     this.initializeNLPComponents();
+    this.npcService = new NPCService();
   }
 
   public static getInstance(): DynamicDMService {
@@ -292,8 +295,9 @@ export class DynamicDMService {
   // CONTEXTUAL AWARENESS METHODS
   private async getGameState(campaignId: string): Promise<GameState> {
     try {
-      const stateDoc = await firebaseService.getDocument(`campaigns/${campaignId}/gameState/current`);
-      return stateDoc?.data() as GameState || this.getDefaultGameState();
+      // TODO: Implement proper Firebase integration when methods are available
+      // For now, return default state
+      return this.getDefaultGameState();
     } catch (error) {
       console.warn('Could not retrieve game state, using default');
       return this.getDefaultGameState();
@@ -302,8 +306,9 @@ export class DynamicDMService {
 
   private async getPlayerProfile(playerId: string): Promise<PlayerProfile> {
     try {
-      const profileDoc = await firebaseService.getDocument(`users/${playerId}/profile/gameData`);
-      return profileDoc?.data() as PlayerProfile || this.getDefaultPlayerProfile();
+      // TODO: Implement proper Firebase integration when methods are available
+      // For now, return default profile
+      return this.getDefaultPlayerProfile();
     } catch (error) {
       console.warn('Could not retrieve player profile, using default');
       return this.getDefaultPlayerProfile();
@@ -312,8 +317,9 @@ export class DynamicDMService {
 
   private async getDMPersona(campaignId: string): Promise<DMPersona> {
     try {
-      const personaDoc = await firebaseService.getDocument(`campaigns/${campaignId}/settings/dmPersona`);
-      return personaDoc?.data() as DMPersona || this.getDefaultDMPersona();
+      // TODO: Implement proper Firebase integration when methods are available
+      // For now, return default persona
+      return this.getDefaultDMPersona();
     } catch (error) {
       console.warn('Could not retrieve DM persona, using default');
       return this.getDefaultDMPersona();
@@ -439,6 +445,102 @@ MOOD: [How this affects scene tension: +1/0/-1]
     };
   }
 
+  // Enhanced NPC Processing Method
+  private async processNPCInteractions(npcNames: string[], playerAction: string, npcDialogue: string): Promise<any[]> {
+    const updatedNPCs = [];
+    for (const npcName of npcNames) {
+      try {
+        // Create or get NPC from service
+        let npc = this.npcService.createNPC({ name: npcName });
+        
+        // Analyze emotional impact of player action
+        const emotionalImpact = this.analyzeEmotionalImpact(playerAction, npcDialogue);
+        
+        // Update NPC emotional state
+        npc = this.npcService.updateEmotionalState(npc, emotionalImpact);
+        
+        // Add memory of this interaction
+        npc = this.npcService.addMemory(npc, {
+          type: 'conversation',
+          description: `Player said:${playerAction}"`,
+          context: 'player_interaction',
+          emotionalImpact: emotionalImpact,
+          relationshipChange: this.calculateMemoryImportance(playerAction, emotionalImpact)
+        });
+        
+        // Convert to game state format
+        updatedNPCs.push({
+          id: npc.id,
+          name: npc.name,
+          hp: 10, // Placeholder for HP, needs actual NPCService
+          status: this.npcService.getDisposition(npc),
+          personality: npc.personality,
+          emotionalState: npc.emotionalState
+        });
+        
+        console.log(`🧠 NPC ${npcName} emotional state updated:`, npc.emotionalState.currentMood);
+      } catch (error) {
+        console.warn(`Failed to process NPC ${npcName}:`, error);
+      }
+    }
+    
+    return updatedNPCs;
+  }
+
+  // Analyze emotional impact of player actions
+  private analyzeEmotionalImpact(playerAction: string, npcDialogue: string): any {
+    const impact = { joy: 0, anger: 0, fear: 0, trust: 0, respect: 0 };
+    
+    // Analyze player action sentiment
+    const actionSentiment = this.analyzeSentiment(playerAction);
+    
+    // Analyze NPC dialogue sentiment
+    const dialogueSentiment = this.analyzeSentiment(npcDialogue);
+    
+    // Determine emotional impact based on sentiment and context
+    if (actionSentiment.emotion === 'excited' && dialogueSentiment.emotion === 'excited') {
+      impact.joy += 10;
+      impact.trust += 5;
+    } else if (actionSentiment.emotion === 'frustrated' && dialogueSentiment.emotion === 'frustrated') {
+      impact.anger += 10;
+      impact.fear += 5;
+    } else if (actionSentiment.emotion === 'confused') {
+      impact.fear += 5;
+      impact.trust -= 5;
+    }
+    
+    // Check for specific keywords that might affect emotions
+    const threateningWords = ['attack', 'kill', 'hurt', 'destroy', 'threaten'];
+    const friendlyWords = ['help', 'save', 'protect', 'friend', 'ally', 'respectful'];
+    
+    if (threateningWords.some(word => playerAction.toLowerCase().includes(word))) {
+      impact.fear += 15;
+      impact.trust -= 10;
+    }
+    
+    if (friendlyWords.some(word => playerAction.toLowerCase().includes(word))) {
+      impact.trust += 10;
+      impact.joy += 5;
+    }
+    
+    if (friendlyWords.some(word => playerAction.toLowerCase().includes(word))) {
+      impact.respect += 10;
+      impact.trust += 5;
+    }
+    
+    return impact;
+  }
+
+  // Calculate memory importance based on emotional impact
+  private calculateMemoryImportance(playerAction: string, emotionalImpact: any): number {
+    const totalImpact = Math.abs(emotionalImpact.joy) + Math.abs(emotionalImpact.anger) + 
+                       Math.abs(emotionalImpact.fear) + Math.abs(emotionalImpact.trust) + 
+                       Math.abs(emotionalImpact.respect);
+    
+    // Scale importance from 1-10 on total emotional impact
+    return Math.min(10, Math.max(1, Math.floor(totalImpact / 10)));
+  }
+
   // UTILITY METHODS
   private extractSection(text: string, section: string): string | undefined {
     const regex = new RegExp(`${section}:\\s*(.+?)(?=\\n[A-Z_]+:|$)`, 's');
@@ -475,7 +577,8 @@ MOOD: [How this affects scene tension: +1/0/-1]
   private async updateGameState(campaignId: string, updates: Partial<GameState>): Promise<void> {
     if (Object.keys(updates).length > 0) {
       try {
-        await firebaseService.updateDocument(`campaigns/${campaignId}/gameState/current`, updates);
+        // TODO: Implement proper Firebase integration when methods are available
+        console.log('💾 Game state updates (Firebase integration pending):', updates);
         console.log('💾 Game state updated:', updates);
       } catch (error) {
         console.error('Failed to update game state:', error);
@@ -493,7 +596,8 @@ MOOD: [How this affects scene tension: +1/0/-1]
     };
 
     try {
-      await firebaseService.addDocument(`campaigns/${input.campaignId}/interactionLog`, logEntry);
+      // TODO: Implement proper Firebase integration when methods are available
+      console.log('📝 Interaction logged (Firebase integration pending):', logEntry);
     } catch (error) {
       console.warn('Failed to log interaction:', error);
     }

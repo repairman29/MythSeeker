@@ -1,4 +1,4 @@
-import { NPC, NPCMemory, NPCEmotionalState } from '../components/NPCInteraction';
+import { NPC, NPCMemory, NPCEmotionalState } from '../types/npc';
 
 export interface NPCServiceConfig {
   memoryRetentionDays: number;
@@ -72,28 +72,32 @@ export class NPCService {
 
   // Update NPC emotional state based on interaction
   updateEmotionalState(npc: NPC, emotionalImpact: Partial<NPCEmotionalState>): NPC {
-    const updatedEmotionalState = { ...npc.emotionalState };
+    // Use a mutable copy for updates
+    const mutableEmotionalState: any = { ...npc.emotionalState };
 
     // Apply emotional changes
     Object.entries(emotionalImpact).forEach(([emotion, change]) => {
-      if (updatedEmotionalState[emotion as keyof NPCEmotionalState] !== undefined) {
-        const currentValue = updatedEmotionalState[emotion as keyof NPCEmotionalState] as number;
-        updatedEmotionalState[emotion as keyof NPCEmotionalState] = Math.max(-100, Math.min(100, currentValue + change));
+      if (["joy", "anger", "fear", "trust", "respect"].includes(emotion)) {
+        const key = emotion as keyof NPCEmotionalState;
+        const currentValue = typeof mutableEmotionalState[key] === 'number' ? mutableEmotionalState[key] : Number(mutableEmotionalState[key]) || 0;
+        const numericChange = typeof change === 'number' ? change : Number(change) || 0;
+        mutableEmotionalState[key] = Math.max(-100, Math.min(100, currentValue + numericChange));
       }
     });
 
     // Calculate new mood based on emotional state
-    updatedEmotionalState.currentMood = this.calculateMood(updatedEmotionalState);
-    updatedEmotionalState.lastMoodChange = new Date();
-    updatedEmotionalState.moodIntensity = this.calculateMoodIntensity(updatedEmotionalState);
+    mutableEmotionalState.currentMood = this.calculateMood(mutableEmotionalState);
+    mutableEmotionalState.lastMoodChange = new Date();
+    mutableEmotionalState.moodIntensity = this.calculateMoodIntensity(mutableEmotionalState);
 
     // Update stress and confidence based on emotional state
-    updatedEmotionalState.stressLevel = this.calculateStressLevel(updatedEmotionalState);
-    updatedEmotionalState.confidence = this.calculateConfidence(updatedEmotionalState);
+    mutableEmotionalState.stressLevel = this.calculateStressLevel(mutableEmotionalState);
+    mutableEmotionalState.confidence = this.calculateConfidence(mutableEmotionalState);
 
+    // When returning, cast back to NPCEmotionalState
     return {
       ...npc,
-      emotionalState: updatedEmotionalState
+      emotionalState: mutableEmotionalState as NPCEmotionalState
     };
   }
 
@@ -121,24 +125,26 @@ export class NPCService {
   // Process emotional decay over time
   processEmotionalDecay(npc: NPC, daysPassed: number = 1): NPC {
     const decayFactor = Math.pow(1 - this.config.emotionalDecayRate, daysPassed);
-    const updatedEmotionalState = { ...npc.emotionalState };
+    // Use a mutable copy for updates
+    const mutableEmotionalState: any = { ...npc.emotionalState };
 
     // Decay emotions towards neutral (0)
-    Object.keys(updatedEmotionalState).forEach(key => {
-      if (typeof updatedEmotionalState[key as keyof NPCEmotionalState] === 'number') {
-        const currentValue = updatedEmotionalState[key as keyof NPCEmotionalState] as number;
+    (['joy', 'anger', 'fear', 'trust', 'respect'] as (keyof NPCEmotionalState)[]).forEach(key => {
+      if (typeof mutableEmotionalState[key] === 'number') {
+        const currentValue = mutableEmotionalState[key];
         const decayedValue = currentValue * decayFactor;
-        updatedEmotionalState[key as keyof NPCEmotionalState] = decayedValue as any;
+        mutableEmotionalState[key] = decayedValue;
       }
     });
 
     // Recalculate mood after decay
-    updatedEmotionalState.currentMood = this.calculateMood(updatedEmotionalState);
-    updatedEmotionalState.moodIntensity = this.calculateMoodIntensity(updatedEmotionalState);
+    mutableEmotionalState.currentMood = this.calculateMood(mutableEmotionalState);
+    mutableEmotionalState.moodIntensity = this.calculateMoodIntensity(mutableEmotionalState);
 
+    // When returning, cast back to NPCEmotionalState
     return {
       ...npc,
-      emotionalState: updatedEmotionalState
+      emotionalState: mutableEmotionalState as NPCEmotionalState
     };
   }
 
@@ -244,7 +250,7 @@ export class NPCService {
   }
 
   private calculateStressLevel(emotionalState: NPCEmotionalState): number {
-    const { anger, fear, neuroticism } = emotionalState;
+    const { anger, fear } = emotionalState;
     const stressFactors = [Math.abs(anger), Math.abs(fear)];
     const averageStress = stressFactors.reduce((sum, factor) => sum + factor, 0) / stressFactors.length;
     return Math.min(10, Math.floor(averageStress / 10));

@@ -47,7 +47,9 @@ import {
   CheckCircle,
   AlertCircle,
   Info,
-  Crown
+  Crown,
+  MapPin,
+  Compass
 } from 'lucide-react';
 
 interface RightDrawerProps {
@@ -67,6 +69,7 @@ interface RightDrawerProps {
   setDrawerWidth?: (w: number) => void;
   minWidth?: number;
   maxWidth?: number;
+  currentScreen?: string;
 }
 
 const RightDrawer: React.FC<RightDrawerProps> = ({
@@ -85,14 +88,13 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
   drawerWidth = 400,
   setDrawerWidth,
   minWidth = 320,
-  maxWidth = 600
+  maxWidth = 600,
+  currentScreen
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
-  const [isResizing, setIsResizing] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
   const [logSearchTerm, setLogSearchTerm] = useState('');
-  const drawerRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [settings, setSettings] = useState({
@@ -103,6 +105,10 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
     theme: 'dark',
     language: 'en'
   });
+
+  // Check if we're in active gameplay
+  const isInGameplay = currentScreen === 'game' || currentScreen === 'combat';
+
   // Resizable drawer state (desktop only)
   const DEFAULT_WIDTH = 384; // 24rem
   const MIN_WIDTH = 320;
@@ -142,19 +148,30 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
       };
     }
   });
-  // Double-click to reset width
-  const handleDoubleClick = () => {
-    setDrawerWidth?.(DEFAULT_WIDTH);
+
+  // Context-aware tabs - show different tabs during gameplay
+  const getTabs = () => {
+    if (isInGameplay) {
+      return [
+        { key: 'chat', label: 'Chat', icon: <MessageSquare size={20} />, description: 'Real-time messaging' },
+        { key: 'log', label: 'Story Log', icon: <BookOpen size={20} />, description: 'Campaign events & notes' },
+        { key: 'party', label: 'Party', icon: <Users size={20} />, description: 'Player status & info' },
+        { key: 'world', label: 'World', icon: <Map size={20} />, description: 'World state & exploration' },
+        { key: 'tools', label: 'Tools', icon: <Settings size={20} />, description: 'Game tools & settings' }
+      ];
+    }
+    
+    return [
+      { key: 'chat', label: 'Chat', icon: <MessageSquare size={20} />, description: 'Real-time messaging' },
+      { key: 'log', label: 'Campaign Log', icon: <BookOpen size={20} />, description: 'Story and events' },
+      { key: 'players', label: 'Players', icon: <Users size={20} />, description: 'Player management' },
+      { key: 'world', label: 'World', icon: <Map size={20} />, description: 'World state & events' },
+      { key: 'achievements', label: 'Achievements', icon: <Award size={20} />, description: 'Progress & rewards' },
+      { key: 'settings', label: 'Settings', icon: <Settings size={20} />, description: 'Game preferences' }
+    ];
   };
 
-  const tabs = [
-    { key: 'chat', label: 'Chat', icon: <MessageSquare size={20} />, description: 'Real-time messaging' },
-    { key: 'log', label: 'Campaign Log', icon: <BookOpen size={20} />, description: 'Story and events' },
-    { key: 'players', label: 'Party', icon: <Users size={20} />, description: 'Player management' },
-    { key: 'world', label: 'World', icon: <Map size={20} />, description: 'World state & events' },
-    { key: 'achievements', label: 'Achievements', icon: <Award size={20} />, description: 'Progress & rewards' },
-    { key: 'settings', label: 'Settings', icon: <Settings size={20} />, description: 'Game preferences' }
-  ];
+  const tabs = getTabs();
 
   const handleSettingChange = (key: string, value: any) => {
     const newSettings = { ...settings, [key]: value };
@@ -176,7 +193,9 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-white/20">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-white">Campaign Chat</h3>
+          <h3 className="text-lg font-semibold text-white">
+            {isInGameplay ? 'Adventure Chat' : 'Campaign Chat'}
+          </h3>
           <div className="flex items-center space-x-2">
             <button className="p-1 text-blue-300 hover:text-blue-100 transition-colors">
               <Search size={16} />
@@ -209,32 +228,21 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
       </div>
       
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {filteredMessages.map((message, index) => (
-          <div key={index} className={`p-3 rounded-lg ${
-            message.type === 'player' 
-              ? 'bg-blue-600/20 border border-blue-500/30' 
-              : message.type === 'dm'
-              ? 'bg-purple-600/20 border border-purple-500/30'
-              : 'bg-gray-600/20 border border-gray-500/30'
-          }`}>
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex items-center space-x-2">
-                <span className={`text-xs px-2 py-1 rounded ${
-                  message.type === 'player' ? 'bg-blue-500/50 text-blue-100' :
-                  message.type === 'dm' ? 'bg-purple-500/50 text-purple-100' :
-                  'bg-gray-500/50 text-gray-100'
-                }`}>
-                  {message.type === 'player' ? 'Player' : message.type === 'dm' ? 'DM' : 'System'}
-                </span>
-                {message.character && (
-                  <span className="text-sm font-medium text-white">{message.character}</span>
-                )}
-              </div>
+        {filteredMessages.map((msg, index) => (
+          <div key={index} className="p-3 rounded-lg bg-white/5 border border-white/10">
+            <div className="flex items-center space-x-2 mb-2">
+              <span className={`text-sm font-semibold text-white ${
+                msg.type === 'player' ? 'bg-blue-500/50 text-blue-100' :
+                msg.type === 'dm' ? 'bg-purple-500/50 text-purple-100' :
+                'bg-gray-500/50 text-gray-100'
+              }`}>
+                {msg.type === 'player' ? 'Player' : msg.type === 'dm' ? 'DM' : 'System'}
+              </span>
               <span className="text-xs text-gray-400">
-                {new Date(message.timestamp?.toDate?.() || message.timestamp).toLocaleTimeString()}
+                {new Date(msg.timestamp).toLocaleTimeString()}
               </span>
             </div>
-            <p className="text-white text-sm leading-relaxed">{message.content}</p>
+            <p className="text-white text-sm leading-relaxed">{msg.content}</p>
           </div>
         ))}
       </div>
@@ -244,13 +252,13 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
           <input
             ref={chatInputRef}
             type="text"
-            placeholder="Type your message..."
+            placeholder="Type a message..."
             value={chatMessage}
             onChange={(e) => setChatMessage(e.target.value)}
             className="flex-1 px-3 py-2 bg-white/10 text-white placeholder-gray-300 rounded-lg border border-white/20 focus:outline-none focus:border-blue-400"
             onKeyPress={(e) => {
-              if (e.key === 'Enter' && chatMessage.trim()) {
-                onSendMessage?.(chatMessage);
+              if (e.key === 'Enter' && chatMessage.trim() && onSendMessage) {
+                onSendMessage(chatMessage);
                 setChatMessage('');
               }
             }}
@@ -258,8 +266,8 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
           <button 
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             onClick={() => {
-              if (chatMessage.trim()) {
-                onSendMessage?.(chatMessage);
+              if (chatMessage.trim() && onSendMessage) {
+                onSendMessage(chatMessage);
                 setChatMessage('');
               }
             }}
@@ -274,115 +282,76 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
   const renderLogTab = () => (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-white/20">
-        <h3 className="text-lg font-semibold text-white mb-3">Campaign Log</h3>
+        <h3 className="text-lg font-semibold text-white mb-3">
+            {isInGameplay ? 'Story Log' : 'Campaign Log'}
+          </h3>
         <div className="flex space-x-2">
-          <input
-            ref={searchInputRef}
-            type="text"
-            placeholder="Search log entries..."
-            value={logSearchTerm}
-            onChange={(e) => setLogSearchTerm(e.target.value)}
-            className="flex-1 px-3 py-2 bg-white/10 text-white placeholder-gray-300 rounded-lg border border-white/20 focus:outline-none focus:border-blue-400"
-          />
-          <button className="px-3 py-2 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 transition-colors">
-            <Download size={16} />
+          <button className="p-1 text-blue-300 hover:text-blue-100 transition-colors">
+            <Search size={16} />
           </button>
         </div>
+        <input
+          type="text"
+          placeholder="Search log entries..."
+          value={logSearchTerm}
+          onChange={(e) => setLogSearchTerm(e.target.value)}
+          className="w-full px-3 py-2 bg-white/10 text-white placeholder-gray-300 rounded-lg border border-white/20 focus:outline-none focus:border-blue-400"
+        />
       </div>
       
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {campaign?.systemMessages?.map((entry: any, index: number) => (
-          <div key={index} className="p-3 bg-white/5 rounded-lg border border-white/10">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center space-x-2">
-                <Calendar size={14} className="text-gray-400" />
-                <span className="text-xs text-gray-400">
-                  {new Date(entry.timestamp?.toDate?.() || entry.timestamp).toLocaleDateString()}
-                </span>
-                <Clock size={14} className="text-gray-400" />
-                <span className="text-xs text-gray-400">
-                  {new Date(entry.timestamp?.toDate?.() || entry.timestamp).toLocaleTimeString()}
-                </span>
-              </div>
-              <span className={`text-xs px-2 py-1 rounded ${
-                entry.type === 'combat' ? 'bg-red-500/50 text-red-100' :
-                entry.type === 'quest' ? 'bg-green-500/50 text-green-100' :
-                entry.type === 'story' ? 'bg-purple-500/50 text-purple-100' :
-                'bg-gray-500/50 text-gray-100'
-              }`}>
-                {entry.type}
-              </span>
-            </div>
-            <h4 className="text-white font-medium mb-1">{entry.title}</h4>
-            <p className="text-gray-300 text-sm">{entry.description}</p>
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {/* Sample log entries - replace with actual data */}
+        <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+          <div className="flex items-center space-x-2 mb-1">
+            <Calendar size={14} className="text-blue-400" />
+            <span className="text-sm font-semibold text-white">Session Start</span>
+            <span className="text-xs text-gray-400">2 hours ago</span>
           </div>
-        ))}
+          <p className="text-gray-200">The party entered the ancient ruins...</p>
+        </div>
+        
+        <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+          <div className="flex items-center space-x-2 mb-1">
+            <Sword size={14} className="text-red-400" />
+            <span className="text-sm font-semibold text-white">Combat Encounter</span>
+            <span className="text-xs text-gray-400">1o</span>
+          </div>
+          <p className="text-gray-200">Battle with goblin scouts...</p>
+        </div>
       </div>
     </div>
   );
 
-  const renderPlayersTab = () => (
+  const renderPartyTab = () => (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-white/20">
-        <h3 className="text-lg font-semibold text-white mb-3">Party Members</h3>
-        <div className="flex items-center space-x-2">
-          <span className="text-sm text-gray-300">
-            {players.length} player{players.length !== 1 ? 's' : ''} online
-          </span>
-          <div className="flex-1"></div>
-          <button className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors">
-            Invite
-          </button>
-        </div>
+        <h3 className="text-lg font-semibold text-white mb-3">Party Status</h3>
       </div>
       
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {players.map((player, index) => (
           <div key={index} className="p-3 bg-white/5 rounded-lg border border-white/10">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center space-x-3">
-                <div className={`w-3 h-3 rounded-full ${
-                  player.isOnline ? 'bg-green-400' : 'bg-gray-400'
-                }`}></div>
-                <div>
-                  <h4 className="text-white font-medium">{player.character?.name || player.name}</h4>
-                  <p className="text-gray-400 text-sm">
-                    Level {player.character?.level} {player.character?.class}
-                  </p>
+            <div className="flex items-center space-x-3">
+              <div className={`w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold`}>
+                {player.name?.charAt(0) || 'P'}
+              </div>
+              <div className="flex-1">
+                <div className="font-semibold text-white">{player.name}</div>
+                <div className="text-sm text-gray-300">
+                  Level {player.level} {player.class}
+                </div>
+                <div className="flex items-center space-x-4">
+                  <span className="flex items-center space-x-1">
+                    <Heart size={12} className="text-red-400" />
+                    <span>{player.health}/{player.maxHealth}</span>
+                  </span>
+                  <span className="flex items-center space-x-1">
+                    <Shield size={12} className="text-blue-400" />
+                    <span>AC {player.armorClass}</span>
+                  </span>
                 </div>
               </div>
-              <div className="text-right">
-                <span className={`text-xs px-2 py-1 rounded ${
-                  player.status === 'ready' ? 'bg-green-500/50 text-green-100' :
-                  player.status === 'in-game' ? 'bg-blue-500/50 text-blue-100' :
-                  'bg-gray-500/50 text-gray-100'
-                }`}>
-                  {player.status}
-                </span>
-              </div>
             </div>
-            
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="flex items-center space-x-1">
-                <Heart size={12} className="text-red-400" />
-                <span className="text-gray-300">
-                  {player.character?.health || 0}/{player.character?.maxHealth || 100}
-                </span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <Zap size={12} className="text-blue-400" />
-                <span className="text-gray-300">
-                  {player.character?.mana || 0}/{player.character?.maxMana || 50}
-                </span>
-              </div>
-            </div>
-            
-            {player.isHost && (
-              <div className="mt-2 flex items-center space-x-1">
-                <Crown size={12} className="text-yellow-400" />
-                <span className="text-xs text-yellow-400">Campaign Host</span>
-              </div>
-            )}
           </div>
         ))}
       </div>
@@ -393,291 +362,98 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-white/20">
         <h3 className="text-lg font-semibold text-white mb-3">World State</h3>
-        <div className="flex items-center space-x-2">
-          <Globe size={16} className="text-green-400" />
-          <span className="text-sm text-gray-300">
-            {worldState?.currentLocation || 'Unknown Location'}
-          </span>
-        </div>
       </div>
       
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Current Location */}
-        <div className="p-3 bg-white/5 rounded-lg border border-white/10">
-          <h4 className="text-white font-medium mb-2">Current Location</h4>
-          <p className="text-gray-300 text-sm mb-2">
-            {worldState?.locationDescription || 'No location description available.'}
-          </p>
-          <div className="flex items-center space-x-2 text-xs text-gray-400">
-            <Map size={12} />
-            <span>{worldState?.coordinates || 'Unknown coordinates'}</span>
-          </div>
-        </div>
-
-        {/* Active Quests */}
-        <div className="p-3 bg-white/5 rounded-lg border border-white/10">
-          <h4 className="text-white font-medium mb-2">Active Quests</h4>
-          {worldState?.activeQuests?.length > 0 ? (
-            <div className="space-y-2">
-              {worldState.activeQuests.map((quest: any, index: number) => (
-                <div key={index} className="p-2 bg-white/5 rounded border border-white/10">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-white">{quest.title}</span>
-                    <span className="text-xs text-gray-400">{quest.progress}%</span>
-                  </div>
-                  <div className="w-full bg-gray-700 rounded-full h-1 mt-1">
-                    <div 
-                      className="bg-green-500 h-1 rounded-full transition-all duration-300"
-                      style={{ width: `${quest.progress}%` }}
-                    />
-                  </div>
+        {worldState && (
+          <>
+            <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+              <div className="flex items-center space-x-2 mb-2">
+                <MapPin size={16} className="text-blue-400" />
+                <span className="font-semibold text-white">Current Location</span>
+              </div>
+              <p className="text-gray-200">{worldState.currentLocation || 'Unknown Location'}</p>
+            </div>
+            
+            <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+              <div className="flex items-center space-x-2 mb-2">
+                <Clock size={16} className="text-green-400" />
+                <span className="font-semibold text-white">Time & Weather</span>
+              </div>
+              <p className="text-gray-200">
+                {worldState.currentTime || 'Day'} - {worldState.weather || 'Clear'}
+              </p>
+            </div>
+            
+            {worldState.activeQuests && worldState.activeQuests.length > 0 && (
+              <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+                <div className="flex items-center space-x-2 mb-2">
+                  <Target size={16} className="text-yellow-400" />
+                  <span className="font-semibold text-white">Active Quests</span>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-400 text-sm">No active quests</p>
-          )}
-        </div>
-
-        {/* World Events */}
-        <div className="p-3 bg-white/5 rounded-lg border border-white/10">
-          <h4 className="text-white font-medium mb-2">Recent Events</h4>
-          {worldState?.recentEvents?.length > 0 ? (
-            <div className="space-y-2">
-              {worldState.recentEvents.map((event: any, index: number) => (
-                <div key={index} className="p-2 bg-white/5 rounded border border-white/10">
-                  <div className="flex items-center space-x-2">
-                    <div className={`w-2 h-2 rounded-full ${
-                      event.type === 'combat' ? 'bg-red-400' :
-                      event.type === 'quest' ? 'bg-green-400' :
-                      event.type === 'story' ? 'bg-purple-400' :
-                      'bg-gray-400'
-                    }`}></div>
-                    <span className="text-sm text-white">{event.title}</span>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1">{event.description}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-400 text-sm">No recent events</p>
-          )}
-        </div>
-
-        {/* Weather & Time */}
-        <div className="p-3 bg-white/5 rounded-lg border border-white/10">
-          <h4 className="text-white font-medium mb-2">Environment</h4>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="flex items-center space-x-2">
-              <Sun size={14} className="text-yellow-400" />
-              <span className="text-gray-300">{worldState?.time || 'Day'}</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Globe size={14} className="text-blue-400" />
-              <span className="text-gray-300">{worldState?.weather || 'Clear'}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderAchievementsTab = () => (
-    <div className="flex flex-col h-full">
-      <div className="p-4 border-b border-white/20">
-        <h3 className="text-lg font-semibold text-white mb-3">Achievements</h3>
-        <div className="flex items-center space-x-2">
-          <Award size={16} className="text-yellow-400" />
-          <span className="text-sm text-gray-300">
-            {achievements.length} unlocked
-          </span>
-        </div>
-      </div>
-      
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {achievements.map((achievement, index) => (
-          <div key={index} className="p-3 bg-white/5 rounded-lg border border-white/10">
-            <div className="flex items-start space-x-3">
-              <div className="text-2xl">{achievement.icon || '🏆'}</div>
-              <div className="flex-1">
-                <h4 className="text-white font-medium">{achievement.name}</h4>
-                <p className="text-gray-300 text-sm mb-2">{achievement.description}</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-yellow-400">+{achievement.points} points</span>
-                  <span className="text-xs text-gray-400">
-                    {new Date(achievement.unlockedAt?.toDate?.() || achievement.unlockedAt).toLocaleDateString()}
-                  </span>
+                <div className="space-y-2">
+                  {worldState.activeQuests.map((quest: any, index: number) => (
+                    <p key={index} className="text-sm text-gray-200">
+                      • {quest.title}
+                    </p>
+                  ))}
                 </div>
               </div>
-            </div>
-          </div>
-        ))}
-        
-        {achievements.length === 0 && (
-          <div className="text-center py-8">
-            <Award size={48} className="text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-400">No achievements unlocked yet</p>
-            <p className="text-gray-500 text-sm mt-2">Complete quests and challenges to earn achievements!</p>
-          </div>
+            )}
+          </>
         )}
       </div>
     </div>
   );
 
-  const renderSettingsTab = () => (
+  const renderToolsTab = () => (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-white/20">
-        <h3 className="text-lg font-semibold text-white mb-3">Settings</h3>
+        <h3 className="text-lg font-semibold text-white mb-3">Game Tools</h3>
       </div>
       
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {/* Audio Settings */}
-        <div className="space-y-3">
-          <h4 className="text-white font-medium">Audio</h4>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+          <div className="flex items-center space-x-2 mb-2">
+            <Volume2 size={16} className="text-blue-400" />
+            <span className="font-semibold text-white">Audio Settings</span>
+          </div>
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Volume2 size={16} className="text-gray-400" />
-                <span className="text-gray-300">Sound Effects</span>
-              </div>
-              <button
-                onClick={() => handleSettingChange('soundEnabled', !settings.soundEnabled)}
-                className={`w-12 h-6 rounded-full transition-colors ${
-                  settings.soundEnabled ? 'bg-blue-600' : 'bg-gray-600'
-                }`}
-              >
-                <div className={`w-4 h-4 bg-white rounded-full transition-transform ${
-                  settings.soundEnabled ? 'translate-x-6' : 'translate-x-1'
-                }`} />
-              </button>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Music size={16} className="text-gray-400" />
-                <span className="text-gray-300">Background Music</span>
-              </div>
-              <button
-                onClick={() => handleSettingChange('musicEnabled', !settings.musicEnabled)}
-                className={`w-12 h-6 rounded-full transition-colors ${
-                  settings.musicEnabled ? 'bg-blue-600' : 'bg-gray-600'
-                }`}
-              >
-                <div className={`w-4 h-4 bg-white rounded-full transition-transform ${
-                  settings.musicEnabled ? 'translate-x-6' : 'translate-x-1'
-                }`} />
-              </button>
-            </div>
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={settings.soundEnabled}
+                onChange={(e) => handleSettingChange('soundEnabled', e.target.checked)}
+                className="rounded"
+              />
+              <span className="text-sm text-gray-200">Sound Effects</span>
+            </label>
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={settings.musicEnabled}
+                onChange={(e) => handleSettingChange('musicEnabled', e.target.checked)}
+                className="rounded"
+              />
+              <span className="text-sm text-gray-200">Background Music</span>
+            </label>
           </div>
         </div>
-
-        {/* Notification Settings */}
-        <div className="space-y-3">
-          <h4 className="text-white font-medium">Notifications</h4>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Bell size={16} className="text-gray-400" />
-                <span className="text-gray-300">Push Notifications</span>
-              </div>
-              <button
-                onClick={() => handleSettingChange('notifications', !settings.notifications)}
-                className={`w-12 h-6 rounded-full transition-colors ${
-                  settings.notifications ? 'bg-blue-600' : 'bg-gray-600'
-                }`}
-              >
-                <div className={`w-4 h-4 bg-white rounded-full transition-transform ${
-                  settings.notifications ? 'translate-x-6' : 'translate-x-1'
-                }`} />
-              </button>
-            </div>
+        
+        <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+          <div className="flex items-center space-x-2 mb-2">
+            <Bell size={16} className="text-yellow-400" />
+            <span className="font-semibold text-white">Notifications</span>
           </div>
-        </div>
-
-        {/* Game Settings */}
-        <div className="space-y-3">
-          <h4 className="text-white font-medium">Game</h4>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Save size={16} className="text-gray-400" />
-                <span className="text-gray-300">Auto Save</span>
-              </div>
-              <button
-                onClick={() => handleSettingChange('autoSave', !settings.autoSave)}
-                className={`w-12 h-6 rounded-full transition-colors ${
-                  settings.autoSave ? 'bg-blue-600' : 'bg-gray-600'
-                }`}
-              >
-                <div className={`w-4 h-4 bg-white rounded-full transition-transform ${
-                  settings.autoSave ? 'translate-x-6' : 'translate-x-1'
-                }`} />
-              </button>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Sun size={16} className="text-gray-400" />
-                <span className="text-gray-300">Theme</span>
-              </div>
-              <select
-                value={settings.theme}
-                onChange={(e) => handleSettingChange('theme', e.target.value)}
-                className="px-3 py-1 bg-white/10 text-white rounded border border-white/20 focus:outline-none focus:border-blue-400"
-              >
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-                <option value="auto">Auto</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Data Management */}
-        <div className="space-y-3">
-          <h4 className="text-white font-medium">Data</h4>
-          <div className="space-y-2">
-            <button className="w-full flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-colors">
-              <div className="flex items-center space-x-2">
-                <Download size={16} className="text-gray-400" />
-                <span className="text-gray-300">Export Character</span>
-              </div>
-              <ChevronRight size={16} className="text-gray-400" />
-            </button>
-            
-            <button className="w-full flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-colors">
-              <div className="flex items-center space-x-2">
-                <Upload size={16} className="text-gray-400" />
-                <span className="text-gray-300">Import Character</span>
-              </div>
-              <ChevronRight size={16} className="text-gray-400" />
-            </button>
-            
-            <button className="w-full flex items-center justify-between p-3 bg-red-600/20 rounded-lg border border-red-500/30 hover:bg-red-600/30 transition-colors">
-              <div className="flex items-center space-x-2">
-                <Trash2 size={16} className="text-red-400" />
-                <span className="text-red-400">Reset Progress</span>
-              </div>
-              <ChevronRight size={16} className="text-red-400" />
-            </button>
-          </div>
-        </div>
-
-        {/* About */}
-        <div className="space-y-3">
-          <h4 className="text-white font-medium">About</h4>
-          <div className="p-3 bg-white/5 rounded-lg border border-white/10">
-            <div className="flex items-center space-x-2 mb-2">
-              <Info size={16} className="text-blue-400" />
-              <span className="text-white font-medium">MythSeeker RPG</span>
-            </div>
-            <p className="text-gray-300 text-sm mb-2">
-              AI-powered tabletop RPG with multiplayer support
-            </p>
-            <div className="text-xs text-gray-400">
-              Version 1.0.0 • Built with React & Firebase
-            </div>
-          </div>
+          <label className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              checked={settings.notifications}
+              onChange={(e) => handleSettingChange('notifications', e.target.checked)}
+              className="rounded"
+            />
+            <span className="text-sm text-gray-200">Enable Notifications</span>
+          </label>
         </div>
       </div>
     </div>
@@ -685,88 +461,74 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
 
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'chat': return renderChatTab();
-      case 'log': return renderLogTab();
-      case 'players': return renderPlayersTab();
-      case 'world': return renderWorldTab();
-      case 'achievements': return renderAchievementsTab();
-      case 'settings': return renderSettingsTab();
-      default: return renderChatTab();
+      case 'chat':
+        return renderChatTab();
+      case 'log':
+        return renderLogTab();
+      case 'party':
+        return renderPartyTab();
+      case 'world':
+        return renderWorldTab();
+      case 'tools':
+        return renderToolsTab();
+      default:
+        return renderChatTab();
     }
   };
 
-  // Drawer style
-  const drawerStyle = !isMobile
-    ? { width: drawerWidth, minWidth, maxWidth, transition: 'width 0.2s cubic-bezier(.4,2,.6,1)' }
-    : {};
+  if (!isOpen) return null;
 
   return (
-    <>
-      {/* Mobile overlay */}
-      {isMobile && isOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={onClose}
+    <div className={`fixed inset-y-0 right-0 bg-gradient-to-b from-blue-900 via-indigo-900 to-purple-900 border-l border-white/20 shadow-2xl z-40 transition-transform duration-300 ease-in-out ${
+      isMobile ? 'w-full sm:w-96' : ''
+    }`}
+      style={{ width: isMobile ? drawerWidth : 'auto' }}>
+      
+      {/* Resize handle for desktop */}
+      {!isMobile && setDrawerWidth && (
+        <div
+          className="absolute left-0 top-0 bottom-0 bg-blue-600 cursor-col-resize hover:bg-blue-400 transition-colors"
+          onMouseDown={handleMouseDown}
         />
       )}
-      {/* Drawer */}
-      <div
-        className={`fixed top-0 right-0 h-full bg-gradient-to-b from-blue-900 via-indigo-900 to-purple-900 border-l border-white/20 shadow-2xl z-50 transition-transform duration-300 ease-in-out ${
-          isOpen ? 'translate-x-0' : 'translate-x-full'
-        } ${isMobile ? 'w-full sm:w-96' : ''}`}
-        style={drawerStyle}
-      >
-        {/* Drag handle (desktop only) */}
-        {!isMobile && isOpen && setDrawerWidth && (
-          <div
-            className="absolute left-0 top-0 h-full w-2 z-50 cursor-col-resize group"
-            style={{ marginLeft: -8 }}
-            onMouseDown={handleMouseDown}
-            onDoubleClick={() => setDrawerWidth(384)}
-            tabIndex={0}
-            aria-label="Resize drawer"
-            role="separator"
-            title="Drag to resize drawer. Double-click to reset."
-          >
-            <div className="w-2 h-full flex items-center justify-center">
-              <div className="w-1 h-16 mx-auto bg-white/30 rounded-full group-hover:bg-blue-400 transition-colors" />
-            </div>
-          </div>
-        )}
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-white/20">
-          <h2 className="text-xl font-bold text-white">Campaign Tools</h2>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-white transition-colors"
-          >
-            <X size={20} />
-          </button>
+      
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-white/20">
+        <div className="flex items-center space-x-2">
+          <h2 className="text-lg font-semibold text-white">GameTools</h2>
         </div>
-        {/* Tab Navigation */}
-        <div className="flex border-b border-white/20 overflow-x-auto">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => onTabChange(tab.key)}
-              className={`flex flex-col items-center p-3 min-w-0 flex-1 transition-colors ${
-                activeTab === tab.key
-                  ? 'bg-white/20 text-white border-b-2 border-blue-400'
-                  : 'text-gray-400 hover:text-white hover:bg-white/10'
-              }`}
-              title={tab.description}
-            >
-              {tab.icon}
-              <span className="text-xs mt-1 font-medium truncate">{tab.label}</span>
-            </button>
-          ))}
-        </div>
-        {/* Tab Content */}
-        <div className="flex-1 overflow-hidden">
-          {renderTabContent()}
-        </div>
+        <button
+          onClick={onClose}
+          className="p-2 text-blue-200 hover:text-white transition-colors"
+        >
+          <X size={20} />
+        </button>
       </div>
-    </>
+      
+      {/* Tabs */}
+      <div className="flex border-b border-white/20 overflow-x-auto">
+        {tabs.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => onTabChange(tab.key)}
+            className={`flex items-center space-x-2 p-3 min-w-0 flex-1 transition-colors ${
+              activeTab === tab.key
+                ? 'bg-blue-600 text-white border-b-2 border-blue-400'
+                : 'text-blue-200 hover:text-white hover:bg-white/10'
+            }`}
+            title={tab.description}
+          >
+            {tab.icon}
+            <span className="text-sm font-medium">{tab.label}</span>
+          </button>
+        ))}
+      </div>
+      
+      {/* Content */}
+      <div className="flex-1 overflow-hidden">
+        {renderTabContent()}
+      </div>
+    </div>
   );
 };
 

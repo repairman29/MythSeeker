@@ -333,7 +333,11 @@ export class CombatService {
 
     // Check if should retreat
     if (enemy.health / enemy.maxHealth < ai.retreatThreshold) {
-      return this.getRetreatAction(enemy);
+      // TODO: Implement retreat action
+      return {
+        type: 'move',
+        target: undefined
+      };
     }
 
     // Select target based on priority
@@ -431,24 +435,44 @@ export class CombatService {
   private getTacticalAction(enemy: Combatant, target: Combatant, ai: EnemyAI): CombatAction {
     // Tactical AI considers positioning, flanking, and cover
     const flankingBonus = this.calculateFlankingBonus(enemy, target);
-    
-    if (flankingBonus > 0 && enemy.currentActionPoints.action > 0) {
+    const enemyTile = this.state.battleMap.tiles[enemy.position.y][enemy.position.x];
+    const targetTile = this.state.battleMap.tiles[target.position.y][target.position.x];
+    const targetCover = targetTile.cover;
+    const enemyCover = enemyTile.cover;
+    const enemyElevation = enemyTile.elevation;
+    const targetElevation = targetTile.elevation;
+
+    // Prefer attacking targets with less cover
+    if (flankingBonus > 0 && enemy.currentActionPoints.action > 0 && targetCover < 2) {
       return {
         type: 'attack',
         target: target.position
       };
     }
-    
-    // Try to find better positioning
-    const betterPosition = this.findTacticalPosition(enemy, target);
-    if (betterPosition && enemy.currentActionPoints.move > 0) {
+    // Prefer attacking from high ground
+    if (enemyElevation > targetElevation && enemy.currentActionPoints.action > 0) {
       return {
-        type: 'move',
-        target: betterPosition
+        type: 'attack',
+        target: target.position
       };
     }
-    
-    return this.getAggressiveAction(enemy, target, ai);
+    // Try to find better tactical positioning (cover/high ground)
+    const tacticalPos = this.findTacticalPosition(enemy, target);
+    if (tacticalPos && enemy.currentActionPoints.move > 0) {
+      return {
+        type: 'move',
+        target: tacticalPos
+      };
+    }
+    // If in good cover, attack
+    if (enemyCover >= 1 && enemy.currentActionPoints.action > 0) {
+      return {
+        type: 'attack',
+        target: target.position
+      };
+    }
+    // Otherwise, end turn
+    return { type: 'end-turn' };
   }
 
   private getCowardlyAction(enemy: Combatant, target: Combatant, ai: EnemyAI): CombatAction {
@@ -575,28 +599,32 @@ export class CombatService {
   }
 
   private findTacticalPosition(enemy: Combatant, target: Combatant): { x: number; y: number } | null {
-    // Find position that provides flanking or better cover
-    const directions = [{ dx: -1, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: -1 }, { dx: 0, dy: 1 }];
-    
+    // Look for adjacent tiles with better cover or higher elevation
+    const directions = [
+      { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
+      { dx: 0, dy: -1 }, { dx: 0, dy: 1 }
+    ];
+    let bestPos = null;
+    let bestScore = -Infinity;
     for (const dir of directions) {
-      const newX = enemy.position.x + dir.dx;
-      const newY = enemy.position.y + dir.dy;
-      
-      if (newX >= 0 && newX < this.state.battleMap.width &&
-          newY >= 0 && newY < this.state.battleMap.height) {
-        const tile = this.state.battleMap.tiles[newY][newX];
-        if (tile.type !== 'wall' && !tile.occupied) {
-          // Check if this position provides better tactical advantage
-          const tempPosition = { x: newX, y: newY };
-          const flankingBonus = this.calculateFlankingBonus({ ...enemy, position: tempPosition }, target);
-          if (flankingBonus > 0 || tile.cover > 0) {
-            return tempPosition;
-          }
-        }
+      const nx = enemy.position.x + dir.dx;
+      const ny = enemy.position.y + dir.dy;
+      if (nx < 0 || nx >= this.state.battleMap.width || ny < 0 || ny >= this.state.battleMap.height) continue;
+      const tile = this.state.battleMap.tiles[ny][nx];
+      if (tile.type === 'wall' || tile.occupied) continue;
+      // Score: prefer higher cover and elevation, closer to target
+      const coverScore = tile.cover * 2;
+      const elevationScore = tile.elevation > this.state.battleMap.tiles[enemy.position.y][enemy.position.x].elevation ? 1 : 0;
+      const distScore = -(
+        Math.abs(nx - target.position.x) + Math.abs(ny - target.position.y)
+      );
+      const score = coverScore + elevationScore + distScore;
+      if (score > bestScore) {
+        bestScore = score;
+        bestPos = { x: nx, y: ny };
       }
     }
-    
-    return null;
+    return bestPos;
   }
 
   private getMovementTowardsPlayers(enemy: Combatant): CombatAction | null {

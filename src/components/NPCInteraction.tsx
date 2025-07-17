@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MessageCircle, ShoppingCart, Gift, Users, Heart, Star, X, ChevronRight, ChevronLeft, Brain, Clock, TrendingUp, TrendingDown } from 'lucide-react';
+import { NPC, NPCMemory, NPCEmotionalState } from '../types/npc';
 
 export interface DialogueOption {
   id: string;
@@ -41,85 +42,6 @@ export interface DialogueNode {
       respect?: number;
     };
   };
-}
-
-export interface NPCMemory {
-  id: string;
-  timestamp: Date;
-  type: 'conversation' | 'gift' | 'quest' | 'trade' | 'conflict' | 'help';
-  description: string;
-  emotionalImpact: {
-    joy: number;
-    anger: number;
-    fear: number;
-    trust: number;
-    respect: number;
-  };
-  relationshipChange: number;
-  context: string;
-}
-
-export interface NPCEmotionalState {
-  joy: number; // -100 to 100
-  anger: number; // -100 to 100
-  fear: number; // -100 to 100
-  trust: number; // -100 to 100
-  respect: number; // -100 to 100
-  currentMood: 'friendly' | 'neutral' | 'hostile' | 'sad' | 'excited' | 'anxious' | 'confident' | 'suspicious';
-  moodIntensity: number; // 0 to 10
-  lastMoodChange: Date;
-  stressLevel: number; // 0 to 10
-  confidence: number; // 0 to 10
-}
-
-export interface NPC {
-  id: string;
-  name: string;
-  title?: string;
-  avatar?: string;
-  type: 'merchant' | 'quest_giver' | 'companion' | 'enemy' | 'neutral';
-  personality: string;
-  relationship: number; // -100 to 100
-  dialogue: DialogueNode[];
-  inventory?: Array<{
-    id: string;
-    name: string;
-    price: number;
-    quantity: number;
-    rarity: string;
-  }>;
-  quests?: string[]; // quest IDs this NPC can give
-  location?: string;
-  schedule?: {
-    morning?: string;
-    afternoon?: string;
-    evening?: string;
-    night?: string;
-  };
-  // Enhanced emotional and memory system
-  emotionalState: NPCEmotionalState;
-  memories: NPCMemory[];
-  personalityTraits: {
-    openness: number; // 0 to 10
-    conscientiousness: number; // 0 to 10
-    extraversion: number; // 0 to 10
-    agreeableness: number; // 0 to 10
-    neuroticism: number; // 0 to 10
-  };
-  background: {
-    origin: string;
-    occupation: string;
-    goals: string[];
-    fears: string[];
-    secrets: string[];
-  };
-  interactionHistory: Array<{
-    timestamp: Date;
-    playerAction: string;
-    npcResponse: string;
-    relationshipChange: number;
-    emotionalImpact: Partial<NPCEmotionalState>;
-  }>;
 }
 
 interface NPCInteractionProps {
@@ -203,31 +125,23 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
 
   const canSelectOption = (option: DialogueOption): boolean => {
     if (!option.requirements) return true;
-
-    const { requirements } = option;
     
-    if (requirements.level && playerLevel < requirements.level) return false;
-    if (requirements.reputation && playerReputation < requirements.reputation) return false;
+    const { level, reputation, items, completedQuests } = option.requirements;
     
-    if (requirements.items) {
-      for (const requiredItem of requirements.items) {
+    if (level && playerLevel < level) return false;
+    if (reputation && playerReputation < reputation) return false;
+    
+    if (items) {
+      for (const requiredItem of items) {
         const playerItem = playerInventory.find(item => item.name === requiredItem.name);
         if (!playerItem || playerItem.quantity < requiredItem.quantity) return false;
       }
     }
     
-    if (requirements.completedQuests) {
-      for (const questId of requirements.completedQuests) {
+    if (completedQuests) {
+      for (const questId of completedQuests) {
         if (!completedQuests.includes(questId)) return false;
       }
-    }
-
-    // Check emotional state requirements
-    if (requirements.emotionalState) {
-      const { emotionalState } = requirements;
-      if (emotionalState.joy !== undefined && npc.emotionalState.joy < emotionalState.joy) return false;
-      if (emotionalState.trust !== undefined && npc.emotionalState.trust < emotionalState.trust) return false;
-      if (emotionalState.respect !== undefined && npc.emotionalState.respect < emotionalState.respect) return false;
     }
     
     return true;
@@ -240,13 +154,15 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
       const updatedRelationship = npc.relationship + (option.relationshipChange || 0);
 
       if (option.emotionalImpact) {
-        Object.entries(option.emotionalImpact).forEach(([emotion, change]) => {
-          if (updatedEmotionalState[emotion as keyof NPCEmotionalState] !== undefined) {
-            updatedEmotionalState[emotion as keyof NPCEmotionalState] = Math.max(-100, Math.min(100, 
-              updatedEmotionalState[emotion as keyof NPCEmotionalState] + change
-            ));
+        const mutableEmotionalState: any = { ...updatedEmotionalState };
+        (Object.entries(option.emotionalImpact) as [keyof NPCEmotionalState, unknown][]).forEach(([emotion, change]: [string, unknown]) => {
+          if (["joy", "anger", "fear", "trust", "respect"].includes(emotion)) {
+            const current = typeof mutableEmotionalState[emotion] === 'number' ? mutableEmotionalState[emotion] : 0;
+            const delta = typeof change === 'number' ? change : Number(change) || 0;
+            mutableEmotionalState[emotion] = Math.max(-100, Math.min(100, current + delta));
           }
         });
+        Object.assign(updatedEmotionalState, mutableEmotionalState);
       }
 
       // Update current mood based on emotional state
@@ -259,7 +175,18 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
         playerAction: option.text,
         npcResponse: currentDialogue.npcText,
         relationshipChange: option.relationshipChange || 0,
-        emotionalImpact: option.emotionalImpact || {}
+        emotionalImpact: option.emotionalImpact || {
+          joy: 0,
+          anger: 0,
+          fear: 0,
+          trust: 0,
+          respect: 0,
+          currentMood: 'neutral' as const,
+          moodIntensity: 0,
+          lastMoodChange: new Date(),
+          stressLevel: 0,
+          confidence: 0
+        } as NPCEmotionalState,
       };
 
       // Add memory
@@ -268,7 +195,13 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
         timestamp: new Date(),
         type: 'conversation',
         description: `Player said: "${option.text}"`,
-        emotionalImpact: option.emotionalImpact || { joy: 0, anger: 0, fear: 0, trust: 0, respect: 0 },
+        emotionalImpact: {
+          joy: option.emotionalImpact?.joy ?? 0,
+          anger: option.emotionalImpact?.anger ?? 0,
+          fear: option.emotionalImpact?.fear ?? 0,
+          trust: option.emotionalImpact?.trust ?? 0,
+          respect: option.emotionalImpact?.respect ?? 0
+        },
         relationshipChange: option.relationshipChange || 0,
         context: currentDialogue.npcText
       };
@@ -442,7 +375,7 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
 
               {/* Dialogue Options */}
               <div className="space-y-2">
-                {currentDialogue.options.map(option => (
+                {currentDialogue.options.map((option: DialogueOption) => (
                   <button
                     key={option.id}
                     onClick={() => handleDialogueOption(option)}
@@ -463,9 +396,9 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
                         )}
                         {option.emotionalImpact && (
                           <div className="flex space-x-1">
-                            {Object.entries(option.emotionalImpact).map(([emotion, change]) => (
-                              <span key={emotion} className={`text-xs ${change > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                {emotion}: {change > 0 ? '+' : ''}{change}
+                            {Object.entries(option.emotionalImpact || {}).map(([emotion, change]: [string, unknown]) => (
+                              <span key={emotion} className={`text-xs ${Number(change) > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {emotion}: {Number(change) > 0 ? '+' : ''}{Number(change)}
                               </span>
                             ))}
                           </div>
