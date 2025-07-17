@@ -3355,18 +3355,7 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
           </Suspense>
         )}
       </ErrorBoundary>
-      {/* Floating Action Button - sets drawer tab and opens drawer */}
-      <FloatingActionButton
-        onToggleDrawer={() => setDrawerOpen(!drawerOpen)}
-        isDrawerOpen={drawerOpen}
-        onQuickAction={(action) => {
-          setActiveDrawerTab(action);
-          setDrawerOpen(true);
-        }}
-        isMobile={isMobile}
-        hasNotifications={messages.length > 0}
-        notificationCount={messages.filter(m => m.type === 'system').length}
-      />
+
       {/* Simple Help Overlay */}
       <Suspense fallback={<LoadingSpinner />}>
         <SimpleHelp 
@@ -4624,6 +4613,17 @@ const DashboardWrapper: React.FC<{ user: any }> = ({ user }) => {
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [characters, setCharacters] = useState<any[]>([]);
   const [isDiceRollerOpen, setIsDiceRollerOpen] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     // Load user data
@@ -4684,6 +4684,29 @@ const DashboardWrapper: React.FC<{ user: any }> = ({ user }) => {
     // This will trigger the auth state change and redirect to landing page
   };
 
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'chat':
+        navigate('/game');
+        break;
+      case 'party':
+        navigate('/party');
+        break;
+      case 'inventory':
+        navigate('/characters');
+        break;
+      case 'character':
+        navigate('/characters');
+        break;
+      case 'map':
+        navigate('/world');
+        break;
+      case 'settings':
+        navigate('/settings');
+        break;
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
@@ -4704,6 +4727,17 @@ const DashboardWrapper: React.FC<{ user: any }> = ({ user }) => {
           onOpenHelp={handleOpenHelp}
         />
       </div>
+      
+      {/* Floating Action Button */}
+      <FloatingActionButton
+        onToggleDrawer={() => setIsDrawerOpen(!isDrawerOpen)}
+        isDrawerOpen={isDrawerOpen}
+        onQuickAction={handleQuickAction}
+        isMobile={isMobile}
+        hasNotifications={false}
+        notificationCount={0}
+      />
+
       {isDiceRollerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
           <div className="bg-slate-800 rounded-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
@@ -4742,8 +4776,44 @@ const GameWrapper: React.FC<{ user: any }> = ({ user }) => {
 
 // Character Wrapper Component
 const CharacterWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const handleSignOut = () => {
     // This will trigger the auth state change and redirect to landing page
+  };
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'chat':
+        navigate('/game');
+        break;
+      case 'party':
+        navigate('/party');
+        break;
+      case 'inventory':
+        navigate('/characters');
+        break;
+      case 'character':
+        navigate('/characters');
+        break;
+      case 'map':
+        navigate('/world');
+        break;
+      case 'settings':
+        navigate('/settings');
+        break;
+    }
   };
 
   return (
@@ -4752,6 +4822,16 @@ const CharacterWrapper: React.FC<{ user: any }> = ({ user }) => {
       <div className="flex-1 overflow-hidden">
         <CharactersPage user={user} />
       </div>
+      
+      {/* Floating Action Button */}
+      <FloatingActionButton
+        onToggleDrawer={() => setIsDrawerOpen(!isDrawerOpen)}
+        isDrawerOpen={isDrawerOpen}
+        onQuickAction={handleQuickAction}
+        isMobile={isMobile}
+        hasNotifications={false}
+        notificationCount={0}
+      />
     </div>
   );
 };
@@ -4774,8 +4854,44 @@ const CharacterCreationWrapper: React.FC<{ user: any }> = ({ user }) => {
 
 // Campaign Wrapper Component
 const CampaignWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const handleSignOut = () => {
     // This will trigger the auth state change and redirect to landing page
+  };
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'chat':
+        navigate('/game');
+        break;
+      case 'party':
+        navigate('/party');
+        break;
+      case 'inventory':
+        navigate('/characters');
+        break;
+      case 'character':
+        navigate('/characters');
+        break;
+      case 'map':
+        navigate('/world');
+        break;
+      case 'settings':
+        navigate('/settings');
+        break;
+    }
   };
 
   return (
@@ -4784,6 +4900,16 @@ const CampaignWrapper: React.FC<{ user: any }> = ({ user }) => {
       <div className="flex-1 overflow-hidden">
         <CampaignsPage user={user} />
       </div>
+      
+      {/* Floating Action Button */}
+      <FloatingActionButton
+        onToggleDrawer={() => setIsDrawerOpen(!isDrawerOpen)}
+        isDrawerOpen={isDrawerOpen}
+        onQuickAction={handleQuickAction}
+        isMobile={isMobile}
+        hasNotifications={false}
+        notificationCount={0}
+      />
     </div>
   );
 };
@@ -4822,8 +4948,44 @@ const WaitingRoomWrapper: React.FC<{ user: any }> = ({ user }) => {
 
 // Party Wrapper Component
 const PartyWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const handleSignOut = () => {
     // This will trigger the auth state change and redirect to landing page
+  };
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'chat':
+        navigate('/game');
+        break;
+      case 'party':
+        navigate('/party');
+        break;
+      case 'inventory':
+        navigate('/characters');
+        break;
+      case 'character':
+        navigate('/characters');
+        break;
+      case 'map':
+        navigate('/world');
+        break;
+      case 'settings':
+        navigate('/settings');
+        break;
+    }
   };
 
   return (
@@ -4832,14 +4994,60 @@ const PartyWrapper: React.FC<{ user: any }> = ({ user }) => {
       <div className="flex-1 overflow-hidden">
         <PartyPage user={user} />
       </div>
+      
+      {/* Floating Action Button */}
+      <FloatingActionButton
+        onToggleDrawer={() => setIsDrawerOpen(!isDrawerOpen)}
+        isDrawerOpen={isDrawerOpen}
+        onQuickAction={handleQuickAction}
+        isMobile={isMobile}
+        hasNotifications={false}
+        notificationCount={0}
+      />
     </div>
   );
 };
 
 // World Wrapper Component
 const WorldWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const handleSignOut = () => {
     // This will trigger the auth state change and redirect to landing page
+  };
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'chat':
+        navigate('/game');
+        break;
+      case 'party':
+        navigate('/party');
+        break;
+      case 'inventory':
+        navigate('/characters');
+        break;
+      case 'character':
+        navigate('/characters');
+        break;
+      case 'map':
+        navigate('/world');
+        break;
+      case 'settings':
+        navigate('/settings');
+        break;
+    }
   };
 
   return (
@@ -4848,14 +5056,60 @@ const WorldWrapper: React.FC<{ user: any }> = ({ user }) => {
       <div className="flex-1 overflow-hidden">
         <AIDungeonMaster initialScreen="world" />
       </div>
+      
+      {/* Floating Action Button */}
+      <FloatingActionButton
+        onToggleDrawer={() => setIsDrawerOpen(!isDrawerOpen)}
+        isDrawerOpen={isDrawerOpen}
+        onQuickAction={handleQuickAction}
+        isMobile={isMobile}
+        hasNotifications={false}
+        notificationCount={0}
+      />
     </div>
   );
 };
 
 // Combat Wrapper Component
 const CombatWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const handleSignOut = () => {
     // This will trigger the auth state change and redirect to landing page
+  };
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'chat':
+        navigate('/game');
+        break;
+      case 'party':
+        navigate('/party');
+        break;
+      case 'inventory':
+        navigate('/characters');
+        break;
+      case 'character':
+        navigate('/characters');
+        break;
+      case 'map':
+        navigate('/world');
+        break;
+      case 'settings':
+        navigate('/settings');
+        break;
+    }
   };
 
   return (
@@ -4864,14 +5118,60 @@ const CombatWrapper: React.FC<{ user: any }> = ({ user }) => {
       <div className="flex-1 overflow-hidden">
         <CombatPage user={user} />
       </div>
+      
+      {/* Floating Action Button */}
+      <FloatingActionButton
+        onToggleDrawer={() => setIsDrawerOpen(!isDrawerOpen)}
+        isDrawerOpen={isDrawerOpen}
+        onQuickAction={handleQuickAction}
+        isMobile={isMobile}
+        hasNotifications={false}
+        notificationCount={0}
+      />
     </div>
   );
 };
 
 // Magic Wrapper Component
 const MagicWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const handleSignOut = () => {
     // This will trigger the auth state change and redirect to landing page
+  };
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'chat':
+        navigate('/game');
+        break;
+      case 'party':
+        navigate('/party');
+        break;
+      case 'inventory':
+        navigate('/characters');
+        break;
+      case 'character':
+        navigate('/characters');
+        break;
+      case 'map':
+        navigate('/world');
+        break;
+      case 'settings':
+        navigate('/settings');
+        break;
+    }
   };
 
   return (
@@ -4880,14 +5180,60 @@ const MagicWrapper: React.FC<{ user: any }> = ({ user }) => {
       <div className="flex-1 overflow-hidden">
         <MagicPage user={user} />
       </div>
+      
+      {/* Floating Action Button */}
+      <FloatingActionButton
+        onToggleDrawer={() => setIsDrawerOpen(!isDrawerOpen)}
+        isDrawerOpen={isDrawerOpen}
+        onQuickAction={handleQuickAction}
+        isMobile={isMobile}
+        hasNotifications={false}
+        notificationCount={0}
+      />
     </div>
   );
 };
 
 // DM Center Wrapper Component
 const DMCenterWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const handleSignOut = () => {
     // This will trigger the auth state change and redirect to landing page
+  };
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'chat':
+        navigate('/game');
+        break;
+      case 'party':
+        navigate('/party');
+        break;
+      case 'inventory':
+        navigate('/characters');
+        break;
+      case 'character':
+        navigate('/characters');
+        break;
+      case 'map':
+        navigate('/world');
+        break;
+      case 'settings':
+        navigate('/settings');
+        break;
+    }
   };
 
   return (
@@ -4896,14 +5242,60 @@ const DMCenterWrapper: React.FC<{ user: any }> = ({ user }) => {
       <div className="flex-1 overflow-hidden">
         <DMCenterPage user={user} />
       </div>
+      
+      {/* Floating Action Button */}
+      <FloatingActionButton
+        onToggleDrawer={() => setIsDrawerOpen(!isDrawerOpen)}
+        isDrawerOpen={isDrawerOpen}
+        onQuickAction={handleQuickAction}
+        isMobile={isMobile}
+        hasNotifications={false}
+        notificationCount={0}
+      />
     </div>
   );
 };
 
 // Profile Wrapper Component
 const ProfileWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const handleSignOut = () => {
     // This will trigger the auth state change and redirect to landing page
+  };
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'chat':
+        navigate('/game');
+        break;
+      case 'party':
+        navigate('/party');
+        break;
+      case 'inventory':
+        navigate('/characters');
+        break;
+      case 'character':
+        navigate('/characters');
+        break;
+      case 'map':
+        navigate('/world');
+        break;
+      case 'settings':
+        navigate('/settings');
+        break;
+    }
   };
 
   return (
@@ -4912,14 +5304,60 @@ const ProfileWrapper: React.FC<{ user: any }> = ({ user }) => {
       <div className="flex-1 overflow-hidden">
         <ProfilePage user={user} />
       </div>
+      
+      {/* Floating Action Button */}
+      <FloatingActionButton
+        onToggleDrawer={() => setIsDrawerOpen(!isDrawerOpen)}
+        isDrawerOpen={isDrawerOpen}
+        onQuickAction={handleQuickAction}
+        isMobile={isMobile}
+        hasNotifications={false}
+        notificationCount={0}
+      />
     </div>
   );
 };
 
 // Achievements Wrapper Component
 const AchievementsWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const handleSignOut = () => {
     // This will trigger the auth state change and redirect to landing page
+  };
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'chat':
+        navigate('/game');
+        break;
+      case 'party':
+        navigate('/party');
+        break;
+      case 'inventory':
+        navigate('/characters');
+        break;
+      case 'character':
+        navigate('/characters');
+        break;
+      case 'map':
+        navigate('/world');
+        break;
+      case 'settings':
+        navigate('/settings');
+        break;
+    }
   };
 
   return (
@@ -4928,14 +5366,60 @@ const AchievementsWrapper: React.FC<{ user: any }> = ({ user }) => {
       <div className="flex-1 overflow-hidden">
         <AchievementsPage user={user} />
       </div>
+      
+      {/* Floating Action Button */}
+      <FloatingActionButton
+        onToggleDrawer={() => setIsDrawerOpen(!isDrawerOpen)}
+        isDrawerOpen={isDrawerOpen}
+        onQuickAction={handleQuickAction}
+        isMobile={isMobile}
+        hasNotifications={false}
+        notificationCount={0}
+      />
     </div>
   );
 };
 
 // Settings Wrapper Component
 const SettingsWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const handleSignOut = () => {
     // This will trigger the auth state change and redirect to landing page
+  };
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'chat':
+        navigate('/game');
+        break;
+      case 'party':
+        navigate('/party');
+        break;
+      case 'inventory':
+        navigate('/characters');
+        break;
+      case 'character':
+        navigate('/characters');
+        break;
+      case 'map':
+        navigate('/world');
+        break;
+      case 'settings':
+        navigate('/settings');
+        break;
+    }
   };
 
   return (
@@ -4944,14 +5428,60 @@ const SettingsWrapper: React.FC<{ user: any }> = ({ user }) => {
       <div className="flex-1 overflow-hidden">
         <SettingsPage user={user} />
       </div>
+      
+      {/* Floating Action Button */}
+      <FloatingActionButton
+        onToggleDrawer={() => setIsDrawerOpen(!isDrawerOpen)}
+        isDrawerOpen={isDrawerOpen}
+        onQuickAction={handleQuickAction}
+        isMobile={isMobile}
+        hasNotifications={false}
+        notificationCount={0}
+      />
     </div>
   );
 };
 
 // Help Wrapper Component
 const HelpWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const handleSignOut = () => {
     // This will trigger the auth state change and redirect to landing page
+  };
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'chat':
+        navigate('/game');
+        break;
+      case 'party':
+        navigate('/party');
+        break;
+      case 'inventory':
+        navigate('/characters');
+        break;
+      case 'character':
+        navigate('/characters');
+        break;
+      case 'map':
+        navigate('/world');
+        break;
+      case 'settings':
+        navigate('/settings');
+        break;
+    }
   };
 
   return (
@@ -4960,6 +5490,16 @@ const HelpWrapper: React.FC<{ user: any }> = ({ user }) => {
       <div className="flex-1 overflow-hidden">
         <HelpPage user={user} />
       </div>
+      
+      {/* Floating Action Button */}
+      <FloatingActionButton
+        onToggleDrawer={() => setIsDrawerOpen(!isDrawerOpen)}
+        isDrawerOpen={isDrawerOpen}
+        onQuickAction={handleQuickAction}
+        isMobile={isMobile}
+        hasNotifications={false}
+        notificationCount={0}
+      />
     </div>
   );
 };
