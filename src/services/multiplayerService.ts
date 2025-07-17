@@ -381,16 +381,21 @@ class MultiplayerService {
 
     try {
       const campaignsRef = collection(db, 'campaigns');
-      const q = query(
-        campaignsRef,
-        where('players', 'array-contains', { id: this.currentUser.uid })
-      );
+      // Get all campaigns and filter in memory since array-contains doesn't work with complex objects
+      const q = query(campaignsRef);
       
       const querySnapshot = await getDocs(q);
       const campaigns: MultiplayerGame[] = [];
       
       querySnapshot.forEach((doc) => {
-        campaigns.push({ id: doc.id, ...doc.data() } as MultiplayerGame);
+        const campaignData = { id: doc.id, ...doc.data() } as MultiplayerGame;
+        // Check if current user is in the campaign
+        if (campaignData.players && Array.isArray(campaignData.players)) {
+          const isInCampaign = campaignData.players.some(player => player.id === this.currentUser?.uid);
+          if (isInCampaign) {
+            campaigns.push(campaignData);
+          }
+        }
       });
       
       return campaigns;

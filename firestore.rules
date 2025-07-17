@@ -38,8 +38,7 @@ service cloud.firestore {
              campaign.code.size() == 6 &&
              campaign.players is list &&
              campaign.players.size() <= 6 &&
-             campaign.started is bool &&
-             campaign.createdAt is timestamp;
+             campaign.started is bool;
     }
     
     function isValidMessage() {
@@ -48,8 +47,16 @@ service cloud.firestore {
              message.content is string &&
              message.content.size() > 0 &&
              message.content.size() <= 500 &&
-             message.type in ['player', 'dm', 'system'] &&
-             message.timestamp is timestamp;
+             message.type in ['player', 'dm', 'system'];
+    }
+
+    // Helper function to check if user is in campaign
+    function isInCampaign(campaignData) {
+      return request.auth.uid in campaignData.get('playerIds', []) ||
+             (campaignData.players is list && 
+              campaignData.players.hasAny([{'id': request.auth.uid}])) ||
+             (campaignData.participants is map && 
+              request.auth.uid in campaignData.participants);
     }
 
     // User profiles - users can only read/write their own profile
@@ -60,19 +67,17 @@ service cloud.firestore {
         request.resource.data.displayName is string &&
         request.resource.data.displayName.size() >= 2 &&
         request.resource.data.displayName.size() <= 50 &&
-        request.resource.data.email is string &&
-        request.resource.data.createdAt is timestamp;
+        request.resource.data.email is string;
       
-      // Allow users to list their own user document, needed for some queries
-      allow list: if isAuthenticated() && request.query.resource.data.userId == request.auth.uid;
+      // Allow users to list their own user document
+      allow list: if isAuthenticated() && isOwner(userId);
     }
 
     // Characters - users can only access their own characters
     match /characters/{characterId} {
       allow get, update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
       
-      // A user can list characters if they are authenticated. 
-      // The query in the app must filter by the user's ID.
+      // A user can list characters if they are authenticated
       allow list: if isAuthenticated();
 
       allow create: if isAuthenticated() && 
@@ -80,16 +85,30 @@ service cloud.firestore {
         isValidCharacter();
     }
 
-    match /collections/{collectionId} {
-      allow read, write: if isAuthenticated();
+    // Games collection (legacy) - users can read/write games they're part of
+    match /games/{gameId} {
+      allow read: if isAuthenticated() && 
+        (resource.data.hostId == request.auth.uid ||
+         (resource.data.players is list && 
+          resource.data.players.hasAny([{'id': request.auth.uid}])));
+      
+      allow list: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && 
+        request.resource.data.hostId == request.auth.uid;
+      
+      allow update: if isAuthenticated() && 
+        (resource.data.hostId == request.auth.uid ||
+         (resource.data.players is list && 
+          resource.data.players.hasAny([{'id': request.auth.uid}])));
+         
+      allow delete: if isAuthenticated() && 
+        resource.data.hostId == request.auth.uid;
     }
 
     // Campaigns - users can read campaigns they're part of, hosts can modify
     match /campaigns/{campaignId} {
-      allow read: if isAuthenticated() && 
-        (request.auth.uid in resource.data.get('playerIds', []) ||
-         resource.data.players.hasAny([{'id': request.auth.uid}]) ||
-         resource.data.get('participants', {}).hasAny([request.auth.uid]));
+      allow read: if isAuthenticated() && isInCampaign(resource.data);
       
       allow list: if isAuthenticated();
       
@@ -98,28 +117,22 @@ service cloud.firestore {
          request.auth.uid in request.resource.data.get('participants', {})) &&
         isValidCampaign();
       
-      allow update: if isAuthenticated() && 
-        (request.auth.uid in resource.data.get('playerIds', []) ||
-         (resource.data.players is list && 
-          resource.data.players.hasAny([{'id': request.auth.uid}])) ||
-         resource.data.get('participants', {}).hasAny([request.auth.uid]));
+      allow update: if isAuthenticated() && isInCampaign(resource.data);
          
       allow delete: if isAuthenticated() && 
         (resource.data.players.hasAny([{'id': request.auth.uid, 'isHost': true}]) ||
-         request.auth.uid in resource.data.get('hostIds', []) ||
-         resource.data.get('participants', {}).hasAny([request.auth.uid]));
+         request.auth.uid in resource.data.get('hostIds', []));
     }
 
     // Campaign messages - users can read/write messages in campaigns they're part of
     match /campaigns/{campaignId}/messages/{messageId} {
       allow read, write: if isAuthenticated() && 
         exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
-        (request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.get('playerIds', []) ||
-         get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players.hasAny([{'id': request.auth.uid}]));
+        isInCampaign(get(/databases/$(database)/documents/campaigns/$(campaignId)).data);
+      
       allow create: if isAuthenticated() && 
         exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
-        (request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.get('playerIds', []) ||
-         get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players.hasAny([{'id': request.auth.uid}])) &&
+        isInCampaign(get(/databases/$(database)/documents/campaigns/$(campaignId)).data) &&
         isValidMessage() &&
         (request.resource.data.type == 'player' ? 
           request.resource.data.playerId == request.auth.uid : true);
@@ -129,28 +142,31 @@ service cloud.firestore {
     match /campaigns/{campaignId}/players/{playerId} {
       allow read: if isAuthenticated() && 
         exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
-        (request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.get('playerIds', []) ||
-         get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players.hasAny([{'id': request.auth.uid}]));
+        isInCampaign(get(/databases/$(database)/documents/campaigns/$(campaignId)).data);
+      
       allow write: if isAuthenticated() && 
         request.auth.uid == playerId &&
         exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
-        (request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.get('playerIds', []) ||
-         get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players.hasAny([{'id': request.auth.uid}]));
+        isInCampaign(get(/databases/$(database)/documents/campaigns/$(campaignId)).data);
     }
 
     // World state - users can read/write world state for campaigns they're part of
     match /campaigns/{campaignId}/worldState/{stateId} {
       allow read, write: if isAuthenticated() && 
         exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
-        (request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.get('playerIds', []) ||
-         get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players.hasAny([{'id': request.auth.uid}]));
+        isInCampaign(get(/databases/$(database)/documents/campaigns/$(campaignId)).data);
     }
 
     // Combat state - users can read/write combat state for campaigns they're part of
     match /campaigns/{campaignId}/combat/{combatId} {
       allow read, write: if isAuthenticated() && 
         exists(/databases/$(database)/documents/campaigns/$(campaignId)) &&
-        request.auth.uid in get(/databases/$(database)/documents/campaigns/$(campaignId)).data.players;
+        isInCampaign(get(/databases/$(database)/documents/campaigns/$(campaignId)).data);
+    }
+
+    // Collections - users can read/write their own collections
+    match /collections/{collectionId} {
+      allow read, write: if isAuthenticated();
     }
 
     // Achievements - users can only access their own achievements
