@@ -1,0 +1,28 @@
+{
+  "name": "mythseeker-scripts",
+  "version": "1.0.0",
+  "description": "MythSeeker automation and testing scripts",
+  "main": "mock-game-simulation.js",
+  "scripts": {
+    "test": "node mock-game-simulation.js",
+    "test:local": "node mock-game-simulation.js --local",
+    "test:verbose": "node mock-game-simulation.js --verbose",
+    "load-test": "node load-test.js",
+    "api-test": "node api-test.js"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  },
+  "keywords": [
+    "mythseeker",
+    "rpg",
+    "automation",
+    "testing",
+    "simulation"
+  ],
+  "author": "MythSeeker Team",
+  "license": "MIT"
+} 

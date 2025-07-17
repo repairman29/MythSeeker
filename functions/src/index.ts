@@ -491,3 +491,206 @@ export const cleanupOldGames = functions.pubsub.schedule('every 24 hours').onRun
 
 // Export AI Dungeon Master function
 export { aiDungeonMaster }; 
+
+// Test endpoint for development (bypasses auth)
+export const testEndpoint = functions.https.onRequest(async (req, res) => {
+  // Set CORS headers
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, X-Test-Mode');
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
+  // Check if this is a test request
+  const isTestMode = req.headers['x-test-mode'] === 'true';
+  
+  if (!isTestMode) {
+    res.status(403).json({ error: 'Test mode required' });
+    return;
+  }
+
+  const { action, data } = req.body;
+
+  try {
+    let result;
+    
+    switch (action) {
+      case 'saveCharacter':
+        result = await handleSaveCharacter(data, { auth: { uid: data.userId } });
+        break;
+      case 'getUserCharacters':
+        result = await handleGetUserCharacters(data, { auth: { uid: data.userId } });
+        break;
+      case 'createGameSession':
+        result = await handleCreateGameSession(data, { auth: { uid: data.hostId } });
+        break;
+      case 'joinGameSession':
+        result = await handleJoinGameSession(data, { auth: { uid: data.playerId } });
+        break;
+      case 'startGameSession':
+        result = await handleStartGameSession(data, { auth: { uid: 'test-user' } });
+        break;
+      case 'aiDungeonMaster':
+        result = await handleAIDungeonMaster(data, { auth: { uid: 'test-user' } });
+        break;
+      case 'saveGameProgress':
+        result = await handleSaveGameProgress(data, { auth: { uid: 'test-user' } });
+        break;
+      case 'completeCampaign':
+        result = await handleCompleteCampaign(data, { auth: { uid: 'test-user' } });
+        break;
+      default:
+        res.status(400).json({ error: 'Unknown action' });
+        return;
+    }
+    
+    res.status(200).json({ result });
+  } catch (error) {
+    console.error('Test endpoint error:', error);
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+// Helper functions to handle the actual logic
+async function handleSaveCharacter(data: any, context: any) {
+  const characterData = {
+    ...data,
+    userId: context.auth.uid,
+    lastPlayed: Date.now()
+  };
+
+  // Remove the ID if it's a test character to create new ones
+  if (data.id && data.id.startsWith('char-')) {
+    delete characterData.id;
+  }
+
+  if (data.id && !data.id.startsWith('char-')) {
+    await admin.firestore().collection('characters').doc(data.id).update(characterData);
+    return { characterId: data.id };
+  } else {
+    const docRef = await admin.firestore().collection('characters').add(characterData);
+    return { characterId: docRef.id };
+  }
+}
+
+async function handleGetUserCharacters(data: any, context: any) {
+  const snapshot = await admin.firestore()
+    .collection('characters')
+    .where('userId', '==', context.auth.uid)
+    .orderBy('lastPlayed', 'desc')
+    .get();
+
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+async function handleCreateGameSession(data: any, context: any) {
+  const gameSession = {
+    code: data.code || generateGameCode(),
+    theme: data.theme || 'Classic Fantasy',
+    background: 'fantasy',
+    hostId: context.auth.uid,
+    players: [],
+    messages: [],
+    started: false,
+    customPrompt: data.customPrompt || '',
+    maxPlayers: 6,
+    createdAt: Date.now(),
+    lastActivity: Date.now()
+  };
+
+  const docRef = await admin.firestore().collection('games').add(gameSession);
+  return { gameId: docRef.id, code: gameSession.code };
+}
+
+async function handleJoinGameSession(data: any, context: any) {
+  const { code, characterId } = data;
+  
+  const gameSnapshot = await admin.firestore()
+    .collection('games')
+    .where('code', '==', code)
+    .limit(1)
+    .get();
+
+  if (gameSnapshot.empty) {
+    throw new Error('Game not found');
+  }
+
+  const gameDoc = gameSnapshot.docs[0];
+  const gameData = gameDoc.data();
+
+  if (gameData.players.length >= gameData.maxPlayers) {
+    throw new Error('Game is full');
+  }
+
+  const player = {
+    id: context.auth.uid,
+    name: 'Test Player',
+    characterId,
+    isHost: false,
+    isOnline: true,
+    lastSeen: Date.now()
+  };
+
+  await gameDoc.ref.update({
+    players: admin.firestore.FieldValue.arrayUnion(player),
+    lastActivity: Date.now()
+  });
+
+  return { gameId: gameDoc.id, success: true };
+}
+
+async function handleStartGameSession(data: any, context: any) {
+  const { gameId } = data;
+  
+  await admin.firestore().collection('games').doc(gameId).update({
+    started: true,
+    lastActivity: Date.now()
+  });
+
+  return { success: true };
+}
+
+async function handleAIDungeonMaster(data: any, context: any) {
+  const { gameId, playerInput } = data;
+  
+  // For testing, return a mock response
+  const mockResponse = {
+    content: `The AI Dungeon Master responds to: "${playerInput.substring(0, 50)}..."`,
+    type: 'dm',
+    timestamp: Date.now()
+  };
+
+  // Save the message to the game
+  await admin.firestore().collection('games').doc(gameId).update({
+    messages: admin.firestore.FieldValue.arrayUnion(mockResponse),
+    lastActivity: Date.now()
+  });
+
+  return mockResponse;
+}
+
+async function handleSaveGameProgress(data: any, context: any) {
+  const { gameId, gameState } = data;
+  
+  await admin.firestore().collection('games').doc(gameId).update({
+    gameState,
+    lastActivity: Date.now()
+  });
+
+  return { success: true };
+}
+
+async function handleCompleteCampaign(data: any, context: any) {
+  const { gameId, finalState } = data;
+  
+  await admin.firestore().collection('games').doc(gameId).update({
+    completedAt: Date.now(),
+    finalState,
+    lastActivity: Date.now()
+  });
+
+  return { success: true };
+} 

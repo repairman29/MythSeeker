@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.aiDungeonMaster = exports.cleanupOldGames = exports.getUserGameHistory = exports.completeCampaign = exports.saveGameProgress = exports.startGameSession = exports.leaveGameSession = exports.joinGameSession = exports.createGameSession = exports.getUserCharacters = exports.saveCharacter = exports.updateUserLastSeen = void 0;
+exports.testEndpoint = exports.aiDungeonMaster = exports.cleanupOldGames = exports.getUserGameHistory = exports.completeCampaign = exports.saveGameProgress = exports.startGameSession = exports.leaveGameSession = exports.joinGameSession = exports.createGameSession = exports.getUserCharacters = exports.saveCharacter = exports.updateUserLastSeen = void 0;
 const functions = require("firebase-functions");
 const init_1 = require("./init");
 const validation_1 = require("./validation");
@@ -343,4 +343,165 @@ exports.cleanupOldGames = functions.pubsub.schedule('every 24 hours').onRun(asyn
         throw error;
     }
 });
+// Test endpoint for development (bypasses auth)
+exports.testEndpoint = functions.https.onRequest(async (req, res) => {
+    // Set CORS headers
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, X-Test-Mode');
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    // Check if this is a test request
+    const isTestMode = req.headers['x-test-mode'] === 'true';
+    if (!isTestMode) {
+        res.status(403).json({ error: 'Test mode required' });
+        return;
+    }
+    const { action, data } = req.body;
+    try {
+        let result;
+        switch (action) {
+            case 'saveCharacter':
+                result = await handleSaveCharacter(data, { auth: { uid: data.userId } });
+                break;
+            case 'getUserCharacters':
+                result = await handleGetUserCharacters(data, { auth: { uid: data.userId } });
+                break;
+            case 'createGameSession':
+                result = await handleCreateGameSession(data, { auth: { uid: data.hostId } });
+                break;
+            case 'joinGameSession':
+                result = await handleJoinGameSession(data, { auth: { uid: data.playerId } });
+                break;
+            case 'startGameSession':
+                result = await handleStartGameSession(data, { auth: { uid: 'test-user' } });
+                break;
+            case 'aiDungeonMaster':
+                result = await handleAIDungeonMaster(data, { auth: { uid: 'test-user' } });
+                break;
+            case 'saveGameProgress':
+                result = await handleSaveGameProgress(data, { auth: { uid: 'test-user' } });
+                break;
+            case 'completeCampaign':
+                result = await handleCompleteCampaign(data, { auth: { uid: 'test-user' } });
+                break;
+            default:
+                res.status(400).json({ error: 'Unknown action' });
+                return;
+        }
+        res.status(200).json({ result });
+    }
+    catch (error) {
+        console.error('Test endpoint error:', error);
+        res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+});
+// Helper functions to handle the actual logic
+async function handleSaveCharacter(data, context) {
+    const characterData = Object.assign(Object.assign({}, data), { userId: context.auth.uid, lastPlayed: Date.now() });
+    if (data.id) {
+        await init_1.default.firestore().collection('characters').doc(data.id).update(characterData);
+        return { characterId: data.id };
+    }
+    else {
+        const docRef = await init_1.default.firestore().collection('characters').add(characterData);
+        return { characterId: docRef.id };
+    }
+}
+async function handleGetUserCharacters(data, context) {
+    const snapshot = await init_1.default.firestore()
+        .collection('characters')
+        .where('userId', '==', context.auth.uid)
+        .orderBy('lastPlayed', 'desc')
+        .get();
+    return snapshot.docs.map(doc => (Object.assign({ id: doc.id }, doc.data())));
+}
+async function handleCreateGameSession(data, context) {
+    const gameSession = {
+        code: data.code || generateGameCode(),
+        theme: data.theme || 'Classic Fantasy',
+        background: 'fantasy',
+        hostId: context.auth.uid,
+        players: [],
+        messages: [],
+        started: false,
+        customPrompt: data.customPrompt || '',
+        maxPlayers: 6,
+        createdAt: Date.now(),
+        lastActivity: Date.now()
+    };
+    const docRef = await init_1.default.firestore().collection('games').add(gameSession);
+    return { gameId: docRef.id, code: gameSession.code };
+}
+async function handleJoinGameSession(data, context) {
+    const { code, characterId } = data;
+    const gameSnapshot = await init_1.default.firestore()
+        .collection('games')
+        .where('code', '==', code)
+        .limit(1)
+        .get();
+    if (gameSnapshot.empty) {
+        throw new Error('Game not found');
+    }
+    const gameDoc = gameSnapshot.docs[0];
+    const gameData = gameDoc.data();
+    if (gameData.players.length >= gameData.maxPlayers) {
+        throw new Error('Game is full');
+    }
+    const player = {
+        id: context.auth.uid,
+        name: 'Test Player',
+        characterId,
+        isHost: false,
+        isOnline: true,
+        lastSeen: Date.now()
+    };
+    await gameDoc.ref.update({
+        players: init_1.default.firestore.FieldValue.arrayUnion(player),
+        lastActivity: Date.now()
+    });
+    return { gameId: gameDoc.id, success: true };
+}
+async function handleStartGameSession(data, context) {
+    const { gameId } = data;
+    await init_1.default.firestore().collection('games').doc(gameId).update({
+        started: true,
+        lastActivity: Date.now()
+    });
+    return { success: true };
+}
+async function handleAIDungeonMaster(data, context) {
+    const { gameId, playerInput } = data;
+    // For testing, return a mock response
+    const mockResponse = {
+        content: `The AI Dungeon Master responds to: "${playerInput.substring(0, 50)}..."`,
+        type: 'dm',
+        timestamp: Date.now()
+    };
+    // Save the message to the game
+    await init_1.default.firestore().collection('games').doc(gameId).update({
+        messages: init_1.default.firestore.FieldValue.arrayUnion(mockResponse),
+        lastActivity: Date.now()
+    });
+    return mockResponse;
+}
+async function handleSaveGameProgress(data, context) {
+    const { gameId, gameState } = data;
+    await init_1.default.firestore().collection('games').doc(gameId).update({
+        gameState,
+        lastActivity: Date.now()
+    });
+    return { success: true };
+}
+async function handleCompleteCampaign(data, context) {
+    const { gameId, finalState } = data;
+    await init_1.default.firestore().collection('games').doc(gameId).update({
+        completedAt: Date.now(),
+        finalState,
+        lastActivity: Date.now()
+    });
+    return { success: true };
+}
 //# sourceMappingURL=index.js.map
