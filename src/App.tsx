@@ -1869,6 +1869,12 @@ Start with a welcoming scene that introduces the magical academy setting and the
     setChatError(null);
     if (isAIThinking) return;
 
+    // Check if character exists before proceeding
+    if (!character) {
+      setChatError('No character selected. Please create or select a character first.');
+      return;
+    }
+
     const sanitizedMessage = sanitizeInput(inputMessage);
     const playerMessage = {
       id: Date.now(),
