@@ -4827,7 +4827,7 @@ const CombatWrapper: React.FC<{ user: any }> = ({ user }) => {
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
       <div className="flex-1 overflow-hidden">
-        <AIDungeonMaster initialScreen="combat" />
+        <CombatPage user={user} />
       </div>
     </div>
   );
@@ -5994,6 +5994,7 @@ const WorldPage: React.FC<{ user: any }> = ({ user }) => {
 };
 
 const CombatPage: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
   const [characters, setCharacters] = useState<any[]>([]);
   const [selectedCharacter, setSelectedCharacter] = useState<any>(null);
   const [showCombatSystem, setShowCombatSystem] = useState(false);
