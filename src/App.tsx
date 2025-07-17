@@ -4843,7 +4843,7 @@ const MagicWrapper: React.FC<{ user: any }> = ({ user }) => {
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
       <div className="flex-1 overflow-hidden">
-        <AIDungeonMaster initialScreen="magic" />
+        <MagicPage user={user} />
       </div>
     </div>
   );
@@ -6163,6 +6163,7 @@ const CombatPage: React.FC<{ user: any }> = ({ user }) => {
 };
 
 const MagicPage: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
   const [characters, setCharacters] = useState<any[]>([]);
   const [selectedCharacter, setSelectedCharacter] = useState<any>(null);
   const [spells, setSpells] = useState<any[]>([]);
