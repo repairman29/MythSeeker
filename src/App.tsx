@@ -3256,17 +3256,18 @@ Your response MUST be a single, valid JSON object. Make it dynamic, specific, an
           onDismiss={dismissToast} 
         />
         {/* Welcome Overlay */}
-        <Suspense fallback={<LoadingSpinner />}>
-          <WelcomeOverlay 
-            isOpen={showWelcomeOverlay} 
-            onClose={() => setShowWelcomeOverlay(false)}
-            onSkip={() => {
-              setShowWelcomeOverlay(false);
-              addToast('ftueSkipped');
-            }}
-            onStart={handleTutorialStart}
-          />
-        </Suspense>
+        {showWelcomeOverlay && (
+          <Suspense fallback={<LoadingSpinner />}>
+            <WelcomeOverlay 
+              character={character}
+              onStart={handleTutorialStart}
+              onDismiss={() => {
+                setShowWelcomeOverlay(false);
+                addToast('ftueSkipped');
+              }}
+            />
+          </Suspense>
+        )}
         {/* Main Content Area */}
         <div className="h-full overflow-hidden">
           <main className="h-full overflow-hidden">
