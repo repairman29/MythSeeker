@@ -2108,13 +2108,36 @@ Start with a welcoming scene that introduces the magical academy setting and the
       continuityStrictness: 'moderate',
       worldReactivity: 8
     };
+
+    // Get DMPersona settings
+    const dmPersona = dmCenterData?.dmPersona || {
+      tone: 'friendly',
+      humor_level: 'medium',
+      descriptiveness: 'moderate',
+      challenge_level: 'moderate',
+      narrative_focus: 'balanced',
+      improvisation_style: 'moderate'
+    };
+
+    // Get AI training settings
+    const aiTraining = dmCenterData?.aiTraining || {
+      learningEnabled: true,
+      feedbackCollection: true,
+      personalityAdaptation: true,
+      memoryRetention: 30,
+      contextWindow: 10,
+      longTermMemory: true,
+      emotionalMemory: true,
+      crossCampaignLearning: false
+    };
     
     // Build context from recent actions - Enhanced memory context
-    const recentActions = aiMemory.playerActions.slice(-10); // Increased from 5 to 10
+    const contextWindow = aiTraining.contextWindow || 10;
+    const recentActions = aiMemory.playerActions.slice(-contextWindow);
     const recentConsequences = aiMemory.consequences.slice(-5); // Increased from 3 to 5
     
     // Add long-term memory summary for campaigns with many actions
-    const longTermMemory = aiMemory.playerActions.length > 20 ? 
+    const longTermMemory = aiTraining.longTermMemory && aiMemory.playerActions.length > 20 ? 
       `LONG-TERM MEMORY: This player has taken ${aiMemory.playerActions.length} actions. Key patterns: ${aiMemory.playerActions.slice(-20).filter((a: any) => a.type === 'combat').length} combat actions, ${aiMemory.playerActions.slice(-20).filter((a: any) => a.type === 'social').length} social interactions, ${aiMemory.playerActions.slice(-20).filter((a: any) => a.type === 'exploration').length} exploration actions.` : '';
     
     // Build NPC context
@@ -2161,7 +2184,15 @@ Start with a welcoming scene that introduces the magical academy setting and the
 
     const basePrompt = `You are an advanced AI Dungeon Master for a ${currentCampaign?.theme || 'fantasy'} campaign. You must create dynamic, responsive, and truly intelligent storytelling.
 
-**AI PERSONALITY SETTINGS:**
+**DM PERSONA CONFIGURATION:**
+- Tone: ${dmPersona.tone} - ${dmPersona.tone === 'friendly' ? 'Warm and approachable' : dmPersona.tone === 'witty' ? 'Clever and humorous' : dmPersona.tone === 'serious' ? 'Dramatic and intense' : dmPersona.tone === 'humorous' ? 'Light and entertaining' : dmPersona.tone === 'mysterious' ? 'Enigmatic and intriguing' : 'Epic and grandiose'}
+- Humor Level: ${dmPersona.humor_level} - ${dmPersona.humor_level === 'none' ? 'No humor, serious tone' : dmPersona.humor_level === 'low' ? 'Subtle, occasional humor' : dmPersona.humor_level === 'medium' ? 'Balanced humor throughout' : 'Frequent, prominent humor'}
+- Descriptiveness: ${dmPersona.descriptiveness} - ${dmPersona.descriptiveness === 'minimal' ? 'Brief, essential details only' : dmPersona.descriptiveness === 'moderate' ? 'Balanced detail level' : dmPersona.descriptiveness === 'high' ? 'Rich, detailed descriptions' : 'Very detailed, immersive descriptions'}
+- Challenge Level: ${dmPersona.challenge_level} - ${dmPersona.challenge_level === 'easy' ? 'Accessible challenges with clear solutions' : dmPersona.challenge_level === 'moderate' ? 'Balanced challenges that test players' : dmPersona.challenge_level === 'hard' ? 'Difficult challenges requiring clever thinking' : 'Extremely challenging with serious consequences'}
+- Narrative Focus: ${dmPersona.narrative_focus} - ${dmPersona.narrative_focus === 'action' ? 'Emphasize action and combat sequences' : dmPersona.narrative_focus === 'character' ? 'Focus on character development and relationships' : dmPersona.narrative_focus === 'exploration' ? 'Highlight world exploration and discovery' : dmPersona.narrative_focus === 'puzzle' ? 'Feature puzzles and problem-solving' : 'Balanced approach across all elements'}
+- Improvisation Style: ${dmPersona.improvisation_style} - ${dmPersona.improvisation_style === 'conservative' ? 'Stick closely to established rules and lore' : dmPersona.improvisation_style === 'moderate' ? 'Balance creativity with consistency' : 'Highly creative and flexible storytelling'}
+
+**AI ENGINE SETTINGS:**
 - DM Style: ${getDMStyle()}
 - Description Style: ${getDescriptionStyle()}
 - Difficulty Level: ${getDifficultyGuidance()}
@@ -2169,6 +2200,10 @@ Start with a welcoming scene that introduces the magical academy setting and the
 - Conflict Frequency: ${aiSettings.conflictFrequency}/10 - ${aiSettings.conflictFrequency <= 3 ? 'Minimal conflict, peaceful interactions' : aiSettings.conflictFrequency <= 6 ? 'Moderate tension and occasional conflicts' : 'High tension with frequent dramatic conflicts'}
 - Continuity: ${aiSettings.continuityStrictness} - ${aiSettings.continuityStrictness === 'strict' ? 'Maintain strict world consistency and logical consequences' : aiSettings.continuityStrictness === 'loose' ? 'Allow creative flexibility while maintaining basic coherence' : 'Balance consistency with creative freedom'}
 - World Reactivity: ${aiSettings.worldReactivity}/10 - ${aiSettings.worldReactivity <= 3 ? 'Minimal world changes' : aiSettings.worldReactivity <= 6 ? 'Moderate world reactions to player actions' : 'Highly reactive world that changes dramatically based on player choices'}
+- Context Window: ${contextWindow} recent actions for memory
+- Long-term Memory: ${aiTraining.longTermMemory ? 'Enabled' : 'Disabled'}
+- Emotional Memory: ${aiTraining.emotionalMemory ? 'Enabled' : 'Disabled'}
+- Learning: ${aiTraining.learningEnabled ? 'Enabled' : 'Disabled'} with ${aiTraining.personalityAdaptation ? 'personality adaptation' : 'static personality'}
 
 **CORE PRINCIPLES:**
 - NEVER give generic responses. Every response must be specific to the current situation, character actions, and world state.
@@ -6416,20 +6451,53 @@ const MagicPage: React.FC<{ user: any }> = ({ user }) => {
 
 const DMCenterPage: React.FC<{ user: any }> = ({ user }) => {
   const navigate = useNavigate();
-  const [characters, setCharacters] = useState<any[]>([]);
-  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [dmCenterData, setDmCenterData] = useState<any>({
+    aiSettings: {
+      dmStyle: 'balanced',
+      difficulty: 6,
+      descriptionLength: 'detailed',
+      improvisationLevel: 7,
+      npcComplexity: 'detailed',
+      conflictFrequency: 5,
+      continuityStrictness: 'moderate',
+      worldReactivity: 8
+    },
+    dmPersona: {
+      tone: 'friendly',
+      humor_level: 'medium',
+      descriptiveness: 'moderate',
+      challenge_level: 'moderate',
+      narrative_focus: 'balanced',
+      improvisation_style: 'moderate'
+    },
+    aiTraining: {
+      learningEnabled: true,
+      feedbackCollection: true,
+      personalityAdaptation: true,
+      memoryRetention: 30,
+      contextWindow: 10,
+      longTermMemory: true,
+      emotionalMemory: true,
+      crossCampaignLearning: false
+    }
+  });
+  const [currentCampaign, setCurrentCampaign] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Load user's characters
-        const userCharacters = await firebaseService.getUserCharacters(user.uid);
-        setCharacters(userCharacters || []);
-        
         // Load user's campaigns
         const userCampaigns = await firebaseService.getUserCampaigns(user.uid);
-        setCampaigns(userCampaigns || []);
+        if (userCampaigns && userCampaigns.length > 0) {
+          setCurrentCampaign(userCampaigns[0]); // Set first campaign as current
+        }
+        
+        // Load DM Center data from localStorage or use defaults
+        const savedDmData = localStorage.getItem(`mythseeker_dmcenter_${user.uid}`);
+        if (savedDmData) {
+          setDmCenterData(JSON.parse(savedDmData));
+        }
       } catch (error) {
         console.error('Error loading DM data:', error);
       } finally {
@@ -6439,13 +6507,10 @@ const DMCenterPage: React.FC<{ user: any }> = ({ user }) => {
     loadData();
   }, [user.uid]);
 
-  const handleCreateCampaign = () => {
-    navigate('/campaigns');
-  };
-
-  const handleStartGame = (character: any) => {
-    // Set character and navigate to game
-    navigate('/game', { state: { character } });
+  const handleUpdateDMCenter = (newData: any) => {
+    setDmCenterData(newData);
+    // Save to localStorage
+    localStorage.setItem(`mythseeker_dmcenter_${user.uid}`, JSON.stringify(newData));
   };
 
   if (isLoading) {
@@ -6453,113 +6518,19 @@ const DMCenterPage: React.FC<{ user: any }> = ({ user }) => {
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center space-y-4">
           <div className="w-8 h-8 border-4 border-blue-300/30 border-t-blue-400 rounded-full animate-spin mx-auto"></div>
-          <p className="text-blue-200">Loading DM tools...</p>
+          <p className="text-blue-200">Loading DM Center...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 p-6 overflow-y-auto">
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">DM Center</h1>
-          <p className="text-blue-200">Dungeon Master tools and resources</p>
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Campaign Management */}
-          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
-            <h3 className="text-xl font-semibold text-white mb-4">Campaign Management</h3>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-blue-200">Active Campaigns</span>
-                <span className="text-white font-semibold">{campaigns.filter(c => c.status === 'active').length}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-blue-200">Total Campaigns</span>
-                <span className="text-white font-semibold">{campaigns.length}</span>
-              </div>
-              <button 
-                onClick={handleCreateCampaign}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors"
-              >
-                Create New Campaign
-              </button>
-            </div>
-          </div>
-
-          {/* Character Management */}
-          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
-            <h3 className="text-xl font-semibold text-white mb-4">Character Management</h3>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-blue-200">Total Characters</span>
-                <span className="text-white font-semibold">{characters.length}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-blue-200">Active Characters</span>
-                <span className="text-white font-semibold">{characters.filter(c => c.status === 'active').length}</span>
-              </div>
-              <button 
-                onClick={() => navigate('/characters')}
-                className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-medium transition-colors"
-              >
-                Manage Characters
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
-            <h3 className="text-xl font-semibold text-white mb-4">Quick Actions</h3>
-            <div className="space-y-3">
-              <button 
-                onClick={() => navigate('/combat')}
-                className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-medium transition-colors"
-              >
-                Combat Simulator
-              </button>
-              <button 
-                onClick={() => navigate('/world')}
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded font-medium transition-colors"
-              >
-                World Builder
-              </button>
-              <button 
-                onClick={() => navigate('/magic')}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded font-medium transition-colors"
-              >
-                Spell Library
-              </button>
-            </div>
-          </div>
-
-          {/* Recent Activity */}
-          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
-            <h3 className="text-xl font-semibold text-white mb-4">Recent Activity</h3>
-            <div className="space-y-3">
-              {campaigns.slice(0, 3).map((campaign) => (
-                <div key={campaign.id} className="flex justify-between items-center p-3 bg-slate-700/30 rounded">
-                  <div>
-                    <p className="text-white font-medium">{campaign.name || campaign.theme}</p>
-                    <p className="text-blue-200 text-sm">{campaign.status}</p>
-                  </div>
-                  <button 
-                    onClick={() => handleStartGame(campaign)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition-colors"
-                  >
-                    Resume
-                  </button>
-                </div>
-              ))}
-              {campaigns.length === 0 && (
-                <p className="text-slate-400 text-sm">No recent activity</p>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="flex-1 overflow-y-auto">
+      <DMCenter 
+        dmCenterData={dmCenterData}
+        onUpdateDMCenter={handleUpdateDMCenter}
+        currentCampaign={currentCampaign}
+      />
     </div>
   );
 };

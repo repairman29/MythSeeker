@@ -382,6 +382,28 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
       worldReactivity: 8
     };
 
+    // Get DMPersona settings or use defaults
+    const dmPersona = dmCenterData?.dmPersona || {
+      tone: 'friendly',
+      humor_level: 'medium',
+      descriptiveness: 'moderate',
+      challenge_level: 'moderate',
+      narrative_focus: 'balanced',
+      improvisation_style: 'moderate'
+    };
+
+    // Get AI training and memory settings
+    const aiTraining = dmCenterData?.aiTraining || {
+      learningEnabled: true,
+      feedbackCollection: true,
+      personalityAdaptation: true,
+      memoryRetention: 30,
+      contextWindow: 10,
+      longTermMemory: true,
+      emotionalMemory: true,
+      crossCampaignLearning: false
+    };
+
     const updateAISetting = (key: string, value: any) => {
       onUpdateDMCenter({
         ...dmCenterData,
@@ -392,8 +414,29 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
       });
     };
 
+    const updateDMPersona = (key: string, value: any) => {
+      onUpdateDMCenter({
+        ...dmCenterData,
+        dmPersona: {
+          ...dmPersona,
+          [key]: value
+        }
+      });
+    };
+
+    const updateAITraining = (key: string, value: any) => {
+      onUpdateDMCenter({
+        ...dmCenterData,
+        aiTraining: {
+          ...aiTraining,
+          [key]: value
+        }
+      });
+    };
+
     return (
       <div className="space-y-6">
+        {/* AI Personality & Behavior */}
         <div className="bg-white/10 rounded-lg p-6 border border-white/20">
           <h3 className="text-xl font-semibold text-white mb-4">AI Personality & Behavior</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -430,6 +473,93 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
           </div>
         </div>
 
+        {/* DMPersona Configuration */}
+        <div className="bg-gradient-to-r from-purple-600/20 to-pink-600/20 rounded-lg p-6 border border-purple-400/30">
+          <h3 className="text-xl font-semibold text-white mb-4">🎭 DM Persona Configuration</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-blue-200 text-sm font-medium mb-2">Tone & Personality</label>
+              <select 
+                value={dmPersona.tone}
+                onChange={(e) => updateDMPersona('tone', e.target.value)}
+                className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white mb-3"
+              >
+                <option value="friendly">Friendly & Approachable</option>
+                <option value="witty">Witty & Clever</option>
+                <option value="serious">Serious & Dramatic</option>
+                <option value="humorous">Humorous & Light</option>
+                <option value="mysterious">Mysterious & Enigmatic</option>
+                <option value="dramatic">Dramatic & Epic</option>
+              </select>
+              
+              <label className="block text-blue-200 text-sm font-medium mb-2">Humor Level</label>
+              <select 
+                value={dmPersona.humor_level}
+                onChange={(e) => updateDMPersona('humor_level', e.target.value)}
+                className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+              >
+                <option value="none">No Humor</option>
+                <option value="low">Subtle Humor</option>
+                <option value="medium">Balanced Humor</option>
+                <option value="high">High Humor</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-blue-200 text-sm font-medium mb-2">Narrative Focus</label>
+              <select 
+                value={dmPersona.narrative_focus}
+                onChange={(e) => updateDMPersona('narrative_focus', e.target.value)}
+                className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white mb-3"
+              >
+                <option value="balanced">Balanced</option>
+                <option value="action">Action-Oriented</option>
+                <option value="character">Character-Driven</option>
+                <option value="exploration">Exploration-Focused</option>
+                <option value="puzzle">Puzzle-Heavy</option>
+              </select>
+
+              <label className="block text-blue-200 text-sm font-medium mb-2">Improvisation Style</label>
+              <select 
+                value={dmPersona.improvisation_style}
+                onChange={(e) => updateDMPersona('improvisation_style', e.target.value)}
+                className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+              >
+                <option value="conservative">Conservative</option>
+                <option value="moderate">Moderate</option>
+                <option value="wild">Wild & Creative</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-blue-200 text-sm font-medium mb-2">Description Style</label>
+              <select 
+                value={dmPersona.descriptiveness}
+                onChange={(e) => updateDMPersona('descriptiveness', e.target.value)}
+                className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white mb-3"
+              >
+                <option value="minimal">Minimal</option>
+                <option value="moderate">Moderate</option>
+                <option value="high">High Detail</option>
+                <option value="verbose">Very Detailed</option>
+              </select>
+
+              <label className="block text-blue-200 text-sm font-medium mb-2">Challenge Level</label>
+              <select 
+                value={dmPersona.challenge_level}
+                onChange={(e) => updateDMPersona('challenge_level', e.target.value)}
+                className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+              >
+                <option value="easy">Easy</option>
+                <option value="moderate">Moderate</option>
+                <option value="hard">Hard</option>
+                <option value="deadly">Deadly</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* AI Engine Configuration */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="bg-white/10 rounded-lg p-6 border border-white/20">
             <h3 className="text-lg font-semibold text-white mb-4">Narrative Engine</h3>
@@ -519,8 +649,102 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
           </div>
         </div>
 
-        {/* Advanced AI Toggle */}
+        {/* AI Training & Learning */}
         <div className="bg-gradient-to-r from-green-600/20 to-blue-600/20 rounded-lg p-6 border border-green-400/30">
+          <h3 className="text-xl font-semibold text-white mb-4">🧠 AI Training & Learning</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <h4 className="text-lg font-medium text-white">Learning Features</h4>
+              <div className="space-y-3">
+                <label className="flex items-center space-x-3">
+                  <input 
+                    type="checkbox" 
+                    checked={aiTraining.learningEnabled}
+                    onChange={(e) => updateAITraining('learningEnabled', e.target.checked)}
+                    className="w-4 h-4 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-blue-200">Enable AI Learning</span>
+                </label>
+                <label className="flex items-center space-x-3">
+                  <input 
+                    type="checkbox" 
+                    checked={aiTraining.feedbackCollection}
+                    onChange={(e) => updateAITraining('feedbackCollection', e.target.checked)}
+                    className="w-4 h-4 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-blue-200">Collect Player Feedback</span>
+                </label>
+                <label className="flex items-center space-x-3">
+                  <input 
+                    type="checkbox" 
+                    checked={aiTraining.personalityAdaptation}
+                    onChange={(e) => updateAITraining('personalityAdaptation', e.target.checked)}
+                    className="w-4 h-4 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-blue-200">Adapt Personality to Players</span>
+                </label>
+                <label className="flex items-center space-x-3">
+                  <input 
+                    type="checkbox" 
+                    checked={aiTraining.crossCampaignLearning}
+                    onChange={(e) => updateAITraining('crossCampaignLearning', e.target.checked)}
+                    className="w-4 h-4 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-blue-200">Cross-Campaign Learning</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="text-lg font-medium text-white">Memory Configuration</h4>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-blue-200 text-sm font-medium mb-1">Memory Retention (Days)</label>
+                  <input 
+                    type="number" 
+                    min="1" 
+                    max="365" 
+                    value={aiTraining.memoryRetention}
+                    onChange={(e) => updateAITraining('memoryRetention', parseInt(e.target.value))}
+                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-blue-200 text-sm font-medium mb-1">Context Window (Actions)</label>
+                  <input 
+                    type="number" 
+                    min="5" 
+                    max="50" 
+                    value={aiTraining.contextWindow}
+                    onChange={(e) => updateAITraining('contextWindow', parseInt(e.target.value))}
+                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                  />
+                </div>
+                <label className="flex items-center space-x-3">
+                  <input 
+                    type="checkbox" 
+                    checked={aiTraining.longTermMemory}
+                    onChange={(e) => updateAITraining('longTermMemory', e.target.checked)}
+                    className="w-4 h-4 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-blue-200">Long-Term Memory Summarization</span>
+                </label>
+                <label className="flex items-center space-x-3">
+                  <input 
+                    type="checkbox" 
+                    checked={aiTraining.emotionalMemory}
+                    onChange={(e) => updateAITraining('emotionalMemory', e.target.checked)}
+                    className="w-4 h-4 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-blue-200">Emotional Memory Tracking</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Advanced AI Features */}
+        <div className="bg-gradient-to-r from-orange-600/20 to-red-600/20 rounded-lg p-6 border border-orange-400/30">
           <h3 className="text-lg font-semibold text-white mb-4">Advanced AI Features</h3>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -553,6 +777,26 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
                 <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
               </div>
             </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-white font-medium">NPC Emotional Intelligence</h4>
+                <p className="text-blue-200 text-sm">Dynamic NPC personalities and emotional states</p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-green-400 text-sm font-medium">ENABLED</span>
+                <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-white font-medium">World Consequence Engine</h4>
+                <p className="text-blue-200 text-sm">Player actions ripple through the world</p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-green-400 text-sm font-medium">ENABLED</span>
+                <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+              </div>
+            </div>
           </div>
           <div className="mt-4 p-3 bg-white/10 rounded border border-white/20">
             <p className="text-xs text-gray-300 italic">
@@ -565,14 +809,43 @@ const DMCenter: React.FC<DMCenterProps> = ({ dmCenterData, onUpdateDMCenter, cur
         <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-lg p-6 border border-blue-400/30">
           <h3 className="text-lg font-semibold text-white mb-4">AI Behavior Preview</h3>
           <div className="text-blue-200 text-sm space-y-2">
-            <p><strong>Current Style:</strong> {aiSettings.dmStyle.replace('-', ' ')} DM with {aiSettings.descriptionLength} descriptions</p>
+            <p><strong>DM Persona:</strong> {dmPersona.tone} tone with {dmPersona.humor_level} humor, {dmPersona.descriptiveness} descriptions</p>
+            <p><strong>Narrative Focus:</strong> {dmPersona.narrative_focus} with {dmPersona.improvisation_style} improvisation</p>
+            <p><strong>Challenge Level:</strong> {dmPersona.challenge_level} difficulty</p>
+            <p><strong>Style:</strong> {aiSettings.dmStyle.replace('-', ' ')} DM with {aiSettings.descriptionLength} descriptions</p>
             <p><strong>Difficulty:</strong> {aiSettings.difficulty}/10 - {aiSettings.difficulty <= 3 ? 'Easy going' : aiSettings.difficulty <= 6 ? 'Balanced challenge' : 'High stakes'}</p>
             <p><strong>NPCs:</strong> {aiSettings.npcComplexity} personalities with {aiSettings.conflictFrequency}/10 conflict frequency</p>
             <p><strong>World:</strong> {aiSettings.continuityStrictness} continuity with {aiSettings.worldReactivity}/10 reactivity to player actions</p>
+            <p><strong>Memory:</strong> {aiTraining.contextWindow} actions context, {aiTraining.memoryRetention} days retention</p>
+            <p><strong>Learning:</strong> {aiTraining.learningEnabled ? 'Enabled' : 'Disabled'} with {aiTraining.crossCampaignLearning ? 'cross-campaign' : 'single-campaign'} learning</p>
           </div>
           <div className="mt-4 p-3 bg-white/10 rounded border border-white/20">
             <p className="text-xs text-gray-300 italic">
-              &quot;These settings will be applied to all new campaigns and can be adjusted during gameplay.&quot;
+              &quot;These settings will be applied to all new campaigns and can be adjusted during gameplay. The AI will adapt its behavior based on your preferences and player feedback.&quot;
+            </p>
+          </div>
+        </div>
+
+        {/* AI Training Actions */}
+        <div className="bg-gradient-to-r from-indigo-600/20 to-purple-600/20 rounded-lg p-6 border border-indigo-400/30">
+          <h3 className="text-lg font-semibold text-white mb-4">AI Training Actions</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-all text-white font-medium flex items-center justify-center space-x-2">
+              <Brain size={16} />
+              <span>Train on Session Data</span>
+            </button>
+            <button className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-all text-white font-medium flex items-center justify-center space-x-2">
+              <Download size={16} />
+              <span>Export AI Model</span>
+            </button>
+            <button className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-all text-white font-medium flex items-center justify-center space-x-2">
+              <Upload size={16} />
+              <span>Import AI Model</span>
+            </button>
+          </div>
+          <div className="mt-4 p-3 bg-white/10 rounded border border-white/20">
+            <p className="text-xs text-gray-300 italic">
+              &quot;Advanced AI training features allow you to customize the AI's behavior based on your specific campaign needs and player preferences.&quot;
             </p>
           </div>
         </div>
