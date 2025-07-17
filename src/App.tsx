@@ -4747,7 +4747,7 @@ const CampaignWrapper: React.FC<{ user: any }> = ({ user }) => {
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
       <div className="flex-1 overflow-hidden">
-        <AIDungeonMaster initialScreen="lobby" />
+        <CampaignsPage user={user} />
       </div>
     </div>
   );
@@ -5173,6 +5173,409 @@ const CharactersPage: React.FC<{ user: any }> = ({ user }) => {
           </div>
         )}
       </div>
+    </div>
+  );
+};
+
+// Campaigns Page Component
+const CampaignsPage: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showCreateCampaign, setShowCreateCampaign] = useState(false);
+  const [showJoinCampaign, setShowJoinCampaign] = useState(false);
+  const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
+  const [joinCode, setJoinCode] = useState('');
+  const [campaignThemes] = useState([
+    { name: 'Fantasy Adventure', description: 'Epic quests in magical realms', icon: '🏰' },
+    { name: 'Sci-Fi Exploration', description: 'Space exploration and alien encounters', icon: '🚀' },
+    { name: 'Mystery Detective', description: 'Solve crimes and uncover secrets', icon: '🔍' },
+    { name: 'Horror Survival', description: 'Survive supernatural threats', icon: '👻' },
+    { name: 'Post-Apocalyptic', description: 'Rebuild civilization after disaster', icon: '🌆' },
+    { name: 'Steampunk', description: 'Victorian era with advanced technology', icon: '⚙️' }
+  ]);
+
+  useEffect(() => {
+    loadCampaigns();
+  }, []);
+
+  const loadCampaigns = async () => {
+    try {
+      setIsLoading(true);
+      const userCampaigns = await firebaseService.getUserCampaigns(user.uid);
+      setCampaigns(userCampaigns || []);
+    } catch (error) {
+      console.error('Error loading campaigns:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreateCampaign = async (theme: any, customPrompt: string, isMultiplayer: boolean) => {
+    try {
+      const campaignData = {
+        theme: theme.name,
+        description: theme.description,
+        customPrompt,
+        isMultiplayer,
+        createdBy: user.uid,
+        createdAt: new Date().toISOString(),
+        status: 'active',
+        players: [user.uid],
+        joinCode: Math.random().toString(36).substr(2, 6).toUpperCase()
+      };
+
+      const campaignId = await firebaseService.createCampaign(campaignData);
+      await loadCampaigns();
+      setShowCreateCampaign(false);
+      
+      // Navigate to the new campaign
+      window.location.href = `/campaigns/${campaignId}`;
+    } catch (error) {
+      console.error('Error creating campaign:', error);
+    }
+  };
+
+  const handleJoinCampaign = async () => {
+    if (!joinCode.trim()) return;
+    
+    try {
+      const campaign = await firebaseService.joinCampaign(joinCode.trim(), user.uid);
+      if (campaign) {
+        await loadCampaigns();
+        setShowJoinCampaign(false);
+        setJoinCode('');
+        
+        // Navigate to the joined campaign
+        window.location.href = `/campaigns/${campaign.id}`;
+      }
+    } catch (error) {
+      console.error('Error joining campaign:', error);
+    }
+  };
+
+  const handleDeleteCampaign = async (campaignId: string) => {
+    if (!confirm('Are you sure you want to delete this campaign? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await firebaseService.deleteCampaign(campaignId);
+      await loadCampaigns();
+    } catch (error) {
+      console.error('Error deleting campaign:', error);
+    }
+  };
+
+  const handleResumeCampaign = async (campaignId: string) => {
+    try {
+      await firebaseService.updateCampaignStatus(campaignId, 'active');
+      await loadCampaigns();
+      
+      // Navigate to the campaign
+      window.location.href = `/campaigns/${campaignId}`;
+    } catch (error) {
+      console.error('Error resuming campaign:', error);
+    }
+  };
+
+  const handlePauseCampaign = async (campaignId: string) => {
+    try {
+      await firebaseService.updateCampaignStatus(campaignId, 'paused');
+      await loadCampaigns();
+    } catch (error) {
+      console.error('Error pausing campaign:', error);
+    }
+  };
+
+  const getCampaignStatusIcon = (campaign: any) => {
+    switch (campaign.status) {
+      case 'active': return '🟢';
+      case 'paused': return '🟡';
+      case 'completed': return '🏁';
+      default: return '⚪';
+    }
+  };
+
+  const getCampaignStatusColor = (campaign: any) => {
+    switch (campaign.status) {
+      case 'active': return 'text-green-400';
+      case 'paused': return 'text-yellow-400';
+      case 'completed': return 'text-blue-400';
+      default: return 'text-gray-400';
+    }
+  };
+
+  const getCampaignStats = () => {
+    const total = campaigns.length;
+    const active = campaigns.filter(c => c.status === 'active').length;
+    const paused = campaigns.filter(c => c.status === 'paused').length;
+    const completed = campaigns.filter(c => c.status === 'completed').length;
+    
+    return { total, active, paused, completed };
+  };
+
+  const stats = getCampaignStats();
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 border-4 border-blue-300/30 border-t-blue-400 rounded-full animate-spin mx-auto"></div>
+          <p className="text-blue-200">Loading campaigns...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-auto bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <div className="p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">Campaigns</h1>
+            <p className="text-blue-200">Manage your adventures and join new campaigns</p>
+          </div>
+          <div className="flex space-x-3">
+            <button
+              onClick={() => setShowJoinCampaign(true)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-2 transition-colors"
+            >
+              <span>🔗</span>
+              <span>Join Campaign</span>
+            </button>
+            <button
+              onClick={() => setShowCreateCampaign(true)}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center space-x-2 transition-colors"
+            >
+              <span>➕</span>
+              <span>Create Campaign</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-blue-900/50 backdrop-blur-sm rounded-lg p-4 border border-blue-700/50">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-200 text-sm">Total Campaigns</p>
+                <p className="text-2xl font-bold text-white">{stats.total}</p>
+              </div>
+              <div className="text-3xl">📚</div>
+            </div>
+          </div>
+          <div className="bg-green-900/50 backdrop-blur-sm rounded-lg p-4 border border-green-700/50">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-green-200 text-sm">Active</p>
+                <p className="text-2xl font-bold text-white">{stats.active}</p>
+              </div>
+              <div className="text-3xl">🟢</div>
+            </div>
+          </div>
+          <div className="bg-yellow-900/50 backdrop-blur-sm rounded-lg p-4 border border-yellow-700/50">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-yellow-200 text-sm">Paused</p>
+                <p className="text-2xl font-bold text-white">{stats.paused}</p>
+              </div>
+              <div className="text-3xl">🟡</div>
+            </div>
+          </div>
+          <div className="bg-purple-900/50 backdrop-blur-sm rounded-lg p-4 border border-purple-700/50">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-purple-200 text-sm">Completed</p>
+                <p className="text-2xl font-bold text-white">{stats.completed}</p>
+              </div>
+              <div className="text-3xl">🏁</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Campaigns List */}
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold text-white">Your Campaigns</h2>
+          
+          {campaigns.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4">📚</div>
+              <h3 className="text-xl font-semibold text-white mb-2">No campaigns yet</h3>
+              <p className="text-blue-200 mb-6">Create your first campaign or join an existing one to start your adventure!</p>
+              <div className="flex justify-center space-x-4">
+                <button
+                  onClick={() => setShowCreateCampaign(true)}
+                  className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center space-x-2 transition-colors"
+                >
+                  <span>➕</span>
+                  <span>Create Campaign</span>
+                </button>
+                <button
+                  onClick={() => setShowJoinCampaign(true)}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-2 transition-colors"
+                >
+                  <span>🔗</span>
+                  <span>Join Campaign</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+              {campaigns.map((campaign) => (
+                <div
+                  key={campaign.id}
+                  className="bg-slate-800/50 backdrop-blur-sm rounded-lg p-6 border border-slate-700/50 hover:border-blue-500/50 transition-all hover:shadow-lg hover:shadow-blue-500/20"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <span className="text-2xl">{campaignThemes.find(t => t.name === campaign.theme)?.icon || '📚'}</span>
+                      <div>
+                        <h3 className="text-lg font-semibold text-white">{campaign.theme}</h3>
+                        <p className="text-sm text-blue-200">{campaign.description}</p>
+                      </div>
+                    </div>
+                    <div className={`text-lg ${getCampaignStatusColor(campaign)}`}>
+                      {getCampaignStatusIcon(campaign)}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 mb-4">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-300">Status:</span>
+                      <span className={`font-medium ${getCampaignStatusColor(campaign)}`}>
+                        {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-300">Players:</span>
+                      <span className="text-white">{campaign.players?.length || 1}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-300">Join Code:</span>
+                      <span className="text-white font-mono">{campaign.joinCode}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-300">Created:</span>
+                      <span className="text-white">
+                        {new Date(campaign.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-2">
+                    {campaign.status === 'active' && (
+                      <button
+                        onClick={() => window.location.href = `/campaigns/${campaign.id}`}
+                        className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors"
+                      >
+                        Continue
+                      </button>
+                    )}
+                    {campaign.status === 'paused' && (
+                      <button
+                        onClick={() => handleResumeCampaign(campaign.id)}
+                        className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm transition-colors"
+                      >
+                        Resume
+                      </button>
+                    )}
+                    {campaign.status === 'active' && (
+                      <button
+                        onClick={() => handlePauseCampaign(campaign.id)}
+                        className="px-3 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-sm transition-colors"
+                      >
+                        Pause
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeleteCampaign(campaign.id)}
+                      className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Create Campaign Modal */}
+      {showCreateCampaign && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md space-y-4">
+            <h3 className="text-xl font-semibold text-white">Create New Campaign</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-blue-200 mb-2">Campaign Theme</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {campaignThemes.map((theme) => (
+                    <button
+                      key={theme.name}
+                      onClick={() => handleCreateCampaign(theme, '', true)}
+                      className="p-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-left transition-colors"
+                    >
+                      <div className="text-2xl mb-1">{theme.icon}</div>
+                      <div className="text-sm font-medium text-white">{theme.name}</div>
+                      <div className="text-xs text-gray-300">{theme.description}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowCreateCampaign(false)}
+                className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Join Campaign Modal */}
+      {showJoinCampaign && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md space-y-4">
+            <h3 className="text-xl font-semibold text-white">Join Campaign</h3>
+            
+            <div>
+              <label className="block text-sm font-medium text-blue-200 mb-2">Campaign Join Code</label>
+              <input
+                type="text"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                placeholder="Enter 6-character code"
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                maxLength={6}
+              />
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowJoinCampaign(false)}
+                className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleJoinCampaign}
+                disabled={!joinCode.trim()}
+                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded transition-colors"
+              >
+                Join Campaign
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

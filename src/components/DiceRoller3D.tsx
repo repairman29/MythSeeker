@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon';
 import * as Tone from 'tone';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { diceService } from '../services/diceService';
 
 interface DiceRoller3DProps {
   isOpen: boolean;
@@ -345,6 +346,15 @@ const DiceRoller3D: React.FC<DiceRoller3DProps> = ({ isOpen, onClose, onRollComp
             setResult(rollResult);
             setIsRolling(false);
             playDiceSound();
+            
+            // Save roll to history
+            diceService.addRoll({
+              sides,
+              result: rollResult,
+              diceSet: selectedDiceSet.id,
+              context: `3D Dice Roll - ${selectedDiceSet.name}`
+            });
+            
             if (onRollComplete) {
               onRollComplete(rollResult);
             }
@@ -472,7 +482,7 @@ const DiceRoller3D: React.FC<DiceRoller3DProps> = ({ isOpen, onClose, onRollComp
     return result;
   };
 
-  // Roll the dice (enhanced with haptics)
+  // Roll the dice (enhanced with haptics and history tracking)
   const rollDice = useCallback(() => {
     if (!diceBody.current || !world.current || isRolling) return;
     
