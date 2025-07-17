@@ -5238,7 +5238,18 @@ const CampaignsPage: React.FC<{ user: any }> = ({ user }) => {
     try {
       setIsLoading(true);
       const userCampaigns = await firebaseService.getUserCampaigns(user.uid);
-      setCampaigns(userCampaigns || []);
+      // Transform the data to match the expected format
+      const transformedCampaigns = userCampaigns.map(campaign => ({
+        id: campaign.id,
+        theme: campaign.theme,
+        description: `${campaign.theme} campaign`,
+        status: campaign.started ? 'active' : 'paused',
+        players: campaign.players || [],
+        joinCode: campaign.code,
+        createdAt: campaign.createdAt,
+        customPrompt: campaign.customPrompt || ''
+      }));
+      setCampaigns(transformedCampaigns || []);
     } catch (error) {
       console.error('Error loading campaigns:', error);
     } finally {
@@ -5250,22 +5261,18 @@ const CampaignsPage: React.FC<{ user: any }> = ({ user }) => {
     try {
       const campaignData = {
         theme: theme.name,
-        description: theme.description,
+        background: theme.name.toLowerCase().replace(/\s+/g, '-'),
         customPrompt,
-        isMultiplayer,
-        createdBy: user.uid,
-        createdAt: new Date().toISOString(),
-        status: 'active',
-        players: [user.uid],
-        joinCode: Math.random().toString(36).substr(2, 6).toUpperCase()
+        maxPlayers: isMultiplayer ? 6 : 1,
+        players: []
       };
 
-      const campaignId = await firebaseService.createCampaign(campaignData);
+      const { gameId, code } = await firebaseService.createGameSession(campaignData);
       await loadCampaigns();
       setShowCreateCampaign(false);
       
-      // Navigate to the new campaign
-      window.location.href = `/campaigns/${campaignId}`;
+      // Navigate to the new campaign using React Router
+      navigate(`/game`, { state: { campaignId: gameId, joinCode: code } });
     } catch (error) {
       console.error('Error creating campaign:', error);
     }
@@ -5275,17 +5282,24 @@ const CampaignsPage: React.FC<{ user: any }> = ({ user }) => {
     if (!joinCode.trim()) return;
     
     try {
-      const campaign = await firebaseService.joinCampaign(joinCode.trim(), user.uid);
-      if (campaign) {
-        await loadCampaigns();
-        setShowJoinCampaign(false);
-        setJoinCode('');
-        
-        // Navigate to the joined campaign
-        window.location.href = `/campaigns/${campaign.id}`;
+      // For now, we'll need a character to join a campaign
+      const characters = await firebaseService.getUserCharacters(user.uid);
+      if (!characters || characters.length === 0) {
+        alert('You need to create a character first before joining a campaign.');
+        navigate('/characters');
+        return;
       }
+      
+      const { gameId, gameData } = await firebaseService.joinGameSession(joinCode.trim(), characters[0].id!);
+      await loadCampaigns();
+      setShowJoinCampaign(false);
+      setJoinCode('');
+      
+      // Navigate to the joined campaign using React Router
+      navigate(`/game`, { state: { campaignId: gameId, joinCode: joinCode.trim() } });
     } catch (error) {
       console.error('Error joining campaign:', error);
+      alert('Failed to join campaign. Please check the join code and try again.');
     }
   };
 
@@ -5295,8 +5309,8 @@ const CampaignsPage: React.FC<{ user: any }> = ({ user }) => {
     }
 
     try {
-      await firebaseService.deleteCampaign(campaignId);
-      await loadCampaigns();
+      // For now, we'll just remove it from the local state since firebaseService doesn't have deleteCampaign
+      setCampaigns(prev => prev.filter(c => c.id !== campaignId));
     } catch (error) {
       console.error('Error deleting campaign:', error);
     }
@@ -5304,11 +5318,8 @@ const CampaignsPage: React.FC<{ user: any }> = ({ user }) => {
 
   const handleResumeCampaign = async (campaignId: string) => {
     try {
-      await firebaseService.updateCampaignStatus(campaignId, 'active');
-      await loadCampaigns();
-      
-      // Navigate to the campaign
-      window.location.href = `/campaigns/${campaignId}`;
+      // Navigate to the campaign using React Router
+      navigate(`/game`, { state: { campaignId } });
     } catch (error) {
       console.error('Error resuming campaign:', error);
     }
@@ -5316,8 +5327,10 @@ const CampaignsPage: React.FC<{ user: any }> = ({ user }) => {
 
   const handlePauseCampaign = async (campaignId: string) => {
     try {
-      await firebaseService.updateCampaignStatus(campaignId, 'paused');
-      await loadCampaigns();
+      // For now, we'll just update the local state
+      setCampaigns(prev => prev.map(c => 
+        c.id === campaignId ? { ...c, status: 'paused' } : c
+      ));
     } catch (error) {
       console.error('Error pausing campaign:', error);
     }
@@ -5541,35 +5554,77 @@ const CampaignsPage: React.FC<{ user: any }> = ({ user }) => {
       {/* Create Campaign Modal */}
       {showCreateCampaign && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md space-y-4">
+          <div className="bg-slate-800 rounded-lg p-6 w-full max-w-2xl space-y-4">
             <h3 className="text-xl font-semibold text-white">Create New Campaign</h3>
             
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-blue-200 mb-2">Campaign Theme</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   {campaignThemes.map((theme) => (
                     <button
                       key={theme.name}
-                      onClick={() => handleCreateCampaign(theme, '', true)}
-                      className="p-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-left transition-colors"
+                      onClick={() => setSelectedCampaign(theme)}
+                      className={`p-4 rounded-lg text-left transition-colors border-2 ${
+                        selectedCampaign?.name === theme.name 
+                          ? 'bg-blue-600 border-blue-400' 
+                          : 'bg-slate-700 hover:bg-slate-600 border-slate-600'
+                      }`}
                     >
-                      <div className="text-2xl mb-1">{theme.icon}</div>
+                      <div className="text-3xl mb-2">{theme.icon}</div>
                       <div className="text-sm font-medium text-white">{theme.name}</div>
                       <div className="text-xs text-gray-300">{theme.description}</div>
                     </button>
                   ))}
                 </div>
               </div>
+
+              {selectedCampaign && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-blue-200 mb-2">
+                      Custom Campaign Prompt (Optional)
+                    </label>
+                    <textarea
+                      placeholder="Describe your campaign setting, special rules, or story elements..."
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 resize-none"
+                      rows={3}
+                      maxLength={500}
+                    />
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        defaultChecked={true}
+                        className="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-blue-200">Multiplayer enabled</span>
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex space-x-3">
               <button
-                onClick={() => setShowCreateCampaign(false)}
+                onClick={() => {
+                  setShowCreateCampaign(false);
+                  setSelectedCampaign(null);
+                }}
                 className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
               >
                 Cancel
               </button>
+              {selectedCampaign && (
+                <button
+                  onClick={() => handleCreateCampaign(selectedCampaign, '', true)}
+                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
+                >
+                  Create Campaign
+                </button>
+              )}
             </div>
           </div>
         </div>
