@@ -1416,3 +1416,146 @@ export const geminiAIFunction = functions.https.onCall(async (data: any, context
     throw new functions.https.HttpsError('internal', 'AI service temporarily unavailable');
   }
 }); 
+
+// Save automated game session
+export const saveAutomatedSession = functions.https.onCall(async (data: { 
+  sessionId: string; 
+  sessionData: any; 
+  userId: string; 
+}, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  // Rate limiting
+  if (!checkRateLimit(context.auth.uid, 'saveAutomatedSession', 20, 60000)) { // 20 per minute
+    throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please wait before saving again.');
+  }
+
+  // Validate session ID
+  const sessionIdValidation = validateGameId(data.sessionId);
+  if (!sessionIdValidation.isValid) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid session ID: ${sessionIdValidation.errors.join(', ')}`);
+  }
+
+  // Verify user is participant in session
+  if (data.userId !== context.auth.uid) {
+    throw new functions.https.HttpsError('permission-denied', 'You can only save your own sessions');
+  }
+
+  try {
+    // Save to automated_sessions collection with user-specific path
+    const sessionDoc = admin.firestore()
+      .collection('users')
+      .doc(context.auth.uid)
+      .collection('automated_sessions')
+      .doc(sessionIdValidation.sanitizedData);
+
+    await sessionDoc.set({
+      ...data.sessionData,
+      lastSaved: Date.now(),
+      userId: context.auth.uid
+    });
+
+    return { success: true, sessionId: sessionIdValidation.sanitizedData };
+  } catch (error) {
+    console.error('Error saving automated session:', error);
+    throw new functions.https.HttpsError('internal', 'Failed to save session');
+  }
+});
+
+// Load automated game sessions for a user
+export const loadAutomatedSessions = functions.https.onCall(async (data: { userId?: string }, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  // Rate limiting
+  if (!checkRateLimit(context.auth.uid, 'loadAutomatedSessions', 10, 60000)) { // 10 per minute
+    throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please wait before loading sessions.');
+  }
+
+  // Users can only load their own sessions
+  const userId = data.userId || context.auth.uid;
+  if (userId !== context.auth.uid) {
+    throw new functions.https.HttpsError('permission-denied', 'You can only load your own sessions');
+  }
+
+  try {
+    const sessionsCollection = admin.firestore()
+      .collection('users')
+      .doc(userId)
+      .collection('automated_sessions');
+
+    const snapshot = await sessionsCollection
+      .orderBy('lastSaved', 'desc')
+      .limit(50) // Limit to 50 most recent sessions
+      .get();
+
+    const sessions = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Array<{ id: string; lastSaved?: number; startTime?: number; [key: string]: any }>;
+
+    // Filter out sessions older than 30 days
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    const activeSessions = sessions.filter(session => 
+      (session.lastSaved || session.startTime || 0) > thirtyDaysAgo
+    );
+
+    return { success: true, sessions: activeSessions };
+  } catch (error) {
+    console.error('Error loading automated sessions:', error);
+    throw new functions.https.HttpsError('internal', 'Failed to load sessions');
+  }
+});
+
+// Delete automated game session
+export const deleteAutomatedSession = functions.https.onCall(async (data: { 
+  sessionId: string; 
+}, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  // Rate limiting
+  if (!checkRateLimit(context.auth.uid, 'deleteAutomatedSession', 20, 60000)) { // 20 per minute
+    throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please wait before deleting.');
+  }
+
+  // Validate session ID
+  const sessionIdValidation = validateGameId(data.sessionId);
+  if (!sessionIdValidation.isValid) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid session ID: ${sessionIdValidation.errors.join(', ')}`);
+  }
+
+  try {
+    const sessionDoc = admin.firestore()
+      .collection('users')
+      .doc(context.auth.uid)
+      .collection('automated_sessions')
+      .doc(sessionIdValidation.sanitizedData);
+
+    // Check if session exists and belongs to user
+    const sessionSnap = await sessionDoc.get();
+    if (!sessionSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Session not found');
+    }
+
+    const sessionData = sessionSnap.data();
+    if (sessionData?.userId !== context.auth.uid) {
+      throw new functions.https.HttpsError('permission-denied', 'You can only delete your own sessions');
+    }
+
+    // Delete the session
+    await sessionDoc.delete();
+
+    return { success: true, sessionId: sessionIdValidation.sanitizedData };
+  } catch (error) {
+    console.error('Error deleting automated session:', error);
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    throw new functions.https.HttpsError('internal', 'Failed to delete session');
+  }
+}); 

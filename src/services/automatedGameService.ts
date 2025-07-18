@@ -4,6 +4,7 @@ import { aiService } from './aiService';
 import { campaignService } from './campaignService';
 import { multiplayerService } from './multiplayerService';
 import { sentientAI } from './sentientAIService';
+import { unifiedAIService, UnifiedGameContext } from './unifiedAIService';
 
 export interface AutomatedGameConfig {
   realm: string;
@@ -86,6 +87,275 @@ export interface GameMessage {
 class AutomatedGameService {
   private activeSessions = new Map<string, GameSession>();
   private sessionTimers = new Map<string, NodeJS.Timeout>();
+  private autoSaveTimers = new Map<string, NodeJS.Timeout>();
+
+  constructor() {
+    // Load persisted sessions on service initialization
+    this.loadPersistedSessions();
+  }
+
+  // ======= PERSISTENCE METHODS =======
+
+  /**
+   * Load persisted sessions from localStorage and Firebase
+   */
+  private async loadPersistedSessions(): Promise<void> {
+    try {
+      console.log('🔄 Loading persisted automated game sessions...');
+      
+      // Load from localStorage first for immediate availability
+      const localSessions = this.loadFromLocalStorage();
+      console.log(`📱 Found ${localSessions.length} sessions in localStorage`);
+      
+      // Restore active sessions
+      localSessions.forEach(session => {
+        this.activeSessions.set(session.id, session);
+        this.startSessionMonitoring(session.id);
+        this.startAutoSave(session.id);
+      });
+
+      // Try to sync with Firebase for authenticated users
+      await this.syncWithFirebase();
+      
+      console.log(`✅ Loaded ${this.activeSessions.size} automated game sessions`);
+    } catch (error) {
+      console.error('❌ Error loading persisted sessions:', error);
+    }
+  }
+
+  /**
+   * Load sessions from localStorage
+   */
+  private loadFromLocalStorage(): GameSession[] {
+    try {
+      const stored = localStorage.getItem('mythseeker_automated_sessions');
+      if (!stored) return [];
+      
+      const sessions = JSON.parse(stored) as GameSession[];
+      
+      // Filter out expired sessions (older than 7 days)
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      return sessions.filter(session => 
+        (session.startTime || 0) > sevenDaysAgo || 
+        session.messages.length > 0 // Keep sessions with activity
+      );
+    } catch (error) {
+      console.warn('Failed to load sessions from localStorage:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Save sessions to localStorage
+   */
+  private saveToLocalStorage(): void {
+    try {
+      const sessions = Array.from(this.activeSessions.values());
+      localStorage.setItem('mythseeker_automated_sessions', JSON.stringify(sessions));
+      console.log(`💾 Saved ${sessions.length} sessions to localStorage`);
+    } catch (error) {
+      console.error('Failed to save sessions to localStorage:', error);
+    }
+  }
+
+  /**
+   * Sync with Firebase for cloud persistence
+   */
+  private async syncWithFirebase(): Promise<void> {
+    try {
+      // Check if user is authenticated
+      const user = await this.getCurrentUser();
+      if (!user) {
+        console.log('🔒 User not authenticated, skipping Firebase sync');
+        return;
+      }
+
+      // Load user's automated game sessions from Firebase
+      const firebaseSessions = await this.loadFromFirebase(user.uid);
+      console.log(`☁️ Found ${firebaseSessions.length} sessions in Firebase`);
+
+      // Merge with local sessions (local takes precedence for recent activity)
+      firebaseSessions.forEach(firebaseSession => {
+        const localSession = this.activeSessions.get(firebaseSession.id);
+        if (!localSession || firebaseSession.messages.length > localSession.messages.length) {
+          this.activeSessions.set(firebaseSession.id, firebaseSession);
+          this.startSessionMonitoring(firebaseSession.id);
+          this.startAutoSave(firebaseSession.id);
+        }
+      });
+
+      // Save merged sessions back to localStorage
+      this.saveToLocalStorage();
+    } catch (error) {
+      console.warn('Firebase sync failed, continuing with local sessions:', error);
+    }
+  }
+
+  /**
+   * Load sessions from Firebase
+   */
+  private async loadFromFirebase(userId: string): Promise<GameSession[]> {
+    try {
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const functions = getFunctions();
+      const loadAutomatedSessions = httpsCallable(functions, 'loadAutomatedSessions');
+      
+      const result = await loadAutomatedSessions({ userId });
+      const data = result.data as { success: boolean; sessions: GameSession[] };
+      
+      if (data.success) {
+        console.log(`☁️ Loaded ${data.sessions.length} sessions from Firebase`);
+        return data.sessions;
+      }
+      
+      return [];
+    } catch (error) {
+      console.warn('Failed to load from Firebase:', error);
+      return [];
+    }
+  }
+
+    /**
+   * Save session to Firebase
+   */
+  private async saveToFirebase(session: GameSession): Promise<void> {
+    try {
+      const user = await this.getCurrentUser();
+      if (!user) return;
+
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const functions = getFunctions();
+      const saveAutomatedSession = httpsCallable(functions, 'saveAutomatedSession');
+      
+      await saveAutomatedSession({ 
+        sessionId: session.id,
+        sessionData: session,
+        userId: user.uid
+      });
+      
+      console.log(`☁️ Automated session ${session.id} saved to Firebase`);
+    } catch (error) {
+      console.warn('Failed to save automated session to Firebase:', error);
+    }
+  }
+
+  /**
+   * Auto-save session periodically
+   */
+  private startAutoSave(sessionId: string): void {
+    // Clear existing timer if any
+    if (this.autoSaveTimers.has(sessionId)) {
+      clearInterval(this.autoSaveTimers.get(sessionId)!);
+    }
+
+    // Start new auto-save timer (every 30 seconds)
+    const timer = setInterval(() => {
+      const session = this.activeSessions.get(sessionId);
+      if (session) {
+        this.saveToLocalStorage();
+        this.saveToFirebase(session); // Save to Firebase in background
+      } else {
+        // Session no longer exists, clear timer
+        clearInterval(timer);
+        this.autoSaveTimers.delete(sessionId);
+      }
+    }, 30000);
+
+    this.autoSaveTimers.set(sessionId, timer);
+  }
+
+  /**
+   * Get current authenticated user
+   */
+  private async getCurrentUser(): Promise<any> {
+    try {
+      const { getAuth } = await import('firebase/auth');
+      const auth = getAuth();
+      return auth.currentUser;
+    } catch {
+      return null;
+    }
+  }
+
+  // ======= ENHANCED SESSION MANAGEMENT =======
+
+  /**
+   * Get all persisted sessions for recovery
+   */
+  getPersistedSessions(): GameSession[] {
+    return Array.from(this.activeSessions.values()).filter(session => 
+      session.messages.length > 0 || session.players.length > 0
+    );
+  }
+
+  /**
+   * Resume a session from persistence
+   */
+  async resumeSession(sessionId: string): Promise<GameSession | null> {
+    let session = this.activeSessions.get(sessionId);
+    
+    if (!session) {
+      // Try to load from localStorage
+      const localSessions = this.loadFromLocalStorage();
+      session = localSessions.find(s => s.id === sessionId);
+      
+      if (session) {
+        this.activeSessions.set(sessionId, session);
+        this.startSessionMonitoring(sessionId);
+        this.startAutoSave(sessionId);
+        console.log(`✅ Session ${sessionId} resumed from localStorage`);
+      }
+    }
+    
+    return session || null;
+  }
+
+  /**
+   * Delete a session permanently
+   */
+  async deleteSession(sessionId: string): Promise<void> {
+    // Remove from memory
+    this.activeSessions.delete(sessionId);
+    
+    // Clear timers
+    if (this.sessionTimers.has(sessionId)) {
+      clearTimeout(this.sessionTimers.get(sessionId)!);
+      this.sessionTimers.delete(sessionId);
+    }
+    
+    if (this.autoSaveTimers.has(sessionId)) {
+      clearInterval(this.autoSaveTimers.get(sessionId)!);
+      this.autoSaveTimers.delete(sessionId);
+    }
+    
+    // Update localStorage
+    this.saveToLocalStorage();
+    
+    console.log(`🗑️ Session ${sessionId} deleted`);
+  }
+
+  /**
+   * Clean up expired sessions
+   */
+  cleanupExpiredSessions(): number {
+    const expiredSessions: string[] = [];
+    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    
+    this.activeSessions.forEach((session, sessionId) => {
+      // Mark for deletion if old and inactive
+      if ((session.startTime || 0) < sevenDaysAgo && session.messages.length === 0) {
+        expiredSessions.push(sessionId);
+      }
+    });
+    
+    // Delete expired sessions
+    expiredSessions.forEach(sessionId => {
+      this.deleteSession(sessionId);
+    });
+    
+    console.log(`🧹 Cleaned up ${expiredSessions.length} expired sessions`);
+    return expiredSessions.length;
+  }
 
   // Initialize automated game session
   async createAutomatedSession(config: AutomatedGameConfig): Promise<string> {
@@ -103,6 +373,7 @@ class AutomatedGameService {
       players: [],
       aiPartyMembers: aiPartyMembers, // Generate AI party members
       currentPhase: 'waiting',
+      startTime: Date.now(), // Add timestamp for persistence
       messages: [],
       worldState: this.generateInitialWorldState(config),
       activeQuests: [],
@@ -114,9 +385,18 @@ class AutomatedGameService {
     this.activeSessions.set(sessionId, session);
     console.log('💾 Session stored in activeSessions map');
     
-    // Start session monitoring
+    // Start session monitoring and auto-save
     this.startSessionMonitoring(sessionId);
-    console.log('⏰ Session monitoring started');
+    this.startAutoSave(sessionId);
+    console.log('⏰ Session monitoring and auto-save started');
+    
+    // Immediately save to localStorage
+    this.saveToLocalStorage();
+    
+    // Save to Firebase in background (non-blocking)
+    this.saveToFirebase(session).catch(error => 
+      console.warn('Background Firebase save failed:', error)
+    );
     
     console.log(`✅ Automated session created: ${sessionId} with ${aiPartyMembers.length} AI members`);
     return sessionId;
@@ -249,14 +529,14 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
 
   // Generate initial world state based on configuration
   private generateInitialWorldState(config: AutomatedGameConfig): any {
-    const baseState = {
+    const baseState: any = {
       time: 'day',
       weather: 'clear',
       location: 'forest_edge',
       tension: 'low',
-      discoveredAreas: [],
-      activeEffects: [],
-      worldEvents: []
+      discoveredAreas: [] as string[],
+      activeEffects: [] as string[],
+      worldEvents: [] as string[]
     };
 
     // Customize based on realm and theme
@@ -538,6 +818,12 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
     // Enhanced AI-to-AI conversation system
     const aiToAiConversations = await this.generateAIToAIConversations(sessionId, input);
     session.messages.push(...aiToAiConversations);
+
+    // Auto-save session after player input
+    this.saveToLocalStorage();
+    this.saveToFirebase(session).catch(error => 
+      console.warn('Background Firebase save failed:', error)
+    );
 
     // Only generate DM response if no AI party members responded, or for special cases
     const shouldDMRespond = aiInteractions.length === 0 || 

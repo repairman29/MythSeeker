@@ -6,13 +6,16 @@ export const useAutomatedGame = () => {
   const { user } = useAuth();
   const [sessions, setSessions] = useState<GameSession[]>([]);
   const [currentSession, setCurrentSession] = useState<GameSession | null>(null);
+  const [persistedSessions, setPersistedSessions] = useState<GameSession[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Refresh sessions list
+  // Refresh sessions list (including persisted sessions)
   const refreshSessions = useCallback(() => {
     const activeSessions = automatedGameService.getAllSessions();
+    const persistedSessions = automatedGameService.getPersistedSessions();
     setSessions(activeSessions);
+    setPersistedSessions(persistedSessions);
   }, []);
 
   // Create new session
@@ -37,6 +40,71 @@ export const useAutomatedGame = () => {
     }
   }, [user, refreshSessions]);
 
+  // Resume a persisted session
+  const resumeSession = useCallback(async (sessionId: string): Promise<GameSession | null> => {
+    if (!user) {
+      setError('User must be authenticated');
+      return null;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const session = await automatedGameService.resumeSession(sessionId);
+      if (session) {
+        setCurrentSession(session);
+        refreshSessions();
+        console.log(`✅ Successfully resumed session: ${sessionId}`);
+      } else {
+        setError('Session could not be found or resumed');
+      }
+      return session;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resume session');
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, refreshSessions]);
+
+  // Delete a session permanently
+  const deleteSession = useCallback(async (sessionId: string): Promise<boolean> => {
+    if (!user) {
+      setError('User must be authenticated');
+      return false;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await automatedGameService.deleteSession(sessionId);
+      
+      // Clear current session if it was deleted
+      if (currentSession?.id === sessionId) {
+        setCurrentSession(null);
+      }
+      
+      refreshSessions();
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete session');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, currentSession, refreshSessions]);
+
+  // Clean up expired sessions
+  const cleanupExpiredSessions = useCallback(() => {
+    const cleanedCount = automatedGameService.cleanupExpiredSessions();
+    if (cleanedCount > 0) {
+      refreshSessions();
+    }
+    return cleanedCount;
+  }, [refreshSessions]);
+
   // Join session
   const joinSession = useCallback(async (sessionId: string): Promise<boolean> => {
     if (!user) {
@@ -48,24 +116,21 @@ export const useAutomatedGame = () => {
     setError(null);
 
     try {
-      const playerContext: PlayerContext = {
+      const player: PlayerContext = {
         id: user.uid,
-        name: user.displayName || 'Adventurer',
+        name: user.displayName || user.email || 'Anonymous',
         experience: 'intermediate',
-        preferences: ['exploration', 'story'],
+        preferences: [],
         joinTime: Date.now()
       };
 
-      await automatedGameService.addPlayerToSession(sessionId, playerContext);
-      
-      // Update current session
-      const session = automatedGameService.getSession(sessionId);
-      if (session) {
-        setCurrentSession(session);
+      const success = await automatedGameService.addPlayerToSession(sessionId, player);
+      if (success) {
+        const session = automatedGameService.getSession(sessionId);
+        setCurrentSession(session || null);
+        refreshSessions();
       }
-      
-      refreshSessions();
-      return true;
+      return success;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join session');
       return false;
@@ -75,33 +140,57 @@ export const useAutomatedGame = () => {
   }, [user, refreshSessions]);
 
   // Leave session
-  const leaveSession = useCallback(() => {
-    if (!currentSession || !user) return;
+  const leaveSession = useCallback(async (sessionId: string): Promise<boolean> => {
+    if (!user) {
+      setError('User must be authenticated');
+      return false;
+    }
 
-    automatedGameService.removePlayerFromSession(currentSession.id, user.uid);
-    setCurrentSession(null);
-    refreshSessions();
-  }, [currentSession, user, refreshSessions]);
-
-  // Send message
-  const sendMessage = useCallback(async (message: string): Promise<boolean> => {
-    if (!currentSession || !user || !message.trim()) return false;
+    setIsLoading(true);
+    setError(null);
 
     try {
-      await automatedGameService.processPlayerInput(currentSession.id, user.uid, message);
+      const success = await automatedGameService.removePlayerFromSession(sessionId, user.uid);
+      if (success) {
+        if (currentSession?.id === sessionId) {
+          setCurrentSession(null);
+        }
+        refreshSessions();
+      }
+      return success;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to leave session');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, currentSession, refreshSessions]);
+
+  // Send message to session
+  const sendMessage = useCallback(async (sessionId: string, message: string): Promise<boolean> => {
+    if (!user) {
+      setError('User must be authenticated');
+      return false;
+    }
+
+    setError(null);
+
+    try {
+      await automatedGameService.processPlayerInput(sessionId, user.uid, message);
       
-      // Refresh current session
-      const updatedSession = automatedGameService.getSession(currentSession.id);
-      if (updatedSession) {
-        setCurrentSession(updatedSession);
+      // Update current session if it matches
+      if (currentSession?.id === sessionId) {
+        const updatedSession = automatedGameService.getSession(sessionId);
+        setCurrentSession(updatedSession || null);
       }
       
+      refreshSessions();
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
       return false;
     }
-  }, [currentSession, user]);
+  }, [user, currentSession, refreshSessions]);
 
   // Get session by ID
   const getSession = useCallback((sessionId: string): GameSession | undefined => {
@@ -115,14 +204,19 @@ export const useAutomatedGame = () => {
     return session?.players.some(p => p.id === user.uid) || false;
   }, [user]);
 
-  // Auto-refresh sessions
+  // Auto-refresh sessions and cleanup on mount
   useEffect(() => {
     refreshSessions();
     
-    const interval = setInterval(refreshSessions, 5000); // Refresh every 5 seconds
+    // Clean up expired sessions on mount
+    cleanupExpiredSessions();
+    
+    const interval = setInterval(() => {
+      refreshSessions();
+    }, 5000); // Refresh every 5 seconds
     
     return () => clearInterval(interval);
-  }, [refreshSessions]);
+  }, [refreshSessions, cleanupExpiredSessions]);
 
   // Auto-refresh current session
   useEffect(() => {
@@ -145,6 +239,7 @@ export const useAutomatedGame = () => {
     // State
     sessions,
     currentSession,
+    persistedSessions,
     isLoading,
     error,
     
@@ -152,7 +247,10 @@ export const useAutomatedGame = () => {
     createSession,
     joinSession,
     leaveSession,
+    resumeSession,
+    deleteSession,
     sendMessage,
+    cleanupExpiredSessions,
     getSession,
     isUserInSession,
     refreshSessions,
