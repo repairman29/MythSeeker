@@ -45,6 +45,17 @@ export interface AIPartyMember {
   relationships: Map<string, number>; // Player ID -> relationship score (-100 to 100)
   lastSpokeAt: number;
   conversationContext: string[];
+  emotionalMemories?: Array<{
+    type: 'conversation' | 'combat' | 'discovery' | 'conflict' | 'bonding';
+    description: string;
+    otherPartyMembers: string[];
+    emotionalImpact: number;
+    timestamp: number;
+  }>;
+  personalityEvolution?: {
+    experienceCount: number;
+    traitShifts: Map<string, number>;
+  };
 }
 
 export interface GameSession {
@@ -523,6 +534,10 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
     const aiInteractions = await this.generateAIPartyInteractions(sessionId, input);
     console.log('🤖 AI interactions generated:', aiInteractions.length);
     session.messages.push(...aiInteractions);
+
+    // Enhanced AI-to-AI conversation system
+    const aiToAiConversations = await this.generateAIToAIConversations(sessionId, input);
+    session.messages.push(...aiToAiConversations);
 
     // Only generate DM response if no AI party members responded, or for special cases
     const shouldDMRespond = aiInteractions.length === 0 || 
@@ -1449,6 +1464,574 @@ IMPORTANT: Respond with ONLY the character's dialogue as plain text. Do not incl
       const newRelationship = Math.max(-100, Math.min(100, currentRelationship + relationshipChange));
       member.relationships.set(playerId, newRelationship);
     });
+  }
+
+  // Enhanced AI-to-AI interaction system
+  async generateAIToAIConversations(sessionId: string, triggerContext: string): Promise<GameMessage[]> {
+    console.log('🗣️ Generating AI-to-AI conversations...');
+    
+    const session = this.activeSessions.get(sessionId);
+    if (!session || !session.aiPartyMembers || session.aiPartyMembers.length < 2) {
+      return [];
+    }
+
+    const conversations: GameMessage[] = [];
+    const now = Date.now();
+
+    // Check if AI members should have conversations based on relationships and context
+    const conversationPairs = this.identifyConversationPairs(session.aiPartyMembers, triggerContext);
+    
+    for (const { member1, member2, conversationType } of conversationPairs) {
+      console.log(`💬 Generating ${conversationType} conversation between ${member1.name} and ${member2.name}`);
+      
+      const conversation = await this.generatePairConversation(member1, member2, conversationType, session, triggerContext);
+      conversations.push(...conversation);
+    }
+
+    return conversations;
+  }
+
+  private identifyConversationPairs(aiMembers: AIPartyMember[], context: string): Array<{
+    member1: AIPartyMember;
+    member2: AIPartyMember;
+    conversationType: 'friendly_banter' | 'strategic_discussion' | 'personality_clash' | 'bonding_moment' | 'memory_sharing';
+  }> {
+    const pairs = [];
+    const contextLower = context.toLowerCase();
+
+    for (let i = 0; i < aiMembers.length; i++) {
+      for (let j = i + 1; j < aiMembers.length; j++) {
+        const member1 = aiMembers[i];
+        const member2 = aiMembers[j];
+        
+        // Calculate relationship dynamics
+        const personalityCompatibility = this.calculatePersonalityCompatibility(member1, member2);
+        const recentInteractionGap = Math.min(
+          Date.now() - member1.lastSpokeAt,
+          Date.now() - member2.lastSpokeAt
+        );
+
+        // Determine conversation type based on various factors
+        let conversationType: any = 'friendly_banter';
+        
+        if (contextLower.includes('danger') || contextLower.includes('combat')) {
+          conversationType = 'strategic_discussion';
+        } else if (personalityCompatibility < -20) {
+          conversationType = 'personality_clash';
+        } else if (personalityCompatibility > 50 && Math.random() < 0.3) {
+          conversationType = 'bonding_moment';
+        } else if (contextLower.includes('remember') || contextLower.includes('past')) {
+          conversationType = 'memory_sharing';
+        }
+
+        // 40% chance for AI-to-AI conversation if enough time has passed
+        if (recentInteractionGap > 45000 && Math.random() < 0.4) {
+          pairs.push({ member1, member2, conversationType });
+        }
+      }
+    }
+
+    // Limit to 1 conversation pair per round to avoid spam
+    return pairs.slice(0, 1);
+  }
+
+  private calculatePersonalityCompatibility(member1: AIPartyMember, member2: AIPartyMember): number {
+    let compatibility = 0;
+    
+    // Alignment compatibility
+    const alignment1 = member1.personality.alignment.toLowerCase();
+    const alignment2 = member2.personality.alignment.toLowerCase();
+    
+    if (alignment1.includes('good') && alignment2.includes('good')) compatibility += 20;
+    if (alignment1.includes('evil') && alignment2.includes('evil')) compatibility += 20;
+    if (alignment1.includes('chaotic') && alignment2.includes('lawful')) compatibility -= 15;
+    if (alignment1.includes('lawful') && alignment2.includes('chaotic')) compatibility -= 15;
+
+    // Trait compatibility
+    const traits1 = member1.personality.traits;
+    const traits2 = member2.personality.traits;
+    
+    // Compatible traits
+    const compatiblePairs = [
+      ['loyal', 'trustworthy'], ['brave', 'protective'], ['curious', 'wise'],
+      ['witty', 'charming'], ['logical', 'analytical']
+    ];
+    
+    // Conflicting traits
+    const conflictingPairs = [
+      ['paranoid', 'trusting'], ['reckless', 'cautious'], ['greedy', 'generous'],
+      ['arrogant', 'humble'], ['impulsive', 'methodical']
+    ];
+
+    compatiblePairs.forEach(([trait1, trait2]) => {
+      if (traits1.includes(trait1) && traits2.includes(trait2) ||
+          traits1.includes(trait2) && traits2.includes(trait1)) {
+        compatibility += 10;
+      }
+    });
+
+    conflictingPairs.forEach(([trait1, trait2]) => {
+      if (traits1.includes(trait1) && traits2.includes(trait2) ||
+          traits1.includes(trait2) && traits2.includes(trait1)) {
+        compatibility -= 15;
+      }
+    });
+
+    return compatibility;
+  }
+
+  private async generatePairConversation(
+    member1: AIPartyMember,
+    member2: AIPartyMember,
+    conversationType: string,
+    session: GameSession,
+    context: string
+  ): Promise<GameMessage[]> {
+    const conversation: GameMessage[] = [];
+    const now = Date.now();
+
+    try {
+      // Generate conversation starter from member1
+      const starterPrompt = this.buildConversationPrompt(member1, member2, conversationType, 'starter', session, context);
+      const starterResponse = await aiService.complete(starterPrompt);
+      
+      if (starterResponse) {
+        conversation.push({
+          id: `ai_conv_${now}_${Math.random().toString(36).substr(2, 9)}`,
+          type: 'player',
+          content: starterResponse,
+          sender: member1.name,
+          timestamp: now,
+          metadata: { 
+            isAI: true, 
+            conversationType: 'ai_to_ai', 
+            targetAI: member2.name,
+            relationshipType: conversationType 
+          }
+        });
+
+        // Generate response from member2
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Brief delay for realism
+        
+        const responsePrompt = this.buildConversationPrompt(member2, member1, conversationType, 'response', session, context, starterResponse);
+        const memberResponse = await aiService.complete(responsePrompt);
+        
+        if (memberResponse) {
+          conversation.push({
+            id: `ai_conv_${now + 1}_${Math.random().toString(36).substr(2, 9)}`,
+            type: 'player',
+            content: memberResponse,
+            sender: member2.name,
+            timestamp: now + 1500,
+            metadata: { 
+              isAI: true, 
+              conversationType: 'ai_to_ai', 
+              targetAI: member1.name,
+              relationshipType: conversationType 
+            }
+          });
+        }
+
+        // Update relationship scores based on conversation
+        this.updateAIToAIRelationship(member1, member2, conversationType);
+      }
+    } catch (error) {
+      console.error('Error generating AI-to-AI conversation:', error);
+    }
+
+    return conversation;
+  }
+
+  private buildConversationPrompt(
+    speaker: AIPartyMember,
+    target: AIPartyMember,
+    conversationType: string,
+    role: 'starter' | 'response',
+    session: GameSession,
+    context: string,
+    previousMessage?: string
+  ): string {
+    const conversationContexts = {
+      friendly_banter: role === 'starter' 
+        ? `Make a light, friendly comment or joke to ${target.name}. Show your personality through humor or casual conversation.`
+        : `Respond to ${speaker.name}'s comment in a friendly way. Match their energy and add your own personality.`,
+      
+      strategic_discussion: role === 'starter'
+        ? `Start a tactical discussion with ${target.name} about the current situation. Use your class expertise.`
+        : `Respond to ${speaker.name}'s strategic input. Add your own tactical perspective based on your class and experience.`,
+      
+      personality_clash: role === 'starter'
+        ? `Make a comment that shows tension with ${target.name} based on your different personalities or values.`
+        : `Respond defensively or with mild irritation to ${speaker.name}. Show how your personalities clash.`,
+      
+      bonding_moment: role === 'starter'
+        ? `Share something personal or show appreciation for ${target.name}. Create a moment of connection.`
+        : `Respond warmly to ${speaker.name}'s gesture. Show how this deepens your bond.`,
+      
+      memory_sharing: role === 'starter'
+        ? `Share a relevant memory or experience with ${target.name} that relates to your current situation.`
+        : `Relate to ${speaker.name}'s memory with your own experience or thoughtful comment.`
+    };
+
+    return `You are ${speaker.name}, a ${speaker.race} ${speaker.characterClass} with these traits: ${speaker.personality.traits.join(', ')}.
+
+You're talking to ${target.name}, a ${target.race} ${target.characterClass} in your party.
+
+CURRENT SITUATION: ${context}
+CONVERSATION TYPE: ${conversationType}
+${previousMessage ? `THEY JUST SAID: "${previousMessage}"` : ''}
+
+${conversationContexts[conversationType as keyof typeof conversationContexts]}
+
+IMPORTANT:
+- Keep it to 1-2 sentences maximum
+- Stay completely in character
+- Reference your class/background when relevant
+- Show personality through word choice and concerns
+- Sound natural, like real party members talking
+
+Respond as ${speaker.name} would speak:`;
+  }
+
+  private updateAIToAIRelationship(member1: AIPartyMember, member2: AIPartyMember, conversationType: string): void {
+    const relationshipChanges = {
+      friendly_banter: 2,
+      strategic_discussion: 3,
+      personality_clash: -1,
+      bonding_moment: 5,
+      memory_sharing: 4
+    };
+
+    const change = relationshipChanges[conversationType as keyof typeof relationshipChanges] || 1;
+    
+    // Update mutual relationship scores
+    const current1to2 = member1.relationships.get(member2.id) || 0;
+    const current2to1 = member2.relationships.get(member1.id) || 0;
+    
+    member1.relationships.set(member2.id, Math.max(-100, Math.min(100, current1to2 + change)));
+    member2.relationships.set(member1.id, Math.max(-100, Math.min(100, current2to1 + change)));
+    
+    console.log(`🤝 Updated AI relationship: ${member1.name} -> ${member2.name}: ${member1.relationships.get(member2.id)}`);
+  }
+
+  // Enhanced memory and emotional intelligence system
+  private addEmotionalMemory(member: AIPartyMember, event: {
+    type: 'conversation' | 'combat' | 'discovery' | 'conflict' | 'bonding';
+    description: string;
+    otherPartyMembers: string[];
+    emotionalImpact: number;
+    timestamp: number;
+  }): void {
+    if (!member.emotionalMemories) {
+      member.emotionalMemories = [];
+    }
+
+    member.emotionalMemories.push(event);
+    
+    // Keep only last 20 memories to prevent memory bloat
+    if (member.emotionalMemories.length > 20) {
+      member.emotionalMemories.shift();
+    }
+
+    console.log(`🧠 Added emotional memory for ${member.name}: ${event.description}`);
+  }
+
+  private getRelevantEmotionalMemories(member: AIPartyMember, context: string, otherMembers: string[]): any[] {
+    if (!member.emotionalMemories) {
+      return [];
+    }
+
+    return member.emotionalMemories
+      .filter(memory => 
+        // Include memories involving current party members
+        otherMembers.some(name => memory.otherPartyMembers.includes(name)) ||
+        // Include memories relevant to current context
+        memory.description.toLowerCase().includes(context.toLowerCase().slice(0, 10))
+      )
+      .slice(-5); // Last 5 relevant memories
+  }
+
+  // Enhanced relationship progression system
+  private updateRelationshipProgression(session: GameSession): void {
+    session.aiPartyMembers.forEach(member => {
+      // Calculate relationship growth over time
+      member.relationships.forEach((score, otherId) => {
+        const otherMember = session.aiPartyMembers.find(m => m.id === otherId);
+        if (otherMember) {
+          // Relationships naturally progress toward neutral over time (realistic decay)
+          const decayRate = 0.5;
+          const newScore = score > 0 ? 
+            Math.max(0, score - decayRate) : 
+            Math.min(0, score + decayRate);
+          
+          member.relationships.set(otherId, newScore);
+        }
+      });
+    });
+  }
+
+  // Dynamic personality evolution based on experiences
+  private evolvePersonality(member: AIPartyMember, recentExperiences: string[]): void {
+    if (!member.personalityEvolution) {
+      member.personalityEvolution = {
+        experienceCount: 0,
+        traitShifts: new Map<string, number>()
+      };
+    }
+
+    member.personalityEvolution.experienceCount++;
+
+    // Every 10 experiences, allow slight personality shifts
+    if (member.personalityEvolution.experienceCount % 10 === 0) {
+      console.log(`🌱 ${member.name} personality evolution check...`);
+      
+      // Analyze recent experiences for trait development
+      recentExperiences.forEach(exp => {
+        if (exp.includes('danger') || exp.includes('combat')) {
+          this.adjustPersonalityTrait(member, 'brave', 0.5);
+        }
+        if (exp.includes('help') || exp.includes('protect')) {
+          this.adjustPersonalityTrait(member, 'protective', 0.3);
+        }
+        if (exp.includes('joke') || exp.includes('laugh')) {
+          this.adjustPersonalityTrait(member, 'witty', 0.2);
+        }
+      });
+    }
+  }
+
+  private adjustPersonalityTrait(member: AIPartyMember, trait: string, adjustment: number): void {
+    if (!member.personalityEvolution) return;
+
+    const currentShift = member.personalityEvolution.traitShifts.get(trait) || 0;
+    const newShift = Math.max(-2, Math.min(2, currentShift + adjustment));
+    
+    member.personalityEvolution.traitShifts.set(trait, newShift);
+
+    // If trait shift is significant enough, add it to active traits
+    if (newShift >= 1 && !member.personality.traits.includes(trait)) {
+      member.personality.traits.push(trait);
+      console.log(`✨ ${member.name} developed new trait: ${trait}`);
+    }
+  }
+
+  // Group dynamics and emotional support system
+  private async generateSupportiveInteractions(session: GameSession, triggerEvent: {
+    type: 'player_stress' | 'combat_danger' | 'discovery' | 'success' | 'failure';
+    intensity: 'low' | 'medium' | 'high';
+    context: string;
+  }): Promise<GameMessage[]> {
+    const supportMessages: GameMessage[] = [];
+    
+    // Determine which AI members would react to this type of event
+    const reactiveMembers = session.aiPartyMembers.filter(member => 
+      this.shouldReactToEvent(member, triggerEvent)
+    );
+
+    for (const member of reactiveMembers.slice(0, 2)) { // Limit to 2 reactions
+      const supportResponse = await this.generateSupportiveResponse(member, triggerEvent, session);
+      if (supportResponse) {
+        supportMessages.push({
+          id: `support_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          type: 'player',
+          content: supportResponse,
+          sender: member.name,
+          timestamp: Date.now(),
+          metadata: { 
+            isAI: true, 
+            messageType: 'emotional_support',
+            triggerEvent: triggerEvent.type
+          }
+        });
+      }
+    }
+
+    return supportMessages;
+  }
+
+  private shouldReactToEvent(member: AIPartyMember, event: any): boolean {
+    const traits = member.personality.traits;
+    
+    switch (event.type) {
+      case 'player_stress':
+        return traits.includes('protective') || traits.includes('empathetic') || traits.includes('loyal');
+      case 'combat_danger':
+        return traits.includes('brave') || traits.includes('tactical') || traits.includes('protective');
+      case 'discovery':
+        return traits.includes('curious') || traits.includes('wise') || traits.includes('analytical');
+      case 'success':
+        return traits.includes('encouraging') || traits.includes('celebratory') || traits.includes('proud');
+      case 'failure':
+        return traits.includes('supportive') || traits.includes('optimistic') || traits.includes('resilient');
+      default:
+        return Math.random() < 0.3;
+    }
+  }
+
+  private async generateSupportiveResponse(member: AIPartyMember, event: any, session: GameSession): Promise<string | null> {
+    const supportPrompts = {
+      player_stress: `The player seems stressed or overwhelmed. As ${member.name}, offer encouragement or practical help based on your personality.`,
+      combat_danger: `Combat is about to begin or is ongoing. As ${member.name}, provide tactical support or encouragement based on your class and personality.`,
+      discovery: `Something interesting has been discovered. As ${member.name}, react with curiosity, analysis, or caution based on your personality.`,
+      success: `The party has achieved something significant. As ${member.name}, celebrate or acknowledge the success in character.`,
+      failure: `Something has gone wrong or failed. As ${member.name}, provide comfort, practical advice, or encouragement.`
+    };
+
+    const prompt = `You are ${member.name}, a ${member.race} ${member.characterClass}.
+Your personality: ${member.personality.traits.join(', ')}
+
+SITUATION: ${event.context}
+${supportPrompts[event.type as keyof typeof supportPrompts]}
+
+REQUIREMENTS:
+- Stay completely in character
+- Keep response to 1-2 sentences
+- Show genuine concern/interest/support
+- Reference your class abilities if relevant
+- Sound natural and caring
+
+Respond as ${member.name}:`;
+
+    try {
+      return await aiService.complete(prompt);
+    } catch (error) {
+      console.error(`Error generating supportive response for ${member.name}:`, error);
+      return null;
+    }
+  }
+
+  // Contextual reaction system for environmental changes
+  private async generateContextualReactions(session: GameSession, environmentChange: {
+    type: 'weather' | 'location' | 'atmosphere' | 'threat_level';
+    description: string;
+    severity: 'minor' | 'moderate' | 'major';
+  }): Promise<GameMessage[]> {
+    const reactions: GameMessage[] = [];
+    
+    // Select AI members who would notice this type of change
+    const observantMembers = session.aiPartyMembers.filter(member => {
+      const traits = member.personality.traits;
+      return traits.includes('observant') || 
+             traits.includes('paranoid') || 
+             traits.includes('cautious') ||
+             member.characterClass === 'Ranger' || 
+             member.characterClass === 'Scout';
+    });
+
+    // If no naturally observant members, pick one at random (someone always notices)
+    if (observantMembers.length === 0 && session.aiPartyMembers.length > 0) {
+      observantMembers.push(session.aiPartyMembers[Math.floor(Math.random() * session.aiPartyMembers.length)]);
+    }
+
+    for (const member of observantMembers.slice(0, 1)) { // Only one environmental reaction
+      const reaction = await this.generateEnvironmentalReaction(member, environmentChange);
+      if (reaction) {
+        reactions.push({
+          id: `env_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          type: 'player',
+          content: reaction,
+          sender: member.name,
+          timestamp: Date.now(),
+          metadata: { 
+            isAI: true, 
+            messageType: 'environmental_reaction',
+            changeType: environmentChange.type
+          }
+        });
+      }
+    }
+
+    return reactions;
+  }
+
+  private async generateEnvironmentalReaction(member: AIPartyMember, change: any): Promise<string | null> {
+    const prompt = `You are ${member.name}, a ${member.race} ${member.characterClass}.
+Your traits: ${member.personality.traits.join(', ')}
+
+ENVIRONMENTAL CHANGE: ${change.description}
+SEVERITY: ${change.severity}
+
+As someone who notices environmental changes, react to this development. Consider:
+- How your class/background would interpret this
+- Whether this poses opportunities or threats  
+- Your personality's approach to change
+
+Keep response brief (1-2 sentences) and in character.
+
+${member.name} says:`;
+
+    try {
+      return await aiService.complete(prompt);
+    } catch (error) {
+      console.error(`Error generating environmental reaction for ${member.name}:`, error);
+      return null;
+    }
+  }
+
+  // Initiative-based conversation starters
+  private async generateProactiveConversations(session: GameSession): Promise<GameMessage[]> {
+    const proactiveMessages: GameMessage[] = [];
+    
+    // Check if any AI member should start a conversation based on current conditions
+    const initiativeMembers = session.aiPartyMembers.filter(member => {
+      const timeSinceLastSpoke = Date.now() - member.lastSpokeAt;
+      const traits = member.personality.traits;
+      
+      // Extroverted or social characters are more likely to start conversations
+      const isSocial = traits.includes('charismatic') || 
+                      traits.includes('friendly') || 
+                      traits.includes('outgoing') ||
+                      traits.includes('curious');
+      
+      // Haven't spoken in a while and have social tendencies
+      return timeSinceLastSpoke > 120000 && isSocial && Math.random() < 0.2; // 20% chance
+    });
+
+    for (const member of initiativeMembers.slice(0, 1)) { // Only one proactive conversation
+      const conversation = await this.generateProactiveComment(member, session);
+      if (conversation) {
+        proactiveMessages.push({
+          id: `proactive_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          type: 'player',
+          content: conversation,
+          sender: member.name,
+          timestamp: Date.now(),
+          metadata: { 
+            isAI: true, 
+            messageType: 'proactive_conversation'
+          }
+        });
+      }
+    }
+
+    return proactiveMessages;
+  }
+
+  private async generateProactiveComment(member: AIPartyMember, session: GameSession): Promise<string | null> {
+    const recentContext = session.messages.slice(-3).map(m => m.content).join(' ');
+    
+    const prompt = `You are ${member.name}, a social ${member.characterClass} who likes to keep conversations going.
+
+RECENT CONTEXT: ${recentContext || 'Traveling with the party'}
+CURRENT LOCATION: ${session.worldState?.currentLocation || 'Unknown'}
+
+Start a natural conversation with your party. You could:
+- Ask about someone's background or experiences
+- Share an observation about your surroundings  
+- Bring up a topic related to your class/interests
+- Check on how others are feeling
+- Suggest something for the group to consider
+
+Keep it conversational and in-character (1-2 sentences).
+
+${member.name} says:`;
+
+    try {
+      return await aiService.complete(prompt);
+    } catch (error) {
+      console.error(`Error generating proactive comment for ${member.name}:`, error);
+      return null;
+    }
   }
 }
 
