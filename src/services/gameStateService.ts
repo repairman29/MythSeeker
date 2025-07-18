@@ -2,6 +2,8 @@ import { dynamicDMService } from './dynamicDMService';
 import { firebaseService } from '../firebaseService';
 import { multiplayerService } from './multiplayerService';
 import { validateChatMessage, sanitizeInput } from '../utils/validation';
+import { unifiedAIService, UnifiedGameContext } from './unifiedAIService';
+import { AIPartyMember } from './automatedGameService';
 
 // Types
 export interface GameState {
@@ -116,6 +118,10 @@ export class GameStateService {
     onCombatEnd?: () => void;
   } = {};
 
+  // Add AI party members support
+  private aiPartyMembers: AIPartyMember[] = [];
+  private aiEnabled: boolean = true;
+
   constructor() {
     this.state = {
       currentCampaign: null,
@@ -206,7 +212,157 @@ export class GameStateService {
     this.callbacks.onMessageSent?.(playerMessage);
 
     try {
-      // Use Advanced Dynamic DM Service for enhanced AI processing
+      // Enhanced AI processing with unified service
+      if (this.aiEnabled && this.state.currentCampaign) {
+        try {
+          // Create unified game context
+          const gameContext: UnifiedGameContext = {
+            gameId: this.state.currentCampaign.id || 'single-player',
+            gameType: 'single-player',
+            realm: this.inferRealmFromTheme(this.state.currentCampaign.theme),
+            theme: this.state.currentCampaign.theme,
+            participants: [{
+              id: playerId,
+              name: playerName,
+              character: this.state.character
+            }],
+            aiPartyMembers: this.aiPartyMembers,
+            worldState: this.state.worldState,
+            messages: this.state.messages.slice(-10)
+          };
+
+          // Process with unified AI service
+          const unifiedResponse = await unifiedAIService.processPlayerInputUnified(
+            gameContext,
+            playerId,
+            sanitizedMessage
+          );
+
+          // Add AI party member responses
+          const aiMessages = [
+            ...unifiedResponse.aiPartyResponses.map(response => ({
+              id: Date.now() + Math.random(),
+              type: 'player' as const,
+              content: response.content,
+              sender: response.characterName,
+              timestamp: new Date(),
+              metadata: response.metadata
+            })),
+            ...unifiedResponse.aiToAiConversations.map(conv => ({
+              id: Date.now() + Math.random(),
+              type: 'player' as const,
+              content: conv.content,
+              sender: conv.speaker,
+              timestamp: new Date(),
+              metadata: { 
+                isAI: true, 
+                conversationType: 'ai_to_ai',
+                targetAI: conv.target
+              }
+            })),
+            ...unifiedResponse.supportiveInteractions.map(support => ({
+              id: Date.now() + Math.random(),
+              type: 'player' as const,
+              content: support.content,
+              sender: support.characterName,
+              timestamp: new Date(),
+              metadata: { 
+                isAI: true, 
+                messageType: 'supportive',
+                supportType: support.supportType
+              }
+            }))
+          ];
+
+          // Update AI party members if they were created
+          if (gameContext.aiPartyMembers && gameContext.aiPartyMembers.length > 0) {
+            this.aiPartyMembers = gameContext.aiPartyMembers;
+            await unifiedAIService.saveAIPartyMembers(gameContext.gameId, gameContext.aiPartyMembers);
+          }
+
+          // Add AI messages to state
+          if (aiMessages.length > 0) {
+            this.setState({
+              messages: [...this.state.messages, ...aiMessages]
+            });
+          }
+
+          // Generate DM response using unified service or fallback to dynamic DM
+          let dmResponse: any;
+          if (unifiedResponse.dmResponse) {
+            dmResponse = {
+              narrative: unifiedResponse.dmResponse,
+              choices: ['Explore', 'Investigate', 'Ask questions'],
+              atmosphere: {
+                mood: 'dynamic',
+                tension: 'medium'
+              }
+            };
+          } else {
+            // Fallback to dynamic DM service
+            const dynamicResponse = await dynamicDMService.processPlayerInput({
+              message: sanitizedMessage,
+              playerId: playerId,
+              campaignId: this.state.currentCampaign?.id || 'single-player',
+              timestamp: new Date()
+            });
+
+            dmResponse = {
+              narrative: dynamicResponse.narrative_text,
+              choices: (dynamicResponse.follow_up_prompts || ['Explore', 'Investigate', 'Ask questions']),
+              atmosphere: {
+                mood: 'dynamic',
+                tension: 'medium',
+                environmentalDetails: 'The world responds to your actions'
+              }
+            };
+
+            // Add NPC dialogue if present
+            if (dynamicResponse.npc_dialogue) {
+              dmResponse.narrative += `\n\n${dynamicResponse.npc_dialogue}`;
+            }
+
+            // Process system actions
+            if (dynamicResponse.system_actions && dynamicResponse.system_actions.length > 0) {
+              dynamicResponse.system_actions.forEach((action: any) => {
+                if (action.type === 'dice_roll') {
+                  const roll = this.rollDice(20);
+                  dmResponse.narrative += `\n\n[Roll: ${roll}]`;
+                }
+              });
+            }
+          }
+
+          // Add DM response
+          const dmMessage = {
+            id: Date.now() + 1,
+            type: 'dm' as const,
+            content: dmResponse.narrative,
+            choices: dmResponse.choices,
+            timestamp: new Date(),
+            atmosphere: dmResponse.atmosphere
+          };
+
+          this.setState({
+            messages: [...this.state.messages, dmMessage],
+            isAIThinking: false,
+            currentChoices: dmResponse.choices
+          });
+
+          // Update world state if present
+          if (dmResponse.worldStateUpdates) {
+            this.updateWorldState(dmResponse.worldStateUpdates);
+          }
+
+          return true;
+
+        } catch (enhancedAIError) {
+          console.error('Enhanced AI processing failed, using fallback:', enhancedAIError);
+          // Fall through to original dynamic DM processing
+        }
+      }
+
+      // Original dynamic DM processing as fallback
       const dynamicResponse = await dynamicDMService.processPlayerInput({
         message: sanitizedMessage,
         playerId: playerId,
@@ -257,40 +413,27 @@ export class GameStateService {
           }
         });
       }
-      
+
+      // Add DM message
       const dmMessage = {
         id: Date.now() + 1,
-        type: 'dm',
+        type: 'dm' as const,
         content: dmResponse.narrative,
         choices: dmResponse.choices,
         timestamp: new Date(),
-        atmosphere: dmResponse.atmosphere,
-        worldStateUpdates: dmResponse.worldStateUpdates
+        atmosphere: dmResponse.atmosphere
       };
-      
-      this.setState(prev => ({ 
-        messages: [...prev.messages, dmMessage],
-        isAIThinking: false 
-      }));
 
-      // Handle combat encounters
-      if (dmResponse.combatEncounter) {
-        this.startCombat(dmResponse.combatEncounter.enemies);
-      }
+      this.setState({
+        messages: [...this.state.messages, dmMessage],
+        isAIThinking: false,
+        currentChoices: dmResponse.choices
+      });
 
       return true;
     } catch (error) {
-      console.error('Error getting DM response:', error);
-      const fallbackMessage = {
-        id: Date.now() + 1,
-        type: 'dm',
-        content: `The story continues to unfold... (AI temporarily unavailable)`,
-        timestamp: new Date()
-      };
-      this.setState(prev => ({ 
-        messages: [...prev.messages, fallbackMessage],
-        isAIThinking: false 
-      }));
+      console.error('Error processing message:', error);
+      this.setState({ isAIThinking: false });
       return false;
     }
   }
@@ -448,6 +591,84 @@ export class GameStateService {
     if (campaign) {
       this.setState({ currentCampaign: campaign });
     }
+  }
+
+  // Enhanced AI party member management
+  async enableAIPartyMembers(): Promise<boolean> {
+    try {
+      if (!this.state.currentCampaign) return false;
+
+      // Check if AI party members already exist
+      if (this.aiPartyMembers.length > 0) {
+        this.aiEnabled = true;
+        return true;
+      }
+
+      // Load existing AI party members
+      const existingMembers = await unifiedAIService.loadAIPartyMembers(
+        this.state.currentCampaign.id || 'single-player'
+      );
+
+      if (existingMembers && existingMembers.length > 0) {
+        this.aiPartyMembers = existingMembers;
+        this.aiEnabled = true;
+        return true;
+      }
+
+      // Generate new AI party members
+      const gameContext: UnifiedGameContext = {
+        gameId: this.state.currentCampaign.id || 'single-player',
+        gameType: 'single-player',
+        realm: this.inferRealmFromTheme(this.state.currentCampaign.theme),
+        theme: this.state.currentCampaign.theme,
+        participants: [{
+          id: 'player',
+          name: 'Player',
+          character: this.state.character
+        }],
+        worldState: this.state.worldState,
+        messages: this.state.messages.slice(-10)
+      };
+
+      this.aiPartyMembers = await unifiedAIService.generateAIPartyMembersForContext(gameContext);
+      this.aiEnabled = true;
+
+      // Save AI party members
+      await unifiedAIService.saveAIPartyMembers(gameContext.gameId, this.aiPartyMembers);
+
+      return true;
+    } catch (error) {
+      console.error('Error enabling AI party members:', error);
+      return false;
+    }
+  }
+
+  disableAIPartyMembers(): void {
+    this.aiEnabled = false;
+  }
+
+  getAIPartyMembers(): AIPartyMember[] {
+    return this.aiPartyMembers;
+  }
+
+  isAIEnabled(): boolean {
+    return this.aiEnabled;
+  }
+
+  private inferRealmFromTheme(theme: string): string {
+    const themeRealms: Record<string, string> = {
+      'Classic Fantasy': 'Fantasy',
+      'Cyberpunk': 'Cyberpunk',
+      'Post-Apocalyptic': 'Post-Apocalyptic',
+      'Space Opera': 'Space Opera',
+      'Horror': 'Horror',
+      'Steampunk': 'Steampunk',
+      'Wild West': 'Wild West',
+      'Modern Day': 'Modern',
+      'Custom Adventure': 'Fantasy'
+    };
+
+    return themeRealms[theme] || 'Fantasy';
   }
 }
 

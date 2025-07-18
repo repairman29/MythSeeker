@@ -16,6 +16,7 @@ export const WelcomeOverlay = lazy(() => import('./WelcomeOverlay'));
 export const ToastNotifications = lazy(() => import('./ToastNotifications'));
 export const VirtualizedMessageList = lazy(() => import('./VirtualizedMessageList'));
 export const GameInterface = lazy(() => import('./GameInterface'));
+export { default as AIPartyManager, useAIPartyManager } from './AIPartyManager';
 
 // Non-lazy components (smaller, frequently used)
 export { default as Tooltip } from './Tooltip';

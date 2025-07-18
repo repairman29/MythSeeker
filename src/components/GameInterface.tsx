@@ -18,6 +18,7 @@ import {
 import Tooltip from './Tooltip';
 import DiceRoller from './DiceRoller';
 import { gameStateService } from '../services/gameStateService';
+import AIPartyManager from './AIPartyManager';
 
 interface GameInterfaceProps {
   campaign: any;
@@ -244,6 +245,90 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
     ));
   }, [tabs, activeTab, onTabChange]);
 
+  // Enhanced message sending with AI party integration
+  const handleSendMessage = async (message: string) => {
+    if (message.trim()) {
+      // Send the original message
+      await sendMessage();
+      
+      // Trigger AI party processing if available
+      if ((window as any).aiPartyManager) {
+        try {
+          await (window as any).aiPartyManager.processPlayerInput(character?.id || 'player', message.trim());
+        } catch (error) {
+          console.error('Error processing AI party input:', error);
+        }
+      }
+    }
+  };
+
+  // Handle AI messages from the party manager
+  const handleAIMessage = (message: any) => {
+    // setAIMessages(prev => [...prev, message]); // This state is not defined in the original file
+    
+    // Add to the main message stream
+    const enhancedMessage = {
+      ...message,
+      id: message.id || Date.now(),
+      type: 'player', // AI party members speak as players
+      content: message.content,
+      sender: message.sender,
+      timestamp: message.timestamp || new Date()
+    };
+    
+    // Update the messages display immediately
+    // setMessages(prev => [...prev, enhancedMessage]); // This state is not defined in the original file
+  };
+
+  // Handle AI party members update
+  const handleAIPartyMembersUpdated = (members: any[]) => {
+    // setAIPartyMembers(members); // This state is not defined in the original file
+    console.log(`🎭 Game Interface: AI party updated with ${members.length} members:`, 
+      members.map(m => `${m.name} (${m.characterClass})`));
+  };
+
+  // Determine game context for AI party manager
+  const getGameContext = () => {
+    const gameType: 'multiplayer' | 'single-player' = campaign?.isMultiplayer ? 'multiplayer' : 'single-player';
+    const realm = inferRealmFromTheme(campaign?.theme || 'Classic Fantasy');
+    
+    return {
+      gameId: campaign?.id || 'single-player-session',
+      gameType,
+      realm,
+      theme: campaign?.theme || 'Classic Fantasy',
+      participants: campaign?.players?.map((p: any) => ({
+        id: p.id || p.name,
+        name: p.name,
+        character: p.character,
+        isHost: p.isHost
+      })) || [{
+        id: character?.id || 'player',
+        name: character?.name || 'Player',
+        character: character,
+        isHost: true
+      }],
+      worldState,
+      recentMessages: messages.slice(-10),
+      isEnabled: true // Enable AI party members by default
+    };
+  };
+
+  const inferRealmFromTheme = (theme: string): string => {
+    const themeRealms: Record<string, string> = {
+      'Classic Fantasy': 'Fantasy',
+      'Cyberpunk': 'Cyberpunk', 
+      'Post-Apocalyptic': 'Post-Apocalyptic',
+      'Space Opera': 'Space Opera',
+      'Horror': 'Horror',
+      'Steampunk': 'Steampunk',
+      'Wild West': 'Wild West',
+      'Modern Day': 'Modern',
+      'Custom Adventure': 'Fantasy'
+    };
+    return themeRealms[theme] || 'Fantasy';
+  };
+
   return (
     <div className="h-full flex flex-col bg-gradient-to-br from-blue-950 via-indigo-950 to-purple-950">
       {/* Enhanced Top Controls with World State */}
@@ -422,6 +507,13 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
           defaultDice={[{ sides: 20, count: 1 }]}
         />
       )}
+
+      {/* AI Party Manager Integration */}
+      <AIPartyManager
+        {...getGameContext()}
+        onAIMessage={handleAIMessage}
+        onAIPartyMembersUpdated={handleAIPartyMembersUpdated}
+      />
     </div>
   );
 };

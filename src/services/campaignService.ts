@@ -5,6 +5,8 @@ import { ErrorHandler, ErrorUtils } from '../lib/errorHandler';
 import { CampaignValidator, VALIDATION_LIMITS } from '../lib/validation';
 import { multiplayerService } from './multiplayerService';
 import { aiService } from './aiService';
+import { unifiedAIService, UnifiedGameContext, UnifiedAIResponse } from './unifiedAIService';
+import { AIPartyMember } from './automatedGameService';
 import { Timestamp } from 'firebase/firestore';
 import { firebaseService } from '../firebaseService';
 
@@ -35,6 +37,11 @@ export interface CampaignData {
   lastActivity?: number | Date | import("firebase/firestore").Timestamp;
   participants?: Record<string, boolean>; // For Firebase compatibility
   rating?: 'G' | 'PG' | 'PG-13' | 'R' | 'NC-17'; // Add rating for mature/creative content
+  // Enhanced AI support
+  aiPartyMembers?: AIPartyMember[];
+  aiEnabled?: boolean;
+  realm?: string;
+  worldState?: any;
 }
 
 export interface Player {
@@ -62,6 +69,8 @@ export interface Message {
   choices?: string[];
   atmosphere?: string;
   worldStateUpdates?: any;
+  metadata?: any; // Added for enhanced AI
+  sender?: string; // Added for enhanced AI
 }
 
 function toGameMessage(msg: Message): import("./multiplayerService").GameMessage {
@@ -195,7 +204,7 @@ export class CampaignService {
   async sendMessage(
     campaignId: string,
     message: Partial<Message>
-  ): Promise<{ success: boolean; dmResponse?: Message; error?: any }> {
+  ): Promise<{ success: boolean; dmResponse?: Message; aiResponses?: any[]; error?: any }> {
     return ErrorUtils.campaignOperation(async () => {
       const campaign = this.campaigns.get(campaignId);
       if (!campaign) {
@@ -215,21 +224,180 @@ export class CampaignService {
         timestamp: new Date()
       } as Message;
 
-      // Generate AI response
-      const dmResponse = await this.generateAIResponse(campaign, playerMessage.content);
+      // Enhanced AI processing with unified service
+      let aiResponses: any[] = [];
+      let dmResponse: Message;
 
-      // Update campaign
+      if (campaign.aiEnabled !== false) { // Default to AI enabled
+        try {
+          // Create unified game context
+          const gameContext: UnifiedGameContext = {
+            gameId: campaignId,
+            gameType: campaign.isMultiplayer ? 'multiplayer' : 'single-player',
+            realm: campaign.realm || this.inferRealmFromTheme(campaign.theme),
+            theme: campaign.theme,
+            participants: campaign.players.map(p => ({
+              id: p.id,
+              name: p.name,
+              character: p.character,
+              isHost: p.isHost
+            })),
+            aiPartyMembers: campaign.aiPartyMembers,
+            worldState: campaign.worldState,
+            messages: campaign.messages.slice(-10) // Recent context
+          };
+
+          // Process with unified AI service
+          const unifiedResponse = await unifiedAIService.processPlayerInputUnified(
+            gameContext,
+            message.playerId || 'unknown',
+            playerMessage.content
+          );
+
+          // Convert AI responses to messages
+          aiResponses = [
+            ...unifiedResponse.aiPartyResponses.map(response => ({
+              id: `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              type: 'player',
+              content: response.content,
+              sender: response.characterName,
+              timestamp: new Date(),
+              metadata: response.metadata
+            })),
+            ...unifiedResponse.aiToAiConversations.map(conv => ({
+              id: `ai_conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              type: 'player',
+              content: conv.content,
+              sender: conv.speaker,
+              timestamp: new Date(),
+              metadata: { 
+                isAI: true, 
+                conversationType: 'ai_to_ai',
+                targetAI: conv.target
+              }
+            })),
+            ...unifiedResponse.supportiveInteractions.map(support => ({
+              id: `ai_support_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              type: 'player',
+              content: support.content,
+              sender: support.characterName,
+              timestamp: new Date(),
+              metadata: { 
+                isAI: true, 
+                messageType: 'supportive',
+                supportType: support.supportType
+              }
+            }))
+          ];
+
+          // Update campaign with AI party members if they were created
+          if (gameContext.aiPartyMembers && gameContext.aiPartyMembers.length > 0) {
+            campaign.aiPartyMembers = gameContext.aiPartyMembers;
+            campaign.realm = gameContext.realm;
+            await unifiedAIService.saveAIPartyMembers(campaignId, gameContext.aiPartyMembers);
+          }
+
+                     // Use unified DM response or generate fallback
+           const dmContentResult = unifiedResponse.dmResponse || await this.generateFallbackDMResponse(campaign, playerMessage.content);
+           const dmContent = typeof dmContentResult === 'string' ? dmContentResult : 
+                           (dmContentResult as any)?.content || 'The adventure continues...';
+          
+          dmResponse = {
+            id: `dm_${Date.now()}`,
+            type: 'dm',
+            content: dmContent,
+            timestamp: new Date(),
+            metadata: { enhanced: true }
+          } as Message;
+
+        } catch (aiError) {
+          console.error('Enhanced AI processing failed, using fallback:', aiError);
+          // Fallback to original AI response
+          dmResponse = await this.generateAIResponse(campaign, playerMessage.content);
+        }
+      } else {
+        // Original AI response if enhanced AI is disabled
+        dmResponse = await this.generateAIResponse(campaign, playerMessage.content);
+      }
+
+      // Update campaign with all messages
+      const allNewMessages = [playerMessage, ...aiResponses, dmResponse];
       const updatedCampaign: CampaignData = {
         ...campaign,
-        messages: [...campaign.messages, playerMessage, dmResponse],
+        messages: [...campaign.messages, ...allNewMessages],
         lastActivity: new Date()
       };
 
       await this.saveCampaign(updatedCampaign);
       this.campaigns.set(campaignId, updatedCampaign);
 
-      return dmResponse;
+      return { dmResponse, aiResponses };
     }, 'sendMessage');
+  }
+
+  /**
+   * Enable AI party members for a campaign
+   */
+  async enableAIPartyMembers(campaignId: string): Promise<{ success: boolean; aiPartyMembers?: AIPartyMember[]; error?: any }> {
+    return ErrorUtils.campaignOperation(async () => {
+      const campaign = this.campaigns.get(campaignId);
+      if (!campaign) {
+        throw new Error('Campaign not found');
+      }
+
+      // Check if AI party members already exist
+      if (campaign.aiPartyMembers && campaign.aiPartyMembers.length > 0) {
+        return { aiPartyMembers: campaign.aiPartyMembers };
+      }
+
+      // Create unified game context to generate AI party members
+      const gameContext: UnifiedGameContext = {
+        gameId: campaignId,
+        gameType: campaign.isMultiplayer ? 'multiplayer' : 'single-player',
+        realm: campaign.realm || this.inferRealmFromTheme(campaign.theme),
+        theme: campaign.theme,
+        participants: campaign.players.map(p => ({
+          id: p.id,
+          name: p.name,
+          character: p.character,
+          isHost: p.isHost
+        })),
+        worldState: campaign.worldState,
+        messages: campaign.messages.slice(-10)
+      };
+
+      // Generate AI party members
+      const aiPartyMembers = await unifiedAIService.generateAIPartyMembersForContext(gameContext);
+
+      // Update campaign
+      const updatedCampaign: CampaignData = {
+        ...campaign,
+        aiPartyMembers,
+        aiEnabled: true,
+        realm: gameContext.realm
+      };
+
+      await this.saveCampaign(updatedCampaign);
+      this.campaigns.set(campaignId, updatedCampaign);
+
+      // Save AI party members persistently
+      await unifiedAIService.saveAIPartyMembers(campaignId, aiPartyMembers);
+
+      return { aiPartyMembers };
+    }, 'enableAIPartyMembers');
+  }
+
+  /**
+   * Load existing AI party members for a campaign
+   */
+  async loadAIPartyMembers(campaignId: string): Promise<AIPartyMember[] | null> {
+    const campaign = this.campaigns.get(campaignId);
+    if (campaign?.aiPartyMembers) {
+      return campaign.aiPartyMembers;
+    }
+
+    // Try to load from persistent storage
+    return await unifiedAIService.loadAIPartyMembers(campaignId);
   }
 
   /**
@@ -320,14 +488,14 @@ export class CampaignService {
   }
 
   private async generateCampaignOpening(campaign: CampaignData): Promise<Message> {
-    const aiResult = await ErrorUtils.aiServiceCall(async () => {
+    const openingMessage = await ErrorUtils.aiServiceCall(async () => {
       const prompt = this.buildOpeningPrompt(campaign);
       return aiService.complete(prompt, campaign);
     });
 
-    if (aiResult.success && aiResult.data) {
+    if (openingMessage.success && openingMessage.data) {
       try {
-        const dmResponse = JSON.parse(aiResult.data);
+        const dmResponse = JSON.parse(openingMessage.data);
         return {
           id: Date.now().toString(),
           type: 'dm',
@@ -524,6 +692,39 @@ export class CampaignService {
 
     this.autoSaveTimers.set(campaignId, timer);
   }
+
+  /**
+   * Helper method to infer realm from theme
+   */
+  private inferRealmFromTheme(theme: string): string {
+    const themeRealms: Record<string, string> = {
+      'Classic Fantasy': 'Fantasy',
+      'Cyberpunk': 'Cyberpunk',
+      'Post-Apocalyptic': 'Post-Apocalyptic',
+      'Space Opera': 'Space Opera',
+      'Horror': 'Horror',
+      'Steampunk': 'Steampunk',
+      'Wild West': 'Wild West',
+      'Modern Day': 'Modern',
+      'Custom Adventure': 'Fantasy' // Default fallback
+    };
+
+    return themeRealms[theme] || 'Fantasy';
+  }
+
+     /**
+    * Generate fallback DM response
+    */
+   private async generateFallbackDMResponse(campaign: CampaignData, input: string): Promise<string> {
+     try {
+       const result = await this.generateAIResponse(campaign, input);
+       return typeof result === 'string' ? result : 
+              (result as any)?.content || "The adventure continues as you venture deeper into the unknown...";
+     } catch (error) {
+       console.error('Fallback DM response failed:', error);
+       return "The adventure continues as you venture deeper into the unknown...";
+     }
+   }
 
   // Cleanup method
   dispose(): void {
