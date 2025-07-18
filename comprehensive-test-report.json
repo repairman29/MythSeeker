@@ -1,0 +1,122 @@
+{
+  "automatedGames": {
+    "passed": 0,
+    "failed": 3,
+    "tests": [
+      {
+        "testName": "Post-Apocalyptic Adventure",
+        "passed": false,
+        "duration": 72,
+        "details": "Status: 400",
+        "timestamp": 1752857865829
+      },
+      {
+        "testName": "Fantasy Quest",
+        "passed": false,
+        "duration": 155,
+        "details": "Status: 400",
+        "timestamp": 1752857867036
+      },
+      {
+        "testName": "Sci-Fi Exploration",
+        "passed": false,
+        "duration": 65,
+        "details": "Status: 400",
+        "timestamp": 1752857868110
+      }
+    ]
+  },
+  "campaigns": {
+    "passed": 2,
+    "failed": 0,
+    "tests": [
+      {
+        "testName": "Character Creation",
+        "passed": true,
+        "duration": 221,
+        "details": "Status: 200",
+        "timestamp": 1752857864581
+      },
+      {
+        "testName": "Campaign Creation",
+        "passed": true,
+        "duration": 173,
+        "details": "Status: 200",
+        "timestamp": 1752857864754
+      }
+    ]
+  },
+  "aiService": {
+    "passed": 0,
+    "failed": 5,
+    "tests": [
+      {
+        "testName": "AI Response: \"I attack the goblin with my sw...\"",
+        "passed": false,
+        "duration": 61,
+        "details": "Status: 400, Response time: 61ms",
+        "timestamp": 1752857858106
+      },
+      {
+        "testName": "AI Response: \"I search for treasure in the r...\"",
+        "passed": false,
+        "duration": 63,
+        "details": "Status: 400, Response time: 63ms",
+        "timestamp": 1752857859171
+      },
+      {
+        "testName": "AI Response: \"I talk to the village elder...\"",
+        "passed": false,
+        "duration": 53,
+        "details": "Status: 400, Response time: 53ms",
+        "timestamp": 1752857860226
+      },
+      {
+        "testName": "AI Response: \"I cast a healing spell on my a...\"",
+        "passed": false,
+        "duration": 58,
+        "details": "Status: 400, Response time: 58ms",
+        "timestamp": 1752857861286
+      },
+      {
+        "testName": "AI Response: \"I investigate the mysterious d...\"",
+        "passed": false,
+        "duration": 68,
+        "details": "Status: 400, Response time: 68ms",
+        "timestamp": 1752857862355
+      }
+    ]
+  },
+  "performance": {
+    "passed": 0,
+    "failed": 2,
+    "tests": [
+      {
+        "testName": "Firebase Functions Health Check",
+        "passed": false,
+        "duration": 138,
+        "details": "Status: 400",
+        "timestamp": 1752857857043
+      },
+      {
+        "testName": "Concurrent AI Requests",
+        "passed": false,
+        "duration": 260,
+        "details": "0/5 requests succeeded",
+        "timestamp": 1752857870373
+      }
+    ]
+  },
+  "overall": {
+    "startTime": 1752857856891,
+    "endTime": 1752857870374
+  },
+  "qualityAssessment": {
+    "overallQuality": false,
+    "successRate": 16.7,
+    "totalTests": 12,
+    "passedTests": 2,
+    "duration": 13483
+  },
+  "timestamp": "2025-07-18T16:57:50.374Z"
+}

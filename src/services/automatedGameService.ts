@@ -76,6 +76,8 @@ export interface GameSession {
   playerMemory: Array<any>; // Add player memory field
   npcMemory: Array<any>; // Add NPC memory field
   aiInsights?: string[]; // Add AI insights for Enhanced AI
+  lastActivity?: number; // Track last activity
+  lastMonitoringCheck?: number; // Track last monitoring check
 }
 
 export interface GameMessage {
@@ -283,12 +285,85 @@ class AutomatedGameService {
   // ======= ENHANCED SESSION MANAGEMENT =======
 
   /**
-   * Get all persisted sessions for recovery
+   * Get all persisted sessions for recovery (implementation moved to bottom of class)
    */
-  getPersistedSessions(): GameSession[] {
-    return Array.from(this.activeSessions.values()).filter(session => 
-      session.messages.length > 0 || session.players.length > 0
-    );
+
+  /**
+   * Start monitoring a session for activity and cleanup
+   */
+  private startSessionMonitoring(sessionId: string): void {
+    console.log(`🔍 Starting session monitoring for: ${sessionId}`);
+    
+    // Clear any existing monitoring timer for this session
+    if (this.sessionTimers.has(sessionId)) {
+      clearTimeout(this.sessionTimers.get(sessionId)!);
+    }
+    
+    // Set up monitoring timer - check session every 5 minutes
+    const monitoringTimer = setInterval(() => {
+      const session = this.activeSessions.get(sessionId);
+      if (!session) {
+        console.log(`🔍 Session ${sessionId} no longer exists, stopping monitoring`);
+        clearInterval(monitoringTimer);
+        this.sessionTimers.delete(sessionId);
+        return;
+      }
+      
+      // Check if session is inactive (no activity in last 30 minutes)
+      const lastActivity = session.lastActivity ?? session.startTime;
+      const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
+      
+      if (lastActivity < thirtyMinutesAgo && session.players.length === 0) {
+        console.log(`🔍 Session ${sessionId} appears inactive, considering cleanup`);
+        // Could implement automatic cleanup here if needed
+      }
+      
+      // Update last monitoring check
+      if (session) {
+        session.lastMonitoringCheck = Date.now();
+      }
+    }, 5 * 60 * 1000); // Check every 5 minutes
+    
+    this.sessionTimers.set(sessionId, monitoringTimer);
+  }
+
+  /**
+   * Schedule a phase transition for a session
+   */
+  private schedulePhaseTransition(sessionId: string, newPhase: string, delayMs: number): void {
+    console.log(`📅 Scheduling phase transition for ${sessionId} to ${newPhase} in ${delayMs}ms`);
+    
+    // Clear any existing phase transition timer for this session
+    const existingTimer = this.sessionTimers.get(`${sessionId}_phase`);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+    
+    // Schedule the phase transition
+    const phaseTimer = setTimeout(() => {
+      const session = this.activeSessions.get(sessionId);
+      if (session && session.currentPhase !== newPhase) {
+        console.log(`🔄 Transitioning session ${sessionId} from ${session.currentPhase} to ${newPhase}`);
+        session.currentPhase = newPhase as any; // Cast to allow flexibility
+        
+        // Add a system message about the phase change
+        const phaseMessage: GameMessage = {
+          id: `msg_${Date.now()}`,
+          type: 'system',
+          content: `--- Transitioning to ${newPhase} phase ---`,
+          timestamp: Date.now()
+        };
+        session.messages.push(phaseMessage);
+        
+        // Save the updated session
+        this.saveToLocalStorage();
+        
+        // Clean up the timer
+        this.sessionTimers.delete(`${sessionId}_phase`);
+      }
+    }, delayMs);
+    
+    this.sessionTimers.set(`${sessionId}_phase`, phaseTimer);
   }
 
   /**
@@ -446,6 +521,7 @@ class AutomatedGameService {
 
     session.currentPhase = 'introduction';
     session.startTime = Date.now();
+    session.lastActivity = Date.now(); // Update last activity
 
     // Generate opening scene based on players and realm
     const openingScene = await this.generateOpeningScene(session);
@@ -787,6 +863,9 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
       console.error('❌ Session not found:', sessionId);
       throw new Error('Session not found');
     }
+
+    // Update last activity
+    session.lastActivity = Date.now();
 
     console.log('✅ Session found. Current phase:', session.currentPhase);
     console.log('🤖 AI Party Members:', session.aiPartyMembers?.length || 0);
