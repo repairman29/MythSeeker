@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UniversalGameInterface } from './UniversalGameInterface';
-import { DiceSystem3D } from './DiceSystem3D';
+// import { DiceSystem3D } from './DiceSystem3D'; // Temporarily disabled due to React version conflicts
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Zap, Users, Sparkles, ArrowLeft, Dice1, Bot, BookOpen, Sword } from 'lucide-react';
 import { DiceRoll } from '../types/dice';
@@ -197,8 +197,8 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
         )}
       </div>
 
-      {/* 3D Dice Roller Modal */}
-      <DiceSystem3D
+      {/* 3D Dice Roller Modal - Temporarily disabled */}
+      {/* <DiceSystem3D
         isOpen={showDiceRoller}
         onClose={() => setShowDiceRoller(false)}
         onRollComplete={handleDiceRollComplete}
@@ -207,7 +207,44 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
         enableSounds={true}
         rollContext="Unified Game Experience"
         playerName={user?.displayName || 'Player'}
-      />
+      /> */}
+      
+      {/* Temporary 2D dice replacement */}
+      {showDiceRoller && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800/95 backdrop-blur-lg rounded-2xl p-6 border border-slate-700">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-white">🎲 Dice Roller</h3>
+              <button
+                onClick={() => setShowDiceRoller(false)}
+                className="text-gray-300 hover:text-white text-2xl font-bold"
+              >
+                ×
+              </button>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl mb-4">🎲</div>
+              <button
+                onClick={() => {
+                  const result = Math.floor(Math.random() * 20) + 1;
+                  handleDiceRollComplete({
+                    id: `temp-${Date.now()}`,
+                    config: { sides: 20, count: 1 },
+                    results: [{ value: result, discarded: false }],
+                    total: result,
+                    timestamp: Date.now(),
+                    metadata: { rollContext: 'Unified Game Experience' }
+                  });
+                  setShowDiceRoller(false);
+                }}
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+              >
+                Roll d20
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 

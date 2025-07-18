@@ -606,7 +606,6 @@ export const GameInterface: React.FC<GameInterfaceProps> = ({
       <div className="flex-1 flex flex-col min-h-0">
         {/* AI Service Status - Non-intrusive notification */}
         <AIServiceStatus 
-          onRetry={checkServiceStatus}
           className="mx-4 mt-2"
         />
         

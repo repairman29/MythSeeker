@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { combatEngine } from '../services/combatEngine';
-import { DiceSystem3D } from './DiceSystem3D';
+// import { DiceSystem3D } from './DiceSystem3D'; // Temporarily disabled due to React version conflicts
 import { 
   CombatEncounter, 
   Combatant, 
@@ -472,7 +472,7 @@ const CombatGrid: React.FC<CombatGridProps> = ({
       </div>
 
       {/* 3D Dice Roller */}
-      <DiceSystem3D
+      {/* <DiceSystem3D
         isOpen={showDiceRoller}
         onClose={() => {
           setShowDiceRoller(false);
@@ -481,7 +481,7 @@ const CombatGrid: React.FC<CombatGridProps> = ({
         onRollComplete={handleDiceRollComplete}
         rollContext={pendingRoll?.action.name}
         playerName={getCurrentCombatant()?.name}
-      />
+      /> */}
     </div>
   );
 };

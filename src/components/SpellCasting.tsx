@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { spellcastingService } from '../services/spellcastingService';
-import { DiceSystem3D } from './DiceSystem3D';
+// import { DiceSystem3D } from './DiceSystem3D'; // Temporarily disabled due to React version conflicts
 import { 
   Spell, 
   Spellcaster, 
@@ -536,7 +536,7 @@ const SpellCasting: React.FC<SpellCastingProps> = ({
         </div>
 
         {/* 3D Dice Roller */}
-        <DiceSystem3D
+        {/* <DiceSystem3D
           isOpen={showDiceRoller}
           onClose={() => {
             setShowDiceRoller(false);
@@ -545,7 +545,7 @@ const SpellCasting: React.FC<SpellCastingProps> = ({
           onRollComplete={handleDiceRollComplete}
           rollContext={pendingCast?.spell.name}
           playerName={caster?.class}
-        />
+        /> */}
       </div>
     </div>
   );
