@@ -7,7 +7,6 @@ import {
   DND5E_CLASSES,
   AbilityScore 
 } from '../types/characterProgression';
-import { characterProgressionService } from '../services/characterProgressionService';
 import { TrendingUp, User, Zap, Star, ArrowLeft } from 'lucide-react';
 
 interface ProgressionDemoProps {
@@ -27,78 +26,106 @@ export const ProgressionDemo: React.FC<ProgressionDemoProps> = ({ onBack }) => {
     try {
       setLoading(true);
       
-      // Create a demo character progression
+      // Create mock demo character progression (no Firebase needed)
       const demoCharacter = DND5E_CLASSES.fighter;
-      const progression = await characterProgressionService.createCharacterProgression(
-        'demo-character',
-        demoCharacter,
-        3 // Start at level 3 for demonstration
-      );
-
-      // Add some sample experience and progression
-      progression.experience.current = 2000;
-      progression.experience.total = 2000;
-      progression.experience.sources = [
-        {
-          id: 'demo-1',
-          type: 'combat',
-          amount: 800,
-          description: 'Defeated goblin warband',
-          timestamp: new Date(Date.now() - 86400000) // Yesterday
+      const mockProgression: ProgressionData = {
+        id: 'demo-character',
+        characterId: 'demo-character',
+        class: demoCharacter,
+        level: 3,
+        experience: {
+          current: 2000,
+          total: 2000,
+          level: 3,
+          nextLevelXP: 2700,
+          sources: [
+            {
+              id: 'demo-1',
+              type: 'combat',
+              amount: 800,
+              description: 'Defeated goblin warband',
+              timestamp: new Date(Date.now() - 86400000) // Yesterday
+            },
+            {
+              id: 'demo-2',
+              type: 'roleplay',
+              amount: 600,
+              description: 'Negotiated peace treaty',
+              timestamp: new Date(Date.now() - 172800000) // 2 days ago
+            },
+            {
+              id: 'demo-3',
+              type: 'quest',
+              amount: 600,
+              description: 'Completed village rescue mission',
+              timestamp: new Date(Date.now() - 259200000) // 3 days ago
+            }
+          ]
         },
-        {
-          id: 'demo-2', 
-          type: 'roleplay',
-          amount: 600,
-          description: 'Negotiated peace treaty',
-          timestamp: new Date(Date.now() - 172800000) // 2 days ago
+        abilityScores: {
+          strength: { base: 16, racial: 0, improvement: 1, equipment: 0, temporary: 0, total: 17 },
+          dexterity: { base: 13, racial: 0, improvement: 0, equipment: 0, temporary: 0, total: 13 },
+          constitution: { base: 15, racial: 0, improvement: 1, equipment: 0, temporary: 0, total: 16 },
+          intelligence: { base: 10, racial: 0, improvement: 0, equipment: 0, temporary: 0, total: 10 },
+          wisdom: { base: 12, racial: 0, improvement: 0, equipment: 0, temporary: 0, total: 12 },
+          charisma: { base: 8, racial: 0, improvement: 0, equipment: 0, temporary: 0, total: 8 }
         },
-        {
-          id: 'demo-3',
-          type: 'quest',
-          amount: 600,
-          description: 'Completed "Rescue the Village" quest',
-          timestamp: new Date(Date.now() - 259200000) // 3 days ago
-        }
-      ];
-
-      // Set some ability scores
-      progression.abilityScores.strength.base = 16;
-      progression.abilityScores.strength.total = 16;
-      progression.abilityScores.dexterity.base = 14;
-      progression.abilityScores.dexterity.total = 14;
-      progression.abilityScores.constitution.base = 15;
-      progression.abilityScores.constitution.total = 15;
-      progression.abilityScores.intelligence.base = 12;
-      progression.abilityScores.intelligence.total = 12;
-      progression.abilityScores.wisdom.base = 13;
-      progression.abilityScores.wisdom.total = 13;
-      progression.abilityScores.charisma.base = 11;
-      progression.abilityScores.charisma.total = 11;
-
-      // Add some skill proficiencies
-      progression.skillProficiencies = ['athletics', 'intimidation', 'perception', 'survival'];
-      
-      // Add some class features
-      progression.classFeatures = [
-        'fighting_style_defense',
-        'second_wind',
-        'action_surge'
-      ];
-
-      // Set up skill tree progress
-      progression.skillTreeProgress = {
-        'fighter_combat_mastery': {
-          unlockedNodes: ['weapon_focus', 'combat_reflexes'],
-          purchasedNodes: ['weapon_focus'],
-          availablePoints: 2,
-          totalPointsSpent: 1
-        }
+        hitPoints: {
+          max: 32,
+          current: 32,
+          temporary: 0
+        },
+        classFeatures: [
+          'fighting_style_defense',
+          'second_wind',
+          'action_surge'
+        ],
+        feats: [
+          {
+            id: 'great-weapon-master',
+            name: 'Great Weapon Master',
+            description: '+10 damage with -5 attack penalty option',
+            prerequisites: [],
+            benefits: ['+10 damage option', 'Bonus attack on crit/kill']
+          }
+        ],
+        skillTreeProgress: {
+          'fighter_combat_mastery': {
+            treeId: 'fighter_combat_mastery',
+            purchasedNodes: ['basic_attack', 'power_strike'],
+            availablePoints: 3,
+            totalPointsSpent: 2
+          }
+        },
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
-      setDemoProgression(progression);
+      setDemoProgression(mockProgression);
     } catch (error) {
       console.error('Error initializing demo data:', error);
+      // Still set some basic demo data even if there's an error
+      setDemoProgression({
+        id: 'demo-character',
+        characterId: 'demo-character',
+        class: DND5E_CLASSES.fighter,
+        level: 3,
+        experience: { current: 2000, total: 2000, level: 3, nextLevelXP: 2700, sources: [] },
+        abilityScores: {
+          strength: { base: 16, racial: 0, improvement: 1, equipment: 0, temporary: 0, total: 17 },
+          dexterity: { base: 13, racial: 0, improvement: 0, equipment: 0, temporary: 0, total: 13 },
+          constitution: { base: 15, racial: 0, improvement: 1, equipment: 0, temporary: 0, total: 16 },
+          intelligence: { base: 10, racial: 0, improvement: 0, equipment: 0, temporary: 0, total: 10 },
+          wisdom: { base: 12, racial: 0, improvement: 0, equipment: 0, temporary: 0, total: 12 },
+          charisma: { base: 8, racial: 0, improvement: 0, equipment: 0, temporary: 0, total: 8 }
+        },
+        hitPoints: { max: 32, current: 32, temporary: 0 },
+        classFeatures: [],
+        feats: [],
+        skillTreeProgress: {},
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
     } finally {
       setLoading(false);
     }
@@ -108,14 +135,26 @@ export const ProgressionDemo: React.FC<ProgressionDemoProps> = ({ onBack }) => {
     if (!demoProgression) return;
 
     try {
-      const result = await characterProgressionService.addExperience(
-        'demo-character',
+      // Mock experience addition without Firebase
+      const newSource = {
+        id: `demo-${Date.now()}`,
+        type: type as any,
         amount,
-        { type: type as any, description }
-      );
+        description,
+        timestamp: new Date()
+      };
 
-      // Refresh the demo data
-      await initializeDemoData();
+      const updatedProgression = {
+        ...demoProgression,
+        experience: {
+          ...demoProgression.experience,
+          current: demoProgression.experience.current + amount,
+          total: demoProgression.experience.total + amount,
+          sources: [...demoProgression.experience.sources, newSource]
+        }
+      };
+
+      setDemoProgression(updatedProgression);
     } catch (error) {
       console.error('Error adding experience:', error);
     }
