@@ -412,9 +412,22 @@ export async function handleAIDungeonMasterLogic(data: any, context: any) {
       `Rate limit exceeded. You can make ${rateLimit.requests} AI requests per minute. Please wait before making another request.`);
   }
 
+  // Enhanced logging for debugging
+  console.log('🔍 AI Dungeon Master - Received data:', JSON.stringify({
+    hasPrompt: !!data.prompt,
+    hasCampaignId: !!data.campaignId,
+    hasPlayerName: !!data.playerName,
+    hasContext: !!data.context,
+    promptLength: data.prompt?.length || 0,
+    campaignId: data.campaignId,
+    dataKeys: Object.keys(data || {})
+  }));
+
   // Validate input data
   const validation = validateAIPrompt(data);
   if (!validation.isValid) {
+    console.error('❌ Validation failed for data:', JSON.stringify(data, null, 2));
+    console.error('❌ Validation errors:', validation.errors);
     logAIRequest(userId, data.campaignId || 'unknown', data.prompt?.length || 0, Date.now() - startTime, false, `Validation failed: ${validation.errors.join(', ')}`);
     throw new functions.https.HttpsError('invalid-argument', `Invalid AI prompt data: ${validation.errors.join(', ')}`);
   }

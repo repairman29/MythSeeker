@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, firebaseService, Character, UserProfile as UserProfileType } from './firebaseService';
+import { CampaignService } from './services/campaignService';
 import UserProfileComponent from './UserProfile';
 import { aiService } from './services/aiService';
 import { dynamicDMService } from './services/dynamicDMService';
@@ -43,6 +44,7 @@ import WorldMap from './components/WorldMap';
 import MagicSystem from './components/MagicSystem';
 import EnhancedCombatSystem from './components/EnhancedCombatSystem';
 import { AutomatedGameWrapper } from './components/AutomatedGameWrapper';
+import { GameInterface } from './components/GameInterface';
 
 // Lazy load components
 const NavBar = lazy(() => import('./components/NavBar'));
@@ -1389,7 +1391,7 @@ Start with a welcoming scene that introduces the magical academy setting and the
       // Try to load from Firebase for multiplayer campaigns (if authenticated)
       if (isAuthenticated && currentUser) {
         try {
-          const firebaseCampaigns = await multiplayerService.getUserCampaigns();
+          const firebaseCampaigns = await firebaseService.getUserCampaigns(currentUser.uid);
           console.log('Found campaigns in Firebase:', firebaseCampaigns.length);
           
           // Merge campaigns, prioritizing Firebase data for multiplayer campaigns
@@ -5107,17 +5109,135 @@ const CampaignWrapper: React.FC<{ user: any }> = ({ user }) => {
   );
 };
 
-// Campaign Game Wrapper Component
+// Campaign Game Wrapper Component  
 const CampaignGameWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const { id: campaignId } = useParams();
+  const [isLoading, setIsLoading] = useState(true);
+  const [campaign, setCampaign] = useState<any>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [inputMessage, setInputMessage] = useState('');
+  const [isAIThinking, setIsAIThinking] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Initialize campaign service
+  const campaignService = useMemo(() => CampaignService.getInstance(), []);
+
+  useEffect(() => {
+    const loadCampaign = async () => {
+      if (!campaignId || !user) return;
+      
+      setIsLoading(true);
+      try {
+        // Load campaign from localStorage or Firebase
+        const userCampaigns = await firebaseService.getUserCampaigns(user.uid);
+        const foundCampaign = userCampaigns.find(c => c.id === campaignId);
+        
+        if (foundCampaign) {
+          setCampaign(foundCampaign);
+          setMessages(foundCampaign.messages || []);
+        }
+      } catch (error) {
+        console.error('Error loading campaign:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadCampaign();
+  }, [campaignId, user]);
+
+  // Campaign-specific send message function
+  const sendCampaignMessage = async () => {
+    if (!campaign || !inputMessage.trim() || isAIThinking) return;
+
+    setIsAIThinking(true);
+    try {
+      const result = await campaignService.sendMessage(campaign.id, {
+        content: inputMessage,
+        playerName: user.displayName || user.email || 'Player',
+        playerId: user.uid,
+        type: 'player'
+      });
+
+      if (result.success) {
+        // Reload campaign to get updated messages
+        const updatedCampaign = await campaignService.getCampaign(campaign.id);
+        setMessages(updatedCampaign.messages || []);
+        setInputMessage('');
+      }
+    } catch (error) {
+      console.error('Error sending campaign message:', error);
+    } finally {
+      setIsAIThinking(false);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendCampaignMessage();
+    }
+  };
+
   const handleSignOut = () => {
     // This will trigger the auth state change and redirect to landing page
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+        <Navigation user={user} onSignOut={handleSignOut} />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-white text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+            <p>Loading campaign...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!campaign) {
+    return (
+      <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+        <Navigation user={user} onSignOut={handleSignOut} />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-white text-center">
+            <h2 className="text-2xl font-bold mb-4">Campaign not found</h2>
+            <p className="mb-6">The campaign you're looking for doesn't exist or you don't have access to it.</p>
+            <button
+              onClick={() => window.location.href = '/campaigns'}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            >
+              Back to Campaigns
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
       <div className="flex-1 overflow-auto">
-        <AIDungeonMaster initialScreen="game" />
+        <GameInterface
+          campaign={campaign}
+          messages={messages}
+          inputMessage={inputMessage}
+          setInputMessage={setInputMessage}
+          sendMessage={sendCampaignMessage}
+          handleKeyPress={handleKeyPress}
+          isAIThinking={isAIThinking}
+          messagesEndRef={messagesEndRef}
+          worldState={campaign.worldState}
+          character={{
+            name: user.displayName || user.email || 'Player',
+            id: user.uid
+          }}
+          inputRef={inputRef}
+        />
       </div>
     </div>
   );

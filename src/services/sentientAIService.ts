@@ -317,7 +317,13 @@ class SentientAIService {
       console.log('🤖 Calling aiService.complete with prompt length:', sentientPrompt.length);
       console.log('🤖 Sentient prompt preview:', sentientPrompt.substring(0, 200) + '...');
       
-      const response = await aiService.complete(sentientPrompt);
+      // Extract campaign info from context for proper AI service calling
+      const campaignInfo = {
+        id: context?.sessionType === 'advanced_ai' ? 'sentient-ai-session' : (context?.session?.id || 'sentient-ai-session'),
+        playerName: context?.playerName || 'Sentient AI User'
+      };
+      
+      const response = await aiService.complete(sentientPrompt, campaignInfo);
       console.log('🎯 Raw aiService response:', response ? `"${response.substring(0, 100)}..."` : 'Empty response');
       
              if (!response || response.length < 10) {

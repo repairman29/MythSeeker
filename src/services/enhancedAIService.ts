@@ -621,7 +621,9 @@ export class EnhancedAIService {
           situation: 'enhanced_context',
           sessionType: 'advanced_ai',
           realm: input.gameContext.realm,
-          richContext: richContext
+          richContext: richContext,
+          session: input.gameContext.session,
+          playerName: input.playerContext.name
         }
       );
 
