@@ -18,6 +18,7 @@ import {
 import Tooltip from './Tooltip';
 import EnhancedDiceSystem from './EnhancedDiceSystem';
 import DiceRollMessage from './DiceRollMessage';
+import AIServiceStatus from './AIServiceStatus';
 import { gameStateService } from '../services/gameStateService';
 import AIPartyManager from './AIPartyManager';
 
@@ -603,6 +604,12 @@ export const GameInterface: React.FC<GameInterfaceProps> = ({
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-h-0">
+        {/* AI Service Status - Non-intrusive notification */}
+        <AIServiceStatus 
+          onRetry={checkServiceStatus}
+          className="mx-4 mt-2"
+        />
+        
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {allMessages.map(renderMessage)}

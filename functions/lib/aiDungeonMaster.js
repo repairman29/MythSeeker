@@ -15,12 +15,12 @@ const RATE_LIMITS = {
 };
 // Helper to access secrets with caching
 const secretCache = new Map();
+// Enhanced secret management with better error handling
 async function getSecret(secretName) {
-    var _a, _b;
+    var _a, _b, _c, _d;
     const cacheKey = secretName;
-    const now = Date.now();
-    // Check cache first
     const cached = secretCache.get(cacheKey);
+    const now = Date.now();
     if (cached && cached.expires > now) {
         return cached.value;
     }
@@ -29,13 +29,25 @@ async function getSecret(secretName) {
             name: `projects/${process.env.GCLOUD_PROJECT}/secrets/${secretName}/versions/latest`
         });
         const value = ((_b = (_a = version.payload) === null || _a === void 0 ? void 0 : _a.data) === null || _b === void 0 ? void 0 : _b.toString()) || '';
-        // Cache for1ur
+        if (!value || value.trim() === '') {
+            throw new Error(`Empty secret value for ${secretName}`);
+        }
+        // Cache for 1 hour
         secretCache.set(cacheKey, { value, expires: now + 3600000 });
+        console.log(`✅ Successfully retrieved secret: ${secretName}`);
         return value;
     }
     catch (error) {
-        console.error(`Failed to access secret ${secretName}:`, error);
-        throw new Error(`Secret access failed: ${secretName}`);
+        console.error(`❌ Failed to access secret ${secretName}:`, error);
+        // Check if it's a missing secret vs access error
+        if (((_c = error === null || error === void 0 ? void 0 : error.message) === null || _c === void 0 ? void 0 : _c.includes('not found')) || ((_d = error === null || error === void 0 ? void 0 : error.message) === null || _d === void 0 ? void 0 : _d.includes('does not exist'))) {
+            console.log(`⚠️ Secret ${secretName} does not exist - needs to be created in Secret Manager`);
+            throw new Error(`Secret not found: ${secretName}. Please create this secret in Google Secret Manager.`);
+        }
+        else {
+            console.log(`⚠️ Secret ${secretName} access denied - check IAM permissions`);
+            throw new Error(`Secret access failed: ${secretName}. Check IAM permissions.`);
+        }
     }
 }
 // OpenAI fallback integration

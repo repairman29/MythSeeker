@@ -15,28 +15,41 @@ const RATE_LIMITS = {
 
 // Helper to access secrets with caching
 const secretCache = new Map<string, { value: string; expires: number }>();
+// Enhanced secret management with better error handling
 async function getSecret(secretName: string): Promise<string> {
   const cacheKey = secretName;
+  const cached = secretCache.get(cacheKey);
   const now = Date.now();
   
-  // Check cache first
-  const cached = secretCache.get(cacheKey);
   if (cached && cached.expires > now) {
     return cached.value;
   }
-  
+
   try {
     const [version] = await secretClient.accessSecretVersion({
       name: `projects/${process.env.GCLOUD_PROJECT}/secrets/${secretName}/versions/latest`
     });
     const value = version.payload?.data?.toString() || '';
     
-    // Cache for1ur
+    if (!value || value.trim() === '') {
+      throw new Error(`Empty secret value for ${secretName}`);
+    }
+    
+    // Cache for 1 hour
     secretCache.set(cacheKey, { value, expires: now + 3600000 });
+    console.log(`✅ Successfully retrieved secret: ${secretName}`);
     return value;
-  } catch (error) {
-    console.error(`Failed to access secret ${secretName}:`, error);
-    throw new Error(`Secret access failed: ${secretName}`);
+  } catch (error: any) {
+    console.error(`❌ Failed to access secret ${secretName}:`, error);
+    
+    // Check if it's a missing secret vs access error
+    if (error?.message?.includes('not found') || error?.message?.includes('does not exist')) {
+      console.log(`⚠️ Secret ${secretName} does not exist - needs to be created in Secret Manager`);
+      throw new Error(`Secret not found: ${secretName}. Please create this secret in Google Secret Manager.`);
+    } else {
+      console.log(`⚠️ Secret ${secretName} access denied - check IAM permissions`);
+      throw new Error(`Secret access failed: ${secretName}. Check IAM permissions.`);
+    }
   }
 }
 
@@ -575,7 +588,7 @@ export async function handleAIDungeonMasterLogic(data: any, context: any) {
     // Log successful request
     logAIRequest(userId, campaignId, prompt.length, responseTime, true);
     return { response: finalResponse };
-  } catch (error) {
+  } catch (error: any) {
     logAIRequest(userId, campaignId, prompt?.length || 0, Date.now() - startTime, false, (error instanceof Error ? error.message : String(error)) || 'Unknown error');
     console.error('AI Dungeon Master error:', error);
     throw new functions.https.HttpsError('internal', 'AI service temporarily unavailable');

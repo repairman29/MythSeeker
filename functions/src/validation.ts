@@ -310,7 +310,7 @@ export function validateCampaignData(data: any): ValidationResult {
   };
 }
 
-// AI prompt validation
+// AI prompt validation - Enhanced for game context
 export function validateAIPrompt(data: any): ValidationResult {
   const errors: string[] = [];
   
@@ -318,48 +318,36 @@ export function validateAIPrompt(data: any): ValidationResult {
     return { isValid: false, errors: ['Invalid AI prompt data'] };
   }
 
-  // Content validation
+  // Content validation - More flexible for game content
   if (!data.prompt || typeof data.prompt !== 'string' || data.prompt.trim().length === 0) {
     errors.push('AI prompt is required and must be a non-empty string');
+  } else if (data.prompt.length > 8000) { // Increased limit for game scenarios
+    errors.push('AI prompt must be 8000 characters or less');
   }
 
-  if (data.prompt && data.prompt.length > 5000) {
-    errors.push('AI prompt must be 5000 characters or less');
-  }
-
-  // Context validation
-  if (data.context && typeof data.context !== 'object') {
-    errors.push('AI context must be an object');
-  }
-
-  // Character validation
-  if (data.character && typeof data.character !== 'object') {
-    errors.push('Character data must be an object');
-  }
-
-  // World state validation
-  if (data.worldState && typeof data.worldState !== 'object') {
-    errors.push('World state must be an object');
-  }
-
-  // --- LOOSE FILTER: Only block empty or extremely long prompts. Allow all creative content. ---
-  // (If you want to block truly egregious content, add a minimal forbidden list here.)
-  // Example:
-  // const forbidden = /(hate speech|illegal|child|terrorism)/i;
-  // if (forbidden.test(data.prompt)) {
-  //   errors.push('AI prompt contains forbidden content');
-  // }
-
-  // Sanitize data
+  // Ensure required fields exist with defaults
   const sanitizedData = {
-    ...data,
     prompt: data.prompt ? sanitizeString(data.prompt) : '',
+    campaignId: data.campaignId || data.sessionId || 'sentient-ai-session', // Support multiple ID formats
+    playerName: data.playerName || 'Player',
     context: data.context && typeof data.context === 'object' ? data.context : {},
     character: data.character && typeof data.character === 'object' ? data.character : {},
     worldState: data.worldState && typeof data.worldState === 'object' ? data.worldState : {},
     timestamp: typeof data.timestamp === 'number' ? data.timestamp : Date.now(),
-    rating: data.rating || 'PG-13', // Pass through rating if provided
+    rating: data.rating || 'PG-13',
+    sessionType: data.sessionType || 'standard' // Support different session types
   };
+
+  // Basic security validation (minimal for creative RPG content)
+  const safetyPatterns = [
+    /\b(kill\s+(?:yourself|myself))\b/i, // Self-harm
+    /\b(real\s+(?:address|location|phone))\b/i, // Personal info requests
+    /\b(credit\s+card|social\s+security)\b/i // Financial info
+  ];
+
+  if (data.prompt && safetyPatterns.some(pattern => pattern.test(data.prompt))) {
+    errors.push('AI prompt contains content that violates safety guidelines');
+  }
 
   return {
     isValid: errors.length === 0,
