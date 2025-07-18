@@ -356,7 +356,7 @@ exports.aiDungeonMaster = functions.https.onCall(async (data, context) => {
 });
 // Export the main logic as a separate function for reuse
 async function handleAIDungeonMasterLogic(data, context) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     const startTime = Date.now();
     let userId = 'anonymous';
     let campaignId = 'unknown';
@@ -371,10 +371,22 @@ async function handleAIDungeonMasterLogic(data, context) {
         logAIRequest(userId, data.campaignId || 'unknown', ((_a = data.prompt) === null || _a === void 0 ? void 0 : _a.length) || 0, Date.now() - startTime, false, 'Rate limit exceeded');
         throw new functions.https.HttpsError('resource-exhausted', `Rate limit exceeded. You can make ${rateLimit.requests} AI requests per minute. Please wait before making another request.`);
     }
+    // Enhanced logging for debugging
+    console.log('🔍 AI Dungeon Master - Received data:', JSON.stringify({
+        hasPrompt: !!data.prompt,
+        hasCampaignId: !!data.campaignId,
+        hasPlayerName: !!data.playerName,
+        hasContext: !!data.context,
+        promptLength: ((_b = data.prompt) === null || _b === void 0 ? void 0 : _b.length) || 0,
+        campaignId: data.campaignId,
+        dataKeys: Object.keys(data || {})
+    }));
     // Validate input data
     const validation = (0, validation_1.validateAIPrompt)(data);
     if (!validation.isValid) {
-        logAIRequest(userId, data.campaignId || 'unknown', ((_b = data.prompt) === null || _b === void 0 ? void 0 : _b.length) || 0, Date.now() - startTime, false, `Validation failed: ${validation.errors.join(', ')}`);
+        console.error('❌ Validation failed for data:', JSON.stringify(data, null, 2));
+        console.error('❌ Validation errors:', validation.errors);
+        logAIRequest(userId, data.campaignId || 'unknown', ((_c = data.prompt) === null || _c === void 0 ? void 0 : _c.length) || 0, Date.now() - startTime, false, `Validation failed: ${validation.errors.join(', ')}`);
         throw new functions.https.HttpsError('invalid-argument', `Invalid AI prompt data: ${validation.errors.join(', ')}`);
     }
     const { prompt, playerName, rating } = validation.sanitizedData;
@@ -397,7 +409,7 @@ async function handleAIDungeonMasterLogic(data, context) {
             }
             campaignData = campaignSnap.data();
             // Verify user is a participant in the campaign
-            if (!((_c = campaignData === null || campaignData === void 0 ? void 0 : campaignData.participants) === null || _c === void 0 ? void 0 : _c[userId]) && !((_d = campaignData === null || campaignData === void 0 ? void 0 : campaignData.players) === null || _d === void 0 ? void 0 : _d.some((p) => p.id === userId))) {
+            if (!((_d = campaignData === null || campaignData === void 0 ? void 0 : campaignData.participants) === null || _d === void 0 ? void 0 : _d[userId]) && !((_e = campaignData === null || campaignData === void 0 ? void 0 : campaignData.players) === null || _e === void 0 ? void 0 : _e.some((p) => p.id === userId))) {
                 logAIRequest(userId, campaignId, prompt.length, Date.now() - startTime, false, 'User not participant in campaign');
                 throw new functions.https.HttpsError('permission-denied', 'You are not a participant in this campaign');
             }

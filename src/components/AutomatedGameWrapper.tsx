@@ -28,6 +28,7 @@ export const AutomatedGameWrapper: React.FC<AutomatedGameWrapperProps> = ({ user
   const [showConfig, setShowConfig] = useState(false);
   const [showSessions, setShowSessions] = useState(false);
   const [showPersisted, setShowPersisted] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);
   const [inputMessage, setInputMessage] = useState('');
   const [isAIThinking, setIsAIThinking] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -82,13 +83,9 @@ export const AutomatedGameWrapper: React.FC<AutomatedGameWrapperProps> = ({ user
     setIsAIThinking(true);
     
     try {
-      const success = await sendMessage(currentSession.id, inputMessage);
-      if (success) {
-        setInputMessage('');
-        console.log('✅ Message sent successfully');
-      } else {
-        console.error('❌ Failed to send message');
-      }
+      await sendMessage(inputMessage);
+      setInputMessage('');
+      console.log('✅ Message sent successfully');
     } catch (error) {
       console.error('❌ Error sending message:', error);
     } finally {
@@ -109,8 +106,94 @@ export const AutomatedGameWrapper: React.FC<AutomatedGameWrapperProps> = ({ user
     if (!currentSession) return;
     
     if (window.confirm('Are you sure you want to leave this adventure? Your progress is saved and you can resume later.')) {
-      await leaveSession(currentSession.id);
+      leaveSession();
     }
+  };
+
+  // Helper functions for quick start and session management
+  const handleQuickStartFantasy = async () => {
+    const quickConfig: AutomatedGameConfig = {
+      realm: 'Fantasy',
+      theme: 'Epic Adventure',
+      maxPlayers: 4,
+      sessionDuration: 60,
+      autoStart: true,
+      dmStyle: 'balanced' as const,
+      rating: 'PG-13' as const
+    };
+    await handleCreateAndJoinSession(quickConfig);
+  };
+
+  const handleQuickStartSciFi = async () => {
+    const quickConfig: AutomatedGameConfig = {
+      realm: 'Sci-Fi',
+      theme: 'Space Exploration',
+      maxPlayers: 4,
+      sessionDuration: 60,
+      autoStart: true,
+      dmStyle: 'narrative' as const,
+      rating: 'PG-13' as const
+    };
+    await handleCreateAndJoinSession(quickConfig);
+  };
+
+  const handleCreateAndJoinSession = async (config: AutomatedGameConfig) => {
+    if (!user) return;
+    
+    try {
+      setLocalLoading(true);
+      console.log('🎮 Quick start: Creating session with config:', config);
+      
+      const sessionId = await createSession(config);
+      if (sessionId) {
+        console.log('🎮 Quick start: Session created, auto-joining...');
+        // The hook will automatically detect the new session and set it as current
+      }
+    } catch (error) {
+      console.error('❌ Quick start failed:', error);
+    } finally {
+      setLocalLoading(false);
+    }
+  };
+
+  const handleJoinSessionLocal = async (sessionId: string) => {
+    if (!user) return;
+    
+    try {
+      setLocalLoading(true);
+      const session = await joinSession(sessionId);
+      if (session) {
+        console.log('✅ Joined session successfully');
+      }
+    } catch (error) {
+      console.error('❌ Failed to join session:', error);
+    } finally {
+      setLocalLoading(false);
+    }
+  };
+
+  const getRealmIcon = (realm: string): string => {
+    const icons: Record<string, string> = {
+      'Fantasy': '🏰',
+      'Sci-Fi': '🚀',
+      'Post-Apocalyptic': '☢️',
+      'Medieval': '⚔️',
+      'Cyberpunk': '🌃',
+      'Horror': '🎃',
+      'Steampunk': '⚙️'
+    };
+    return icons[realm] || '🎮';
+  };
+
+  const getPhaseColor = (phase: string): string => {
+    const colors: Record<string, string> = {
+      'waiting': 'bg-yellow-600 text-yellow-100',
+      'introduction': 'bg-blue-600 text-blue-100',
+      'exploration': 'bg-green-600 text-green-100',
+      'combat': 'bg-red-600 text-red-100',
+      'resolution': 'bg-purple-600 text-purple-100'
+    };
+    return colors[phase] || 'bg-gray-600 text-gray-100';
   };
 
   // If we have a current session, show the game interface
@@ -238,7 +321,7 @@ export const AutomatedGameWrapper: React.FC<AutomatedGameWrapperProps> = ({ user
               {sessions.slice(0, 6).map((session) => (
                 <button
                   key={session.id}
-                  onClick={() => handleJoinSession(session.id)}
+                                        onClick={() => handleJoinSessionLocal(session.id)}
                   className="p-4 bg-slate-800/50 hover:bg-slate-700/50 rounded-lg border border-slate-700/50 transition-all text-left"
                   disabled={isLoading}
                 >
@@ -341,86 +424,4 @@ export const AutomatedGameWrapper: React.FC<AutomatedGameWrapperProps> = ({ user
     </div>
   );
 
-  // Helper functions
-  const handleQuickStartFantasy = async () => {
-    const quickConfig = {
-      realm: 'Fantasy',
-      theme: 'Epic Adventure',
-      maxPlayers: 4,
-      sessionDuration: 60,
-      autoStart: true,
-      dmStyle: 'balanced',
-      rating: 'PG-13' as const
-    };
-    await handleCreateAndJoinSession(quickConfig);
-  };
-
-  const handleQuickStartSciFi = async () => {
-    const quickConfig = {
-      realm: 'Sci-Fi',
-      theme: 'Space Exploration',
-      maxPlayers: 4,
-      sessionDuration: 60,
-      autoStart: true,
-      dmStyle: 'narrative',
-      rating: 'PG-13' as const
-    };
-    await handleCreateAndJoinSession(quickConfig);
-  };
-
-  const handleCreateAndJoinSession = async (config: AutomatedGameConfig) => {
-    if (!user) return;
-    
-    try {
-      setIsLoading(true);
-      console.log('🎮 Quick start: Creating session with config:', config);
-      
-      const sessionId = await createSession(config);
-      if (sessionId) {
-        console.log('🎮 Quick start: Session created, auto-joining...');
-        // The hook will automatically detect the new session and set it as current
-      }
-    } catch (error) {
-      console.error('❌ Quick start failed:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleJoinSession = async (sessionId: string) => {
-    if (!user) return;
-    
-    try {
-      setIsLoading(true);
-      await joinSession(sessionId);
-    } catch (error) {
-      console.error('❌ Failed to join session:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const getRealmIcon = (realm: string): string => {
-    const icons: Record<string, string> = {
-      'Fantasy': '🏰',
-      'Sci-Fi': '🚀',
-      'Post-Apocalyptic': '☢️',
-      'Medieval': '⚔️',
-      'Cyberpunk': '🌃',
-      'Horror': '🎃',
-      'Steampunk': '⚙️'
-    };
-    return icons[realm] || '🎮';
-  };
-
-  const getPhaseColor = (phase: string): string => {
-    const colors: Record<string, string> = {
-      'waiting': 'bg-yellow-600 text-yellow-100',
-      'introduction': 'bg-blue-600 text-blue-100',
-      'exploration': 'bg-green-600 text-green-100',
-      'combat': 'bg-red-600 text-red-100',
-      'resolution': 'bg-purple-600 text-purple-100'
-    };
-    return colors[phase] || 'bg-gray-600 text-gray-100';
-  };
 }; 

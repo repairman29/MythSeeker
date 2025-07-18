@@ -276,59 +276,7 @@ class EnhancedEmbeddingsMemoryService {
     }
   }
 
-  /**
-   * Enhanced semantic similarity search with OpenAI quality
-   */
-  async retrieveRelevantMemories(
-    query: string, 
-    options: SemanticQueryOptions = {}
-  ): Promise<SemanticMemory[]> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
 
-    try {
-      // Generate query embedding
-      const queryEmbedding = await this.generateEmbeddings(query);
-      
-      // Find similar memories
-      const similarities: Array<{ memory: SemanticMemory; similarity: number }> = [];
-      
-      for (const [memoryId, memory] of this.memories.entries()) {
-        // Apply context filters if specified
-        if (this.matchesFilters(memory, options.contextFilters)) {
-          const similarity = this.cosineSimilarity(queryEmbedding, memory.embedding);
-          
-          if (similarity >= (options.threshold || 0.7)) {
-            similarities.push({ memory, similarity });
-          }
-        }
-      }
-
-      // Sort by similarity and importance
-      similarities.sort((a, b) => {
-        const similarityDiff = b.similarity - a.similarity;
-        if (Math.abs(similarityDiff) < 0.05) {
-          // If similarity is close, prefer more important memories
-          return b.memory.importance - a.memory.importance;
-        }
-        return similarityDiff;
-      });
-
-      const relevantMemories = similarities
-        .slice(0, options.limit || 5)
-        .map(item => ({
-          ...item.memory,
-          similarityScore: item.similarity
-        }));
-
-      console.log(`🔍 Enhanced retrieval found ${relevantMemories.length} relevant memories with OpenAI quality`);
-      return relevantMemories;
-    } catch (error) {
-      console.error('Failed to retrieve memories:', error);
-      return [];
-    }
-  }
 
   /**
    * Store an interaction (player input + AI response) as contextual memories
