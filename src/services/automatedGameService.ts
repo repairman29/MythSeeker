@@ -473,15 +473,27 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
 
   // Handle player input and generate DM response
   async processPlayerInput(sessionId: string, playerId: string, input: string): Promise<GameMessage> {
+    console.log('🎯 AutomatedGameService: processPlayerInput called');
+    console.log('📋 Session ID:', sessionId);
+    console.log('👤 Player ID:', playerId);
+    console.log('💬 Input:', input);
+
     const session = this.activeSessions.get(sessionId);
     if (!session) {
+      console.error('❌ Session not found:', sessionId);
       throw new Error('Session not found');
     }
 
+    console.log('✅ Session found. Current phase:', session.currentPhase);
+    console.log('🤖 AI Party Members:', session.aiPartyMembers?.length || 0);
+
     const player = session.players.find(p => p.id === playerId);
     if (!player) {
+      console.error('❌ Player not found in session:', playerId);
       throw new Error('Player not found in session');
     }
+
+    console.log('✅ Player found:', player.name);
 
     // Add player message
     const playerMessage: GameMessage = {
@@ -492,16 +504,22 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
       timestamp: Date.now()
     };
     session.messages.push(playerMessage);
+    console.log('✅ Player message added');
 
     // Update AI party member relationships based on player action
     this.updateAIRelationships(session, playerId, input);
+    console.log('✅ AI relationships updated');
 
     // Generate AI party member interactions first
+    console.log('🤖 Generating AI party interactions...');
     const aiInteractions = await this.generateAIPartyInteractions(sessionId, input);
+    console.log('🤖 AI interactions generated:', aiInteractions.length);
     session.messages.push(...aiInteractions);
 
     // Generate DM response based on current phase and context
+    console.log('🎭 Generating DM response...');
     const dmResponse = await this.generateDMResponse(session, player, input);
+    console.log('🎭 DM response generated');
     
     const dmMessage: GameMessage = {
       id: `msg_${Date.now()}`,
@@ -511,6 +529,7 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
       metadata: { phase: session.currentPhase }
     };
     session.messages.push(dmMessage);
+    console.log('✅ DM message added. Total messages:', session.messages.length);
 
     return dmMessage;
   }
@@ -993,8 +1012,19 @@ RESPONSE FORMAT:
 
   // Generate AI party member interactions
   async generateAIPartyInteractions(sessionId: string, context: string): Promise<GameMessage[]> {
+    console.log('🎮 generateAIPartyInteractions called with context:', context);
+    
     const session = this.activeSessions.get(sessionId);
-    if (!session) return [];
+    if (!session) {
+      console.log('❌ No session found for AI interactions');
+      return [];
+    }
+
+    console.log('🤖 Total AI party members:', session.aiPartyMembers?.length || 0);
+    if (!session.aiPartyMembers || session.aiPartyMembers.length === 0) {
+      console.log('❌ No AI party members in session');
+      return [];
+    }
 
     const interactions: GameMessage[] = [];
     const now = Date.now();
@@ -1005,14 +1035,22 @@ RESPONSE FORMAT:
       const shouldSpeak = timeSinceLastSpoke > 30000 || // 30 seconds minimum
                          this.shouldRespondToContext(member, context) ||
                          Math.random() < 0.3; // 30% chance to interject
+      
+      console.log(`🤖 ${member.name}: timeSinceLastSpoke=${timeSinceLastSpoke}ms, shouldRespond=${this.shouldRespondToContext(member, context)}, shouldSpeak=${shouldSpeak}`);
       return shouldSpeak;
     });
 
+    console.log('🎯 Active members who should speak:', activeMembers.map(m => m.name));
+
     // Limit to 1-2 AI responses to avoid spam
     const respondingMembers = activeMembers.slice(0, Math.random() < 0.7 ? 1 : 2);
+    console.log('📝 Final responding members:', respondingMembers.map(m => m.name));
 
     for (const member of respondingMembers) {
+      console.log(`🤖 Generating response for ${member.name}...`);
       const response = await this.generateAIResponse(member, context, session);
+      console.log(`🤖 ${member.name} response:`, response ? `"${response.substring(0, 50)}..."` : 'null');
+      
       if (response) {
         const message: GameMessage = {
           id: `ai_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -1031,9 +1069,11 @@ RESPONSE FORMAT:
         if (member.conversationContext.length > 5) {
           member.conversationContext.shift();
         }
+        console.log(`✅ Added ${member.name} message to interactions`);
       }
     }
 
+    console.log(`🎯 Total AI interactions generated: ${interactions.length}`);
     return interactions;
   }
 

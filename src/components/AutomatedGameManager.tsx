@@ -107,17 +107,23 @@ export const AutomatedGameManager: React.FC<AutomatedGameManagerProps> = ({ onSe
   const sendMessage = async () => {
     if (!selectedSession || !playerInput.trim() || !user) return;
 
+    console.log('🎮 AutomatedGameManager: Sending message:', playerInput);
+    console.log('🎮 Session ID:', selectedSession.id);
+    console.log('🎮 User ID:', user.uid);
+
     try {
-      await automatedGameService.processPlayerInput(selectedSession.id, user.uid, playerInput);
+      const result = await automatedGameService.processPlayerInput(selectedSession.id, user.uid, playerInput);
+      console.log('🎮 Message processing result:', result);
       setPlayerInput('');
       
       // Refresh session data
       const updatedSession = automatedGameService.getSession(selectedSession.id);
       if (updatedSession) {
+        console.log('🎮 Updated session messages count:', updatedSession.messages.length);
         setSelectedSession(updatedSession);
       }
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('❌ Error sending message:', error);
     }
   };
 
