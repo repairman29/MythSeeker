@@ -4954,17 +4954,34 @@ const DashboardWrapper: React.FC<{ user: any }> = ({ user }) => {
   );
 };
 
-// Game Wrapper Component (for the main game interface)
+// Game Wrapper Component (for the main game interface) - Now uses UniversalGameInterface
 const GameWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const location = useLocation();
+  const { state } = location;
+  
   const handleSignOut = () => {
     // This will trigger the auth state change and redirect to landing page
   };
+
+  const handleBackToLobby = () => {
+    window.location.href = '/dashboard';
+  };
+
+  // Determine if this is for a campaign or automated game based on state or URL
+  const gameType = state?.campaignId ? 'campaign' : 'automated';
+  const gameId = state?.campaignId || state?.sessionId || 'default-game';
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
       <div className="flex-1 overflow-auto md:pb-0 pb-20">
-        <AIDungeonMaster initialScreen="game" />
+        <UniversalGameInterface
+          gameType={gameType}
+          gameId={gameId}
+          user={user}
+          onBackToLobby={handleBackToLobby}
+          showManager={gameType === 'automated'}
+        />
       </div>
     </div>
   );
