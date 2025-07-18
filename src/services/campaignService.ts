@@ -201,6 +201,39 @@ export class CampaignService {
   }
 
   /**
+   * Get campaign by ID from memory or storage
+   */
+  async getCampaign(campaignId: string): Promise<CampaignData> {
+    // Try memory first
+    let campaign = this.campaigns.get(campaignId);
+    if (campaign) {
+      return campaign;
+    }
+
+    // Try localStorage
+    const localCampaigns = this.loadFromLocalStorage();
+    campaign = localCampaigns.find(c => c.id === campaignId);
+    if (campaign) {
+      this.campaigns.set(campaignId, campaign);
+      return campaign;
+    }
+
+    // Try Firebase for multiplayer campaigns
+    try {
+      const firebaseCampaigns = await firebaseService.getUserCampaigns();
+      campaign = firebaseCampaigns.find(c => c.id === campaignId);
+      if (campaign) {
+        this.campaigns.set(campaignId, campaign);
+        return campaign;
+      }
+    } catch (error) {
+      console.warn('Failed to search Firebase campaigns:', error);
+    }
+
+    throw new Error(`Campaign not found: ${campaignId}`);
+  }
+
+  /**
    * Enhanced campaign message handling with universal AI context
    */
   async sendMessage(
