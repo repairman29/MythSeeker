@@ -50,7 +50,8 @@ export const CharacterProgression: React.FC<CharacterProgressionProps> = ({
     try {
       const result = await characterProgressionService.addExperience(characterId, amount, {
         type: type as any,
-        description
+        description,
+        amount
       });
 
       if (result.leveledUp && result.levelUpData) {
@@ -225,19 +226,22 @@ const OverviewTab: React.FC<{
     <div className="space-y-6">
       {/* Ability Scores */}
       <div>
-        <h3 className="text-lg font-semibold mb-4">Ability Scores</h3>
+        <h3 className="text-lg font-semibold text-white mb-4">Ability Scores</h3>
         <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
           {Object.entries(progression.abilityScores).map(([ability, scores]) => (
-            <div key={ability} className="text-center p-3 border rounded-lg">
-              <div className="text-xs uppercase text-gray-500 mb-1">
+            <div key={ability} className="text-center p-4 bg-white/5 border border-white/20 rounded-lg hover:bg-white/10 transition-all transform hover:scale-105 cursor-pointer group">
+              <div className="text-xs uppercase text-blue-300 mb-1 group-hover:text-blue-200 transition-colors">
                 {ability.slice(0, 3)}
               </div>
-              <div className="text-2xl font-bold text-purple-600">
+              <div className="text-2xl font-bold text-purple-400 group-hover:text-purple-300 transition-colors">
                 {scores.total}
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-blue-200 group-hover:text-white transition-colors">
                 {getAbilityModifier(scores.total) >= 0 ? '+' : ''}
                 {getAbilityModifier(scores.total)}
+              </div>
+              <div className="text-xs text-gray-400 mt-1">
+                Base: {scores.base}
               </div>
             </div>
           ))}
@@ -246,30 +250,30 @@ const OverviewTab: React.FC<{
 
       {/* Character Stats */}
       <div className="grid md:grid-cols-2 gap-6">
-        <div>
-          <h3 className="text-lg font-semibold mb-4">Character Statistics</h3>
+        <div className="bg-white/5 border border-white/20 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Character Statistics</h3>
           <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Hit Points</span>
-              <span className="font-medium">
+            <div className="flex justify-between items-center p-2 rounded hover:bg-white/5 transition-colors">
+              <span className="text-blue-200">Hit Points</span>
+              <span className="font-medium text-white">
                 {progression.hitPoints.current} / {progression.hitPoints.max}
               </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Proficiency Bonus</span>
-              <span className="font-medium">+{getProficiencyBonus(progression.level)}</span>
+            <div className="flex justify-between items-center p-2 rounded hover:bg-white/5 transition-colors">
+              <span className="text-blue-200">Proficiency Bonus</span>
+              <span className="font-medium text-white">+{getProficiencyBonus(progression.level)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Hit Die</span>
-              <span className="font-medium">{progression.class.hitDie}</span>
+            <div className="flex justify-between items-center p-2 rounded hover:bg-white/5 transition-colors">
+              <span className="text-blue-200">Hit Die</span>
+              <span className="font-medium text-white">{progression.class.hitDie}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Class Features</span>
-              <span className="font-medium">{progression.classFeatures.length}</span>
+            <div className="flex justify-between items-center p-2 rounded hover:bg-white/5 transition-colors">
+              <span className="text-blue-200">Class Features</span>
+              <span className="font-medium text-white">{progression.classFeatures.length}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Feats</span>
-              <span className="font-medium">{progression.feats.length}</span>
+            <div className="flex justify-between items-center p-2 rounded hover:bg-white/5 transition-colors">
+              <span className="text-blue-200">Feats</span>
+              <span className="font-medium text-white">{progression.feats.length}</span>
             </div>
           </div>
         </div>
@@ -278,73 +282,117 @@ const OverviewTab: React.FC<{
           <h3 className="text-lg font-semibold mb-4">Experience Management</h3>
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-white mb-1">
                 Experience Amount
               </label>
               <input
                 type="number"
                 value={xpAmount}
                 onChange={(e) => setXpAmount(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                placeholder="0"
+                className="w-full px-3 py-2 bg-black/20 border border-white/30 rounded-md text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                placeholder="Enter XP amount (e.g. 100)"
               />
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-white mb-1">
                 Source Type
               </label>
               <select
                 value={xpType}
                 onChange={(e) => setXpType(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full px-3 py-2 bg-black/20 border border-white/30 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
               >
-                <option value="combat">Combat</option>
-                <option value="roleplay">Roleplay</option>
-                <option value="discovery">Discovery</option>
-                <option value="quest">Quest Completion</option>
-                <option value="milestone">Milestone</option>
-                <option value="bonus">Bonus</option>
+                <option value="combat" className="bg-gray-800 text-white">⚔️ Combat</option>
+                <option value="roleplay" className="bg-gray-800 text-white">🎭 Roleplay</option>
+                <option value="discovery" className="bg-gray-800 text-white">🔍 Discovery</option>
+                <option value="quest" className="bg-gray-800 text-white">📜 Quest Completion</option>
+                <option value="milestone" className="bg-gray-800 text-white">🏆 Milestone</option>
+                <option value="bonus" className="bg-gray-800 text-white">⭐ Bonus</option>
               </select>
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-white mb-1">
                 Description
               </label>
               <input
                 type="text"
                 value={xpDescription}
                 onChange={(e) => setXpDescription(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                placeholder="Defeated goblin warband"
+                className="w-full px-3 py-2 bg-black/20 border border-white/30 rounded-md text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                placeholder="e.g. Defeated goblin warband"
               />
             </div>
             
             <button
               onClick={handleAddXP}
               disabled={!xpAmount || !xpDescription.trim()}
-              className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-3 px-4 rounded-md hover:from-purple-700 hover:to-purple-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105 font-semibold shadow-lg"
             >
-              Add Experience
+              {xpAmount && xpDescription.trim() ? `Add ${xpAmount} XP` : 'Add Experience'}
             </button>
+            
+            {/* Quick XP Buttons */}
+            <div className="grid grid-cols-4 gap-2 mt-4">
+              <button
+                onClick={() => {
+                  setXpAmount('50');
+                  setXpType('combat');
+                  setXpDescription('Minor encounter');
+                }}
+                className="px-2 py-1 bg-red-600/20 border border-red-500/30 rounded text-red-300 text-xs hover:bg-red-600/30 transition-colors"
+              >
+                +50 Combat
+              </button>
+              <button
+                onClick={() => {
+                  setXpAmount('100');
+                  setXpType('roleplay');
+                  setXpDescription('Good roleplay');
+                }}
+                className="px-2 py-1 bg-green-600/20 border border-green-500/30 rounded text-green-300 text-xs hover:bg-green-600/30 transition-colors"
+              >
+                +100 RP
+              </button>
+              <button
+                onClick={() => {
+                  setXpAmount('200');
+                  setXpType('quest');
+                  setXpDescription('Quest completed');
+                }}
+                className="px-2 py-1 bg-blue-600/20 border border-blue-500/30 rounded text-blue-300 text-xs hover:bg-blue-600/30 transition-colors"
+              >
+                +200 Quest
+              </button>
+              <button
+                onClick={() => {
+                  setXpAmount('500');
+                  setXpType('milestone');
+                  setXpDescription('Major milestone');
+                }}
+                className="px-2 py-1 bg-yellow-600/20 border border-yellow-500/30 rounded text-yellow-300 text-xs hover:bg-yellow-600/30 transition-colors"
+              >
+                +500 Epic
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Recent Experience */}
       <div>
-        <h3 className="text-lg font-semibold mb-4">Recent Experience</h3>
+        <h3 className="text-lg font-semibold text-white mb-4">Recent Experience</h3>
         <div className="space-y-2 max-h-64 overflow-y-auto">
           {progression.experience.sources.slice(-10).reverse().map((source, index) => (
-            <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+            <div key={index} className="flex justify-between items-center p-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors">
               <div>
-                <p className="font-medium">{source.description}</p>
-                <p className="text-sm text-gray-600 capitalize">{source.type}</p>
+                <p className="font-medium text-white">{source.description}</p>
+                <p className="text-sm text-blue-300 capitalize">📍 {source.type}</p>
               </div>
               <div className="text-right">
-                <p className="font-bold text-green-600">+{source.amount} XP</p>
-                <p className="text-xs text-gray-500">
+                <p className="font-bold text-green-400">+{source.amount} XP</p>
+                <p className="text-xs text-gray-400">
                   {new Date(source.timestamp).toLocaleDateString()}
                 </p>
               </div>
