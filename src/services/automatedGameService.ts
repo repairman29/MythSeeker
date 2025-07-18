@@ -1041,9 +1041,24 @@ ${recentMessages}
 
 Current situation: ${context}
 
-Respond as ${member.name} in character. Keep responses 1-2 sentences, conversational, and true to your personality. Sometimes ask questions, offer help, make observations, or show concern for party members. Don't just repeat what others say.`;
+Respond as ${member.name} in character. Keep responses 1-2 sentences, conversational, and true to your personality. Sometimes ask questions, offer help, make observations, or show concern for party members. Don't just repeat what others say.
+
+IMPORTANT: Respond with ONLY the character's dialogue as plain text. Do not include JSON formatting, quotes, or any other markup.`;
 
       const response = await aiService.complete(prompt);
+      
+      // Try to parse JSON response and extract narrative if it's structured
+      try {
+        const parsed = JSON.parse(response || '{}');
+        if (parsed.narrative) {
+          return parsed.narrative;
+        } else if (typeof parsed === 'string') {
+          return parsed;
+        }
+      } catch (parseError) {
+        // If not JSON, treat as plain text
+      }
+      
       return response || null;
     } catch (error) {
       console.error('Error generating AI response:', error);
@@ -1090,10 +1105,10 @@ Respond as ${member.name} in character. Keep responses 1-2 sentences, conversati
         "We need to approach this tactically."
       ],
       'Scavenger': [
-        "Might be something useful here.",
-        "I've seen worse than this.",
-        "Anyone need supplies? I've got extras.",
-        "This place has been picked over already."
+        "Heard something out there... could be trouble.",
+        "My scavenging instincts are tingling. Something's not right.",
+        "I've got some gear if you need it, but we should stay alert.",
+        "This place gives me the creeps. Let's watch each other's backs."
       ],
       'Knight': [
         "Honor demands we help those in need.",
