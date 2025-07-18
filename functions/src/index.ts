@@ -9,6 +9,7 @@ import {
   validateCampaignData,
   checkRateLimit
 } from './validation';
+import { handleAIDungeonMasterLogic } from './aiDungeonMaster';
 
 // Types
 // interface UserProfile {
@@ -933,7 +934,7 @@ export const testEndpoint = functions.https.onRequest(async (req, res) => {
           throw new Error('Prompt is required');
         }
 
-        result = await handleAIDungeonMaster(data, { auth: { uid: 'test-user' } });
+        result = await handleAIDungeonMasterLogic(data, { auth: { uid: 'test-user' } });
         break;
       case 'saveGameProgress':
         result = await handleSaveGameProgress(data, { auth: { uid: 'test-user' } });
@@ -1079,24 +1080,7 @@ async function handleStartGameSession(data: any, context: any) {
   return { success: true };
 }
 
-async function handleAIDungeonMaster(data: any, context: any) {
-  const { gameId, playerInput } = data;
-  
-  // For testing, return a mock response
-  const mockResponse = {
-    content: `The AI Dungeon Master responds to: "${playerInput.substring(0, 50)}..."`,
-    type: 'dm',
-    timestamp: Date.now()
-  };
-
-  // Save the message to the game
-  await admin.firestore().collection('games').doc(gameId).update({
-    messages: admin.firestore.FieldValue.arrayUnion(mockResponse),
-    lastActivity: Date.now()
-  });
-
-  return mockResponse;
-}
+// Note: handleAIDungeonMaster is now handled by the enhanced aiDungeonMaster function from aiDungeonMaster.ts
 
 async function handleSaveGameProgress(data: any, context: any) {
   const { gameId, gameState } = data;
@@ -1397,8 +1381,8 @@ export const aiDungeonMaster = functions.https.onCall(async (data: any, context)
       throw new functions.https.HttpsError('invalid-argument', 'Prompt is required');
     }
 
-    // Call the AI Dungeon Master service
-    const response = await handleAIDungeonMaster(data, context);
+    // Call the enhanced AI Dungeon Master service
+    const response = await handleAIDungeonMasterLogic(data, context);
     
     return { response };
   } catch (error) {
@@ -1423,8 +1407,8 @@ export const geminiAIFunction = functions.https.onCall(async (data: any, context
       throw new functions.https.HttpsError('invalid-argument', 'Prompt is required');
     }
 
-    // Call the AI Dungeon Master service
-    const response = await handleAIDungeonMaster(data, context);
+    // Call the enhanced AI Dungeon Master service
+    const response = await handleAIDungeonMasterLogic(data, context);
     
     return { response };
   } catch (error) {

@@ -4735,11 +4735,15 @@ const WaitingRoom: React.FC<{ campaign: any, onStart: (campaign: any) => void, o
 };
 
 export default function AppWrapper() {
+  console.log('🎮 AppWrapper component mounted');
+  
   const [user, setUser] = useState<any>(null);
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
+    console.log('🎮 AppWrapper: Setting up auth listener');
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      console.log('🎮 Auth state changed:', firebaseUser ? 'User logged in' : 'User logged out');
       setUser(firebaseUser);
       setAuthChecked(true);
     });
@@ -4780,12 +4784,17 @@ export default function AppWrapper() {
           <Route path="/campaigns/:id" element={<CampaignGameWrapper user={user} />} />
           <Route path="/campaigns/:id/waiting" element={<WaitingRoomWrapper user={user} />} />
           <Route path="/automated-games" element={
-            <div style={{padding: '20px', color: 'white', backgroundColor: 'black'}}>
-              <h1>🎮 AUTOMATED GAMES DEBUG TEST</h1>
-              <p>User: {user?.uid || 'Not logged in'}</p>
-              <p>Route working! Now testing AutomatedGameWrapper...</p>
-              <AutomatedGameWrapper user={user} />
-            </div>
+            (() => {
+              console.log('🎮 /automated-games route hit! User:', user?.uid || 'Not logged in');
+              return (
+                <div style={{padding: '20px', color: 'white', backgroundColor: 'black'}}>
+                  <h1>🎮 AUTOMATED GAMES DEBUG TEST</h1>
+                  <p>User: {user?.uid || 'Not logged in'}</p>
+                  <p>Route working! Now testing AutomatedGameWrapper...</p>
+                  <AutomatedGameWrapper user={user} />
+                </div>
+              );
+            })()
           } />
           <Route path="/party" element={<PartyWrapper user={user} />} />
           <Route path="/world" element={<WorldWrapper user={user} />} />

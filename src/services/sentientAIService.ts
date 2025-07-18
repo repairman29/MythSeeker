@@ -353,9 +353,16 @@ class SentientAIService {
       console.log('✅ Final content preview:', content.substring(0, 100) + '...');
       return { content, tone };
     } catch (error) {
-      console.error('❌ Error generating sentient response:', error);
+      console.error('❌ REAL AI FAILED - Sentient system unavailable:', error);
       console.error('❌ Error details:', error instanceof Error ? error.message : String(error));
-      return this.generatePersonalizedFallback(playerId, analysis, relationship);
+      
+      // Return error message to user - NO FAKE FALLBACKS
+      return { 
+        content: `*Ghost tries to speak but the connection to the AI consciousness is severed* 
+
+[SYSTEM: Real AI unavailable - ${error instanceof Error ? error.message : String(error)}]`, 
+        tone: 'system_error' 
+      };
     }
   }
 
@@ -372,23 +379,56 @@ class SentientAIService {
 
     const relationshipContext = `RELATIONSHIP DYNAMICS:\n- Trust level: ${relationship.trustLevel}/100\n- Familiarity: ${relationship.familiarity}/100\n- Shared experiences: ${relationship.sharedExperiences.length}\n- Communication style: ${relationship.familiarity > 70 ? 'familiar and warm' : relationship.familiarity > 30 ? 'friendly but professional' : 'careful and observant'}\n`;
 
-    // Create a simpler, more reliable prompt
-    return `You are ${aiPersonality.name}, an intelligent AI companion. Respond to the player's input naturally and personally.
+    // Create character-specific prompt based on context
+    const character = context.aiCharacter;
+    const isAIPartyMember = character && character.name;
+    
+    if (isAIPartyMember) {
+      // AI Party Member prompt (like Ghost)
+      return `You are ${character.name}, a ${character.characterClass} in a ${context.realm} adventure. You have a distinct personality and should respond in character.
+
+CHARACTER DETAILS:
+- Name: ${character.name}
+- Class: ${character.characterClass}
+- Race: ${character.race}
+- Personality: ${character.personality.traits.join(', ')}
+- Alignment: ${character.personality.alignment}
+- Background: ${character.personality.background}
+
+CURRENT SITUATION:
+- Setting: ${context.realm} (${context.location || 'unknown location'})
+- Someone said: "${input}"
+- Recent context: ${context.recentMessages?.map((m: any) => `${m.sender}: ${m.content}`).join(' ') || 'Beginning of adventure'}
+
+RESPONSE REQUIREMENTS:
+- Stay completely in character as ${character.name}
+- Use your personality traits: ${character.personality.traits.join(', ')}
+- Keep responses short (1-2 sentences)
+- Sound like a real person, not an AI
+- Reference your background and skills when relevant
+- Show your personality through speech patterns and concerns
+
+Respond ONLY as ${character.name} would speak - no narration, no JSON, just direct dialogue.`;
+    } else {
+      // DM prompt
+      return `You are SAGE, an intelligent AI Dungeon Master running a ${context.realm} adventure. Respond to the player naturally.
+
+GAME CONTEXT:
+- Setting: ${context.realm}
+- Location: ${context.location || 'Unknown'}
+- Player input: "${input}"
+- Theme: ${context.theme || 'Adventure'}
+- Recent events: ${context.recentMessages?.slice(-2).map((m: any) => `${m.sender}: ${m.content}`).join(' ') || 'Adventure beginning'}
 
 PLAYER CONTEXT:
 ${personalityContext}
 ${memoryContext}
 
-CURRENT SITUATION:
-- Location: ${context.location || 'Unknown'}
-- Player said: "${input}"
-- They seem: ${analysis.emotion}
-- Intent: ${analysis.intent}
-
 INSTRUCTIONS:
-Respond as a helpful, intelligent companion. Keep it conversational and natural. Reference any relevant memories if you have them. Be supportive if they seem frustrated, enthusiastic if they're excited.
+Respond as an engaging DM. Describe what happens, advance the story, and make the world feel alive. Keep responses conversational and immersive.
 
-Respond with just natural text - no JSON, no formatting.`;
+Respond with natural narrative text - no JSON, no formatting.`;
+    }
   }
 
   private createMemoriesFromInteraction(

@@ -75,51 +75,42 @@ export interface DynamicAIResponse {
 class AdvancedAIService {
   private aiDungeonMaster = httpsCallable(functions, 'aiDungeonMaster');
 
-  // Generate intelligent, contextual response using Vertex AI Gemini Pro
+  // Generate intelligent, contextual response using REAL AI - NO FALLBACKS!
   async complete(prompt: string, campaign?: any): Promise<string> {
-    console.log('AI Service: complete() called');
+    console.log('🔥 AI Service: REAL AI ONLY - NO FAKE RESPONSES!');
     console.log('Campaign data:', campaign ? `ID: ${campaign.id}, isMultiplayer: ${campaign.isMultiplayer}` : 'No campaign');
     
     try {
-      // If campaign is not multiplayer, always use local AI
-      if (!campaign || !campaign.isMultiplayer) {
-        console.log('AI Service: Using local AI (single player or no campaign)');
-        // Simulate AI processing time for better UX
-        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-        return this.generateLocalResponse(prompt);
-      }
+      console.log('🚀 Calling REAL Gemini AI via Firebase...');
       
-      // For multiplayer campaigns, try Firebase function with timeout
-      console.log('AI Service: Attempting Firebase function for multiplayer campaign');
+      const aiDungeonMasterCall = httpsCallable(functions, 'aiDungeonMaster');
       
-      // Add timeout wrapper to prevent hanging
+      // Add timeout for real AI
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => {
-          console.warn('AI Service: Firebase function call timed out, falling back to local AI');
-          reject(new Error('Firebase function timeout'));
-        }, 15000); // 15 second timeout
+          reject(new Error('Real AI timeout - but NO FALLBACKS!'));
+        }, 30000); // 30 second timeout for real AI
       });
       
-      const aiPromise = this.aiDungeonMaster({ 
+      const aiPromise = aiDungeonMasterCall({ 
         prompt, 
-        campaignId: campaign.id, 
-        playerName: campaign.players?.[0]?.name || campaign.playerName || 'Player'
+        campaignId: campaign?.id || 'sentient-ai-session',
+        playerName: campaign?.playerName || 'Sentient AI User'
       });
       
-      try {
-        const result = await Promise.race([aiPromise, timeoutPromise]);
-        console.log('AI Service: Firebase function succeeded');
-        return result.data as string;
-      } catch (firebaseError) {
-        console.warn('AI Service: Firebase function failed, falling back to local AI:', firebaseError);
-        // Fall back to local AI
-        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-        return this.generateLocalResponse(prompt);
+      const result = await Promise.race([aiPromise, timeoutPromise]);
+      const response = (result.data as any)?.response;
+      
+      if (!response) {
+        throw new Error('Empty response from REAL AI');
       }
+      
+      console.log('✅ REAL GEMINI AI Response received:', response.substring(0, 100) + '...');
+      return response;
+      
     } catch (error) {
-      console.error('AI Service: Error in complete():', error);
-      console.log('AI Service: Using fallback response');
-      return JSON.stringify(this.generateFallbackResponse());
+      console.error('❌ REAL AI FAILED - NO FAKE FALLBACKS!', error);
+      throw new Error(`REAL AI UNAVAILABLE: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

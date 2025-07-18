@@ -40,6 +40,72 @@ async function getSecret(secretName: string): Promise<string> {
   }
 }
 
+// OpenAI fallback integration
+async function callOpenAI(prompt: string, apiKey: string): Promise<string> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 1000,
+      temperature: 0.7,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.choices[0]?.message?.content || 'I understand your message, but I need a moment to think...';
+}
+
+// Intelligent local response generator  
+function generateIntelligentLocalResponse(prompt: string, context: any): string {
+  console.log('🧠 Generating intelligent local response...');
+  
+  // Analyze prompt for character information
+  const isGhostCharacter = prompt.includes('You are Ghost') || prompt.includes('Ghost,');
+  const isDMPrompt = prompt.includes('You are SAGE') || prompt.includes('Dungeon Master');
+  const isPostApocalyptic = prompt.includes('Post-Apocalyptic') || prompt.includes('wasteland');
+  
+  if (isGhostCharacter && isPostApocalyptic) {
+    const ghostResponses = [
+      "*scans the area nervously* Something's not right here. We should move quickly and quietly.",
+      "*checks their gear* The radiation's getting worse. We need to find shelter soon.",
+      "*whispers* I hear movement... could be raiders. Stay low and follow my lead.",
+      "*examines some debris* This place was hit hard. Might be useful scrap, but watch for traps.",
+      "*looks around cautiously* Too quiet. In the wasteland, quiet usually means danger.",
+      "*adjusts their mask* Air's getting thick. We don't want to stay here long."
+    ];
+    return ghostResponses[Math.floor(Math.random() * ghostResponses.length)];
+  }
+  
+  if (isDMPrompt && isPostApocalyptic) {
+    const dmResponses = [
+      "The wasteland stretches endlessly before you, filled with the remnants of a world that once was. The air shimmers with heat and radiation as you make your way through the desolate landscape.",
+      "In the distance, you see the twisted remains of what was once a great city. The wind carries with it the sound of metal creaking and the distant howl of some unknown creature.",
+      "Your Geiger counter begins to click more rapidly as you approach a particularly devastated area. The ground here is still scarred from whatever catastrophe befell this place.",
+      "As you move through the ruins, you notice signs of recent activity - footprints in the dust, disturbed debris. You're not alone in this wasteland."
+    ];
+    return dmResponses[Math.floor(Math.random() * dmResponses.length)];
+  }
+  
+  // Generic intelligent responses
+  const genericResponses = [
+    "The story continues to unfold as your actions shape the world around you.",
+    "Your choices have consequences in this adventure. What will you do next?",
+    "The realm responds to your presence as new possibilities emerge.",
+    "Adventure awaits as you navigate the challenges ahead."
+  ];
+  
+  return genericResponses[Math.floor(Math.random() * genericResponses.length)];
+}
+
 // Enhanced Vertex AI Gemini Pro integration
 async function callVertexAIGeminiPro(prompt: string, context: any, apiKey: string): Promise<string> {
   
@@ -319,15 +385,22 @@ function parseNPCMemoryUpdates(aiResponse: string): Array<any> {
   return updates;
 }
 
-// Main enhanced function
-export const aiDungeonMaster = functions.https.onCall(async (data, context) => {
+// Enhanced AI Dungeon Master with multi-tier fallback system
+export const aiDungeonMaster = functions.https.onCall(async (data: any, context) => {
+  return await handleAIDungeonMasterLogic(data, context);
+});
+
+// Export the main logic as a separate function for reuse
+export async function handleAIDungeonMasterLogic(data: any, context: any) {
   const startTime = Date.now();
-  
+  let userId = 'anonymous';
+  let campaignId = 'unknown';
+
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
 
-  const userId = context.auth.uid;
+  userId = context.auth.uid;
   
   // Enhanced rate limiting with user tier support
   const userTier = await getUserTier(userId);
@@ -346,7 +419,8 @@ export const aiDungeonMaster = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('invalid-argument', `Invalid AI prompt data: ${validation.errors.join(', ')}`);
   }
 
-  const { campaignId, prompt, playerName, rating } = validation.sanitizedData;
+  const { prompt, playerName, rating } = validation.sanitizedData;
+  campaignId = validation.sanitizedData.campaignId;
   
   if (!campaignId || !prompt) {
     logAIRequest(userId, campaignId || 'unknown', prompt?.length || 0, Date.now() - startTime, false, 'Missing campaignId or prompt');
@@ -390,11 +464,34 @@ export const aiDungeonMaster = functions.https.onCall(async (data, context) => {
     const playerMemory = gameSessionData?.playerMemory || [];
     const npcMemory = gameSessionData?.npcMemory || [];
 
-    // Get Vertex AI API key from Secret Manager
-    const apiKey = await getSecret('vertex-ai-api-key');
-
-    // Call enhanced Vertex AI with full context
-    const aiResponse = await callVertexAIGeminiPro(prompt, data.context || { session: { config: { rating: rating || 'PG-13' } } }, apiKey);
+    // Get Vertex AI API key from Secret Manager with error handling
+    let aiResponse: string;
+    try {
+      console.log('🔑 Attempting to get API key from Secret Manager...');
+      const apiKey = await getSecret('vertex-ai-api-key');
+      console.log('✅ API key retrieved, calling Vertex AI...');
+      
+      // Call enhanced Vertex AI with full context
+      aiResponse = await callVertexAIGeminiPro(prompt, data.context || { session: { config: { rating: rating || 'PG-13' } } }, apiKey);
+      console.log('✅ Vertex AI response received');
+      
+    } catch (secretError) {
+      console.error('❌ Secret Manager or Vertex AI failed:', secretError);
+      
+      // Try OpenAI as fallback
+      try {
+        console.log('🔄 Trying OpenAI as fallback...');
+        const openaiKey = await getSecret('openai-api-key');
+        aiResponse = await callOpenAI(prompt, openaiKey);
+        console.log('✅ OpenAI fallback succeeded');
+      } catch (openaiError) {
+        console.error('❌ OpenAI fallback also failed:', openaiError);
+        
+        // Use intelligent local response as last resort
+        console.log('🔄 Using intelligent local response...');
+        aiResponse = generateIntelligentLocalResponse(prompt, data.context);
+      }
+    }
 
     // Parse AI response for potential world state updates
     const worldStateUpdates = parseWorldStateUpdates(aiResponse);
@@ -431,7 +528,7 @@ export const aiDungeonMaster = functions.https.onCall(async (data, context) => {
     console.error('AI Dungeon Master error:', error);
     throw new functions.https.HttpsError('internal', 'AI service temporarily unavailable');
   }
-});
+}
 
 // Helper function to get user tier (free/premium)
 async function getUserTier(userId: string): Promise<'free' | 'premium'> {

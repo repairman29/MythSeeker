@@ -4,6 +4,7 @@ exports.geminiAIFunction = exports.aiDungeonMaster = exports.testEndpoint = expo
 const functions = require("firebase-functions");
 const init_1 = require("./init");
 const validation_1 = require("./validation");
+const aiDungeonMaster_1 = require("./aiDungeonMaster");
 // Create user profile when user signs up
 // export const createUserProfile = functions.auth.user().onCreate(async (user) => {
 //   const userProfile: UserProfile = {
@@ -659,7 +660,7 @@ exports.testEndpoint = functions.https.onRequest(async (req, res) => {
                 if (!aiPrompt) {
                     throw new Error('Prompt is required');
                 }
-                result = await handleAIDungeonMaster(data, { auth: { uid: 'test-user' } });
+                result = await (0, aiDungeonMaster_1.handleAIDungeonMasterLogic)(data, { auth: { uid: 'test-user' } });
                 break;
             case 'saveGameProgress':
                 result = await handleSaveGameProgress(data, { auth: { uid: 'test-user' } });
@@ -781,21 +782,7 @@ async function handleStartGameSession(data, context) {
     });
     return { success: true };
 }
-async function handleAIDungeonMaster(data, context) {
-    const { gameId, playerInput } = data;
-    // For testing, return a mock response
-    const mockResponse = {
-        content: `The AI Dungeon Master responds to: "${playerInput.substring(0, 50)}..."`,
-        type: 'dm',
-        timestamp: Date.now()
-    };
-    // Save the message to the game
-    await init_1.default.firestore().collection('games').doc(gameId).update({
-        messages: init_1.default.firestore.FieldValue.arrayUnion(mockResponse),
-        lastActivity: Date.now()
-    });
-    return mockResponse;
-}
+// Note: handleAIDungeonMaster is now handled by the enhanced aiDungeonMaster function from aiDungeonMaster.ts
 async function handleSaveGameProgress(data, context) {
     const { gameId, gameState } = data;
     await init_1.default.firestore().collection('games').doc(gameId).update({
@@ -1044,8 +1031,8 @@ exports.aiDungeonMaster = functions.https.onCall(async (data, context) => {
         if (!prompt) {
             throw new functions.https.HttpsError('invalid-argument', 'Prompt is required');
         }
-        // Call the AI Dungeon Master service
-        const response = await handleAIDungeonMaster(data, context);
+        // Call the enhanced AI Dungeon Master service
+        const response = await (0, aiDungeonMaster_1.handleAIDungeonMasterLogic)(data, context);
         return { response };
     }
     catch (error) {
@@ -1065,8 +1052,8 @@ exports.geminiAIFunction = functions.https.onCall(async (data, context) => {
         if (!prompt) {
             throw new functions.https.HttpsError('invalid-argument', 'Prompt is required');
         }
-        // Call the AI Dungeon Master service
-        const response = await handleAIDungeonMaster(data, context);
+        // Call the enhanced AI Dungeon Master service
+        const response = await (0, aiDungeonMaster_1.handleAIDungeonMasterLogic)(data, context);
         return { response };
     }
     catch (error) {
