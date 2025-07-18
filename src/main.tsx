@@ -3,6 +3,9 @@ import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 
+// Debug tools available - use window.debugSentientAI in dev console
+// Note: Auto-import disabled due to linter restrictions
+
 // Suppress Firebase COOP warnings globally
 const originalConsoleWarn = console.warn;
 console.warn = (...args) => {
