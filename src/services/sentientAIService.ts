@@ -315,24 +315,32 @@ class SentientAIService {
 
     try {
       console.log('🤖 Calling aiService.complete with prompt length:', sentientPrompt.length);
-      const response = await aiService.complete(sentientPrompt);
-      console.log('🎯 aiService response:', response ? 'Success' : 'Empty response');
+      console.log('🤖 Sentient prompt preview:', sentientPrompt.substring(0, 200) + '...');
       
-      if (!response) {
-        console.warn('Empty response from aiService, using fallback');
-        return this.generatePersonalizedFallback(playerId, analysis, relationship);
-      }
+      const response = await aiService.complete(sentientPrompt);
+      console.log('🎯 Raw aiService response:', response ? `"${response.substring(0, 100)}..."` : 'Empty response');
+      
+             if (!response || response.length < 10) {
+         console.warn('❌ Empty or too short response from aiService, using enhanced fallback');
+         return this.generatePersonalizedFallback(playerId, analysis, relationship);
+       }
       
       // Parse response if JSON, extract content if needed
       let content = response;
       try {
         const parsed = JSON.parse(response);
         content = parsed.narrative || parsed.content || response;
-        console.log('📝 Parsed JSON response, extracted content');
+        console.log('📝 Parsed JSON response, extracted content:', content.substring(0, 50) + '...');
       } catch (e) {
         // Use as-is if not JSON
-        console.log('📝 Using response as plain text');
+        console.log('📝 Using response as plain text:', content.substring(0, 50) + '...');
       }
+
+             // Ensure content is meaningful
+       if (!content || content.length < 5) {
+         console.warn('❌ Content too short or empty, using enhanced fallback');
+         return this.generatePersonalizedFallback(playerId, analysis, relationship);
+       }
 
       // Determine emotional tone based on analysis and relationship
       let tone = 'warm';
@@ -342,9 +350,11 @@ class SentientAIService {
       else if (analysis.emotion === 'frustrated') tone = 'supportive';
 
       console.log('✅ Generated sentient response with tone:', tone);
+      console.log('✅ Final content preview:', content.substring(0, 100) + '...');
       return { content, tone };
     } catch (error) {
       console.error('❌ Error generating sentient response:', error);
+      console.error('❌ Error details:', error instanceof Error ? error.message : String(error));
       return this.generatePersonalizedFallback(playerId, analysis, relationship);
     }
   }

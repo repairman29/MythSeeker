@@ -1157,16 +1157,22 @@ RESPONSE FORMAT:
   }
 
   private async generateEnhancedCharacterResponse(member: AIPartyMember, context: string, session: GameSession): Promise<string | null> {
+    console.log(`🎭 generateEnhancedCharacterResponse for ${member.name} with context: "${context}"`);
+    
     // Generate contextual responses based on character personality and situation
     const recentMessages = session.messages.slice(-3);
     const playerMessage = recentMessages[recentMessages.length - 1];
     
     // Ghost-specific responses for post-apocalyptic setting
     if (member.name === 'Ghost' && member.characterClass === 'Scavenger') {
-      return this.generateGhostResponse(context, playerMessage?.content || '', session);
+      console.log('👻 Generating Ghost-specific response...');
+      const ghostResponse = this.generateGhostResponse(context, playerMessage?.content || '', session);
+      console.log('👻 Ghost response generated:', ghostResponse ? `"${ghostResponse.substring(0, 50)}..."` : 'null');
+      return ghostResponse;
     }
     
     // Use enhanced fallback for other characters
+    console.log(`🎭 Using fallback response for ${member.name}`);
     return this.getFallbackResponse(member, context);
   }
 
