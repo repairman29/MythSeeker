@@ -524,22 +524,38 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
     console.log('🤖 AI interactions generated:', aiInteractions.length);
     session.messages.push(...aiInteractions);
 
-    // Generate DM response based on current phase and context
-    console.log('🎭 Generating DM response...');
-    const dmResponse = await this.generateDMResponse(session, player, input);
-    console.log('🎭 DM response generated');
+    // Only generate DM response if no AI party members responded, or for special cases
+    const shouldDMRespond = aiInteractions.length === 0 || 
+                           input.toLowerCase().includes('dm') ||
+                           input.toLowerCase().includes('sage') ||
+                           session.currentPhase === 'exploration';
     
-    const dmMessage: GameMessage = {
-      id: `msg_${Date.now()}`,
-      type: 'dm',
-      content: dmResponse,
-      timestamp: Date.now(),
-      metadata: { phase: session.currentPhase }
-    };
-    session.messages.push(dmMessage);
-    console.log('✅ DM message added. Total messages:', session.messages.length);
+    if (shouldDMRespond) {
+      console.log('🎭 Generating DM response...');
+      const dmResponse = await this.generateDMResponse(session, player, input);
+      console.log('🎭 DM response generated');
+      
+      // Ensure dmResponse is a string, not a JSON object
+      const responseContent = typeof dmResponse === 'string' ? dmResponse : 
+                            (dmResponse as any)?.response || 
+                            JSON.stringify(dmResponse);
+      
+      const dmMessage: GameMessage = {
+        id: `msg_${Date.now()}`,
+        type: 'dm',
+        content: responseContent,
+        timestamp: Date.now(),
+        metadata: { phase: session.currentPhase }
+      };
+      session.messages.push(dmMessage);
+      console.log('✅ DM message added. Total messages:', session.messages.length);
+    } else {
+      console.log('🎭 Skipping DM response - AI party members already responded');
+    }
 
-    return dmMessage;
+    // Return the last message added (either AI party member or DM)
+    const lastMessage = session.messages[session.messages.length - 1];
+    return lastMessage;
   }
 
   // Generate contextual DM response using Sentient AI
