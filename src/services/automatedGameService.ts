@@ -1072,36 +1072,71 @@ RESPONSE FORMAT:
   }
 
   private async generateAIResponse(member: AIPartyMember, context: string, session: GameSession): Promise<string | null> {
-    try {
-      // Use sentient AI for more intelligent, aware responses
-      const sentientContext = {
-        location: session.worldState?.currentLocation || 'unknown',
-        situation: session.currentPhase,
-        sessionType: 'automated_game',
-        realm: session.config.realm,
-        aiCharacter: member,
-        recentMessages: session.messages.slice(-5)
-      };
+    // For now, use enhanced character-driven responses
+    // TODO: Re-enable sentient AI once debugging is complete
+    return this.generateEnhancedCharacterResponse(member, context, session);
+  }
 
-      const sentientResult = await sentientAI.processSentientInput(
-        member.id, // Use AI member ID as player ID for memory
-        context,
-        sentientContext
-      );
-
-      // Enhance the response with character-specific personality
-      const enhancedResponse = this.enhanceWithCharacterPersonality(
-        sentientResult.response,
-        member,
-        sentientResult.emotionalTone
-      );
-
-      return enhancedResponse;
-    } catch (error) {
-      console.error('Error generating sentient AI response:', error);
-      // Fallback to original method
-      return this.generateClassicAIResponse(member, context, session);
+  private async generateEnhancedCharacterResponse(member: AIPartyMember, context: string, session: GameSession): Promise<string | null> {
+    // Generate contextual responses based on character personality and situation
+    const recentMessages = session.messages.slice(-3);
+    const playerMessage = recentMessages[recentMessages.length - 1];
+    
+    // Ghost-specific responses for post-apocalyptic setting
+    if (member.name === 'Ghost' && member.characterClass === 'Scavenger') {
+      return this.generateGhostResponse(context, playerMessage?.content || '', session);
     }
+    
+    // Use enhanced fallback for other characters
+    return this.getFallbackResponse(member, context);
+  }
+
+  private generateGhostResponse(context: string, playerInput: string, session: GameSession): string {
+    const contextLower = context.toLowerCase();
+    const inputLower = playerInput.toLowerCase();
+    
+    // Respond to specific situations
+    if (inputLower.includes('hear') || inputLower.includes('something')) {
+      const ghostResponses = [
+        "*freezes and listens* Yeah, I heard it too. Could be raiders... or worse. We need to move. Now.",
+        "*hand moves to weapon* That ain't the wind. Something's out there. Stay low and follow my lead.",
+        "*whispers urgently* Quiet! I've been tracking sounds like that for miles. We're being hunted.",
+        "*taps ear* You're learning. Good. Trust your instincts out here - they keep you breathing."
+      ];
+      return ghostResponses[Math.floor(Math.random() * ghostResponses.length)];
+    }
+    
+    if (contextLower.includes('explore') || contextLower.includes('look') || contextLower.includes('search')) {
+      const searchResponses = [
+        "*scans the area with practiced eyes* This place has been picked clean, but... *kicks debris* There. Hidden stash. Always check twice.",
+        "*crouches low* See those tracks? Fresh. Someone was here recently. Could be friendly... but I ain't betting my life on it.",
+        "*examines surroundings* Radiation's low here, but don't touch anything metal without checking first. Learned that the hard way.",
+        "*points to subtle signs* Trap wires there, escape route there. Whoever lived here knew what they were doing."
+      ];
+      return searchResponses[Math.floor(Math.random() * searchResponses.length)];
+    }
+    
+    if (contextLower.includes('danger') || contextLower.includes('threat') || contextLower.includes('combat')) {
+      const combatResponses = [
+        "*takes cover immediately* Contact! Get down! *pulls out weapon* I count at least three hostiles. Watch your six!",
+        "*moves tactically* Stay behind me. I've got better armor and more experience. Don't try to be a hero.",
+        "*assesses threats quickly* Raider tactics - they'll try to flank us. Keep an eye on that doorway while I handle the front.",
+        "*breathing controlled* Just like the old days. Keep calm, pick your shots, and don't waste ammo. We'll get through this."
+      ];
+      return combatResponses[Math.floor(Math.random() * combatResponses.length)];
+    }
+    
+    // General responses based on Ghost's paranoid, experienced personality
+    const generalResponses = [
+      "*adjusts makeshift armor* This place gives me the creeps. Too quiet. In the wasteland, quiet usually means trouble's coming.",
+      "*checks supplies* We're running low on clean water. I know a place... but it's risky. Then again, everything's risky out here.",
+      "*glances around nervously* You stick with me, you might just live through this. But listen carefully - first rule of the wasteland: trust no one completely.",
+      "*examines the horizon* Storm's coming in. We need shelter, and fast. Radiation storms out here will cook you from the inside out.",
+      "*taps weapon nervously* Stay alert. I've survived this long because I assume everything wants to kill me. So far, I've been right.",
+      "*voice low and gravelly* You remind me of someone I used to travel with. Good kid... too trusting. Don't make the same mistakes."
+    ];
+    
+    return generalResponses[Math.floor(Math.random() * generalResponses.length)];
   }
 
   private async generateClassicAIResponse(member: AIPartyMember, context: string, session: GameSession): Promise<string | null> {
@@ -1261,10 +1296,12 @@ IMPORTANT: Respond with ONLY the character's dialogue as plain text. Do not incl
         "We need to approach this tactically."
       ],
       'Scavenger': [
-        "Heard something out there... could be trouble.",
-        "My scavenging instincts are tingling. Something's not right.",
-        "I've got some gear if you need it, but we should stay alert.",
-        "This place gives me the creeps. Let's watch each other's backs."
+        "Keep your voice down. *glances around nervously* That's how people get dead out here.",
+        "I've seen this before... never ends well. Stay close and trust nobody we ain't vetted.",
+        "*checks weapon* Something feels wrong. My gut's telling me we're being watched.",
+        "Listen... *whispers* I got some supplies, but we move quiet. Too much noise draws the wrong attention.",
+        "This whole thing stinks. I've survived this long by being paranoid. Keep your eyes open.",
+        "*taps ear* You hear that? Could be nothing... but in the wasteland, nothing's ever nothing."
       ],
       'Knight': [
         "Honor demands we help those in need.",
