@@ -146,6 +146,16 @@ const Dashboard: React.FC<DashboardProps> = ({
       badge: 'Quick Start'
     },
     {
+      id: 'progression',
+      title: 'Character Progression',
+      description: 'Level up & customize characters',
+      icon: <TrendingUp className="w-6 h-6" />,
+      action: () => onNavigate('/progression'),
+      color: 'from-amber-500 to-orange-600',
+      gradient: 'bg-gradient-to-r from-amber-500 to-orange-600',
+      badge: 'New!'
+    },
+    {
       id: 'new-campaign',
       title: 'New Campaign',
       description: 'Start a fresh adventure',
@@ -245,6 +255,20 @@ const Dashboard: React.FC<DashboardProps> = ({
       ]
     },
     {
+      id: 'progression',
+      title: 'Character Progression',
+      description: 'Level up & customize characters',
+      icon: <TrendingUp className="w-8 h-8" />,
+      path: '/progression',
+      color: 'from-amber-500 to-orange-600',
+      gradient: 'bg-gradient-to-br from-amber-500 to-orange-600',
+      isNew: true,
+      stats: [
+        { label: 'Characters', value: characters.length },
+        { label: 'Ready to Level', value: characters.filter(c => c.experience >= 300).length }
+      ]
+    },
+    {
       id: 'automated-games',
       title: 'AI Games',
       description: 'AI-powered adventures',
@@ -305,6 +329,32 @@ const Dashboard: React.FC<DashboardProps> = ({
               <p className="text-blue-200 text-lg">
                 Ready for your next epic adventure?
               </p>
+            </div>
+
+            {/* Sprint 2 Announcement */}
+            <div className="mb-8 bg-gradient-to-r from-purple-600/20 to-amber-600/20 border border-purple-500/30 rounded-xl p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="p-3 bg-gradient-to-r from-purple-500 to-amber-500 rounded-lg">
+                    <TrendingUp className="w-8 h-8 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-amber-400">
+                      🚀 Sprint 2: Character Progression System
+                    </h3>
+                    <p className="text-blue-200">
+                      Level up your characters with XP tracking, skill trees, feats, and D&D 5e progression!
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => onNavigate('/progression')}
+                  className="bg-gradient-to-r from-purple-600 to-amber-600 hover:from-purple-700 hover:to-amber-700 px-6 py-3 rounded-lg font-semibold transition-all transform hover:scale-105 flex items-center space-x-2"
+                >
+                  <span>Try Now</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Quick Actions */}

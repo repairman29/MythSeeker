@@ -195,14 +195,24 @@ const CharacterSheet: React.FC<CharacterSheetProps> = ({ character, calculateSta
             <div className="text-green-400 text-sm">{character.gold || 0} Gold</div>
             
             {/* Edit Mode Toggle */}
-            <button
-              onClick={() => setIsEditing(!isEditing)}
-              className={`mt-2 px-3 py-1 rounded text-sm transition-colors ${
-                isEditing ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
-              }`}
-            >
-              {isEditing ? 'Save' : 'Edit'}
-            </button>
+            <div className="flex space-x-2 mt-2">
+              <button
+                onClick={() => setIsEditing(!isEditing)}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  isEditing ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {isEditing ? 'Save' : 'Edit'}
+              </button>
+              <button
+                onClick={() => window.location.href = '/progression'}
+                className="px-3 py-1 rounded text-sm bg-purple-600 hover:bg-purple-700 transition-colors flex items-center space-x-1"
+                title="View character progression and advancement"
+              >
+                <TrendingUp size={12} />
+                <span>Progress</span>
+              </button>
+            </div>
           </div>
         </div>
         

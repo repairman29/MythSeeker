@@ -4781,9 +4781,10 @@ export default function AppWrapper() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardWrapper user={user} />} />
           <Route path="/game/*" element={<GameWrapper user={user} />} />
-          <Route path="/characters" element={<CharacterWrapper user={user} />} />
-          <Route path="/characters/create" element={<CharacterCreationWrapper user={user} />} />
-          <Route path="/campaigns" element={<CampaignWrapper user={user} />} />
+                      <Route path="/characters" element={<CharacterWrapper user={user} />} />
+            <Route path="/characters/create" element={<CharacterCreationWrapper user={user} />} />
+            <Route path="/progression" element={<ProgressionWrapper user={user} />} />
+            <Route path="/campaigns" element={<CampaignWrapper user={user} />} />
           <Route path="/campaigns/:id" element={<CampaignGameWrapper user={user} />} />
           <Route path="/campaigns/:id/waiting" element={<WaitingRoomWrapper user={user} />} />
           <Route path="/automated-games" element={<AutomatedGamesWrapper user={user} />} />

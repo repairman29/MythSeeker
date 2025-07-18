@@ -20,7 +20,8 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
-  Bot
+  Bot,
+  TrendingUp
 } from 'lucide-react';
 import { auth, firebaseService } from '../firebaseService';
 
@@ -74,6 +75,14 @@ const Navigation: React.FC<NavigationProps> = ({ user, onSignOut }) => {
       path: '/characters',
       icon: <User className="w-5 h-5" />,
       description: 'Your heroes and companions'
+    },
+    {
+      id: 'progression',
+      label: 'Progression',
+      path: '/progression',
+      icon: <TrendingUp className="w-5 h-5" />,
+      description: 'Character advancement & leveling',
+      isNew: true
     },
     {
       id: 'party',
