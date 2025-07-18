@@ -55,6 +55,14 @@ const Navigation: React.FC<NavigationProps> = ({ user, onSignOut }) => {
       description: 'Main hub and overview'
     },
     {
+      id: 'play',
+      label: 'Play',
+      path: '/play',
+      icon: <Sparkles className="w-5 h-5" />,
+      description: 'Start any type of game',
+      isNew: true
+    },
+    {
       id: 'campaigns',
       label: 'Campaigns',
       path: '/campaigns',
@@ -66,8 +74,8 @@ const Navigation: React.FC<NavigationProps> = ({ user, onSignOut }) => {
       label: 'AI Games',
       path: '/automated-games',
       icon: <Bot className="w-5 h-5" />,
-      description: 'Join AI-powered RPG sessions',
-      isNew: true
+      description: 'AI-powered sessions (Legacy)',
+      badge: 'Legacy'
     },
     {
       id: 'characters',

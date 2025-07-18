@@ -4,28 +4,41 @@ import { AutomatedGameManager } from './AutomatedGameManager';
 import { useAutomatedGame } from '../hooks/useAutomatedGame';
 import { AutomatedGameConfig } from '../services/automatedGameService';
 import { campaignService } from '../services/campaignService';
+import { DiceRoll } from '../types/dice';
 
-export type GameType = 'campaign' | 'automated';
+export type GameType = 'campaign' | 'automated' | 'combat' | 'multiplayer';
 
 interface UniversalGameInterfaceProps {
-  gameType: GameType;
-  gameId: string;
   user: any;
+  mode?: GameType;
+  gameId?: string;
+  onBackToSelection?: () => void;
   onBackToLobby?: () => void;
-  // Campaign-specific props
+  // Enhanced props for unified experience
+  enableDiceIntegration?: boolean;
+  onDiceRoll?: (roll: DiceRoll) => void;
+  // Legacy props
+  gameType?: GameType;
   initialCampaign?: any;
-  // Automated game-specific props
   showManager?: boolean;
 }
 
 export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
-  gameType,
-  gameId,
   user,
+  mode = 'automated',
+  gameId = 'unified-session',
+  onBackToSelection,
   onBackToLobby,
+  enableDiceIntegration = true,
+  onDiceRoll,
+  // Legacy props for backward compatibility
+  gameType,
   initialCampaign,
   showManager = true
 }) => {
+  // Determine actual game type (support both new 'mode' and legacy 'gameType')
+  const actualGameType = mode || gameType || 'automated';
+  
   // Shared state
   const [inputMessage, setInputMessage] = useState('');
   const [isAIThinking, setIsAIThinking] = useState(false);
@@ -56,12 +69,12 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
   const [campaignError, setCampaignError] = useState<string | null>(null);
 
   // Unified loading and error states
-  const isLoading = gameType === 'automated' ? automatedLoading : campaignLoading;
-  const error = gameType === 'automated' ? automatedError : campaignError;
+  const isLoading = actualGameType === 'automated' ? automatedLoading : campaignLoading;
+  const error = actualGameType === 'automated' ? automatedError : campaignError;
 
   // Load campaign data if needed
   useEffect(() => {
-    if (gameType === 'campaign' && gameId && !campaign) {
+    if (actualGameType === 'campaign' && gameId && !campaign) {
       // For now, use the initialCampaign or load from local storage
       // This will be properly implemented in Phase 3
       if (initialCampaign) {
@@ -69,7 +82,7 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
         setMessages(initialCampaign.messages || []);
       }
     }
-  }, [gameType, gameId, campaign, initialCampaign]);
+  }, [actualGameType, gameId, campaign, initialCampaign]);
 
   // Unified send message function
   const sendMessage = useCallback(async () => {
@@ -78,7 +91,7 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
     try {
       setIsAIThinking(true);
       
-      if (gameType === 'automated') {
+      if (actualGameType === 'automated') {
         // Use automated game service
         await sendAutomatedMessage(inputMessage);
         setInputMessage('');
@@ -103,7 +116,7 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
     } finally {
       setIsAIThinking(false);
     }
-  }, [gameType, inputMessage, gameId, user.uid, sendAutomatedMessage]);
+  }, [actualGameType, inputMessage, gameId, user.uid, sendAutomatedMessage]);
 
   // Handle key press
   const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
@@ -115,7 +128,7 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
 
   // Get current game data
   const getCurrentGameData = () => {
-    if (gameType === 'automated') {
+    if (actualGameType === 'automated') {
       return {
         session: currentSession,
         messages: currentSession?.messages || [],
@@ -133,7 +146,7 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
   const { session, messages: currentMessages, campaign: currentCampaign } = getCurrentGameData();
 
   // Show automated game manager for automated games
-  if (gameType === 'automated' && showManager && !currentSession) {
+  if (actualGameType === 'automated' && showManager && !currentSession) {
     return (
       <div className="h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
         <AutomatedGameManager 
@@ -150,7 +163,7 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
   if (isLoading) {
     return (
       <div className="h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center">
-        <div className="text-white text-xl">Loading {gameType} game...</div>
+        <div className="text-white text-xl">Loading {actualGameType} game...</div>
       </div>
     );
   }
@@ -186,6 +199,8 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
         messagesEndRef={messagesEndRef}
         inputRef={inputRef}
         worldState={session?.worldState}
+        enableDiceIntegration={enableDiceIntegration}
+        onDiceRoll={onDiceRoll}
       />
     </div>
   );

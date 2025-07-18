@@ -4,6 +4,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth, firebaseService, Character, UserProfile as UserProfileType } from './firebaseService';
 import { CampaignService } from './services/campaignService';
 import { UniversalGameInterface } from './components/UniversalGameInterface';
+import { UnifiedGameExperience } from './components/UnifiedGameExperience';
 import UserProfileComponent from './UserProfile';
 import { aiService } from './services/aiService';
 import { dynamicDMService } from './services/dynamicDMService';
@@ -4781,11 +4782,12 @@ export default function AppWrapper() {
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardWrapper user={user} />} />
+          <Route path="/play" element={<UnifiedGameExperience user={user} />} />
           <Route path="/game/*" element={<GameWrapper user={user} />} />
-                      <Route path="/characters" element={<CharacterWrapper user={user} />} />
-            <Route path="/characters/create" element={<CharacterCreationWrapper user={user} />} />
-            <Route path="/progression" element={<ProgressionWrapper user={user} />} />
-            <Route path="/campaigns" element={<CampaignWrapper user={user} />} />
+          <Route path="/characters" element={<CharacterWrapper user={user} />} />
+          <Route path="/characters/create" element={<CharacterCreationWrapper user={user} />} />
+          <Route path="/progression" element={<ProgressionWrapper user={user} />} />
+          <Route path="/campaigns" element={<CampaignWrapper user={user} />} />
           <Route path="/campaigns/:id" element={<CampaignGameWrapper user={user} />} />
           <Route path="/campaigns/:id/waiting" element={<WaitingRoomWrapper user={user} />} />
           <Route path="/automated-games" element={<AutomatedGamesWrapper user={user} />} />

@@ -120,6 +120,16 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const quickActions: QuickAction[] = [
     {
+      id: 'play-now',
+      title: 'Play Now',
+      description: 'Start any type of RPG adventure',
+      icon: <Sparkles className="w-6 h-6" />,
+      action: () => onNavigate('/play'),
+      color: 'from-purple-600 to-pink-600',
+      gradient: 'bg-gradient-to-r from-purple-600 to-pink-600',
+      badge: 'Unified Experience'
+    },
+    {
       id: 'resume',
       title: 'Resume Adventure',
       description: 'Continue your latest campaign',
@@ -137,13 +147,13 @@ const Dashboard: React.FC<DashboardProps> = ({
     },
     {
       id: 'ai-games',
-      title: 'AI Adventures',
-      description: 'Instant RPG with AI companions',
+      title: 'AI Adventures (Legacy)',
+      description: 'Legacy AI companion interface',
       icon: <Gamepad2 className="w-6 h-6" />,
       action: () => onNavigate('/automated-games'),
-      color: 'from-cyan-500 to-blue-600',
-      gradient: 'bg-gradient-to-r from-cyan-500 to-blue-600',
-      badge: 'Quick Start'
+      color: 'from-gray-500 to-gray-600',
+      gradient: 'bg-gradient-to-r from-gray-500 to-gray-600',
+      badge: 'Legacy'
     },
     {
       id: 'progression',
