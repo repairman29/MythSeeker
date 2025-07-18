@@ -443,7 +443,9 @@ export async function handleAIDungeonMasterLogic(data: any, context: any) {
   try {
     // Handle automated game sessions vs regular campaigns
     let campaignData = null;
-    let isAutomatedSession = campaignId === 'sentient-ai-session' || campaignId.startsWith('automated-');
+    let isAutomatedSession = campaignId === 'sentient-ai-session' || 
+                           campaignId === 'default-campaign' || 
+                           campaignId.startsWith('automated-');
     
     if (!isAutomatedSession) {
       // Get campaign doc for regular campaigns

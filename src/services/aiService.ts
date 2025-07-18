@@ -982,7 +982,7 @@ class AdvancedAIService {
 
       const requestData = {
         prompt: enhancedPrompt,
-        campaignId: sessionContext.id || 'default-campaign',
+        campaignId: sessionContext.id || sessionContext.campaignId || 'sentient-ai-session',
         playerName: playerContext.name || 'Player',
         context: {
           session: sessionContext,
