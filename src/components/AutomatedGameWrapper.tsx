@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { GameInterface } from './GameInterface';
 import { AutomatedGameManager } from './AutomatedGameManager';
-import Navigation from './Navigation';
 import { useAutomatedGame } from '../hooks/useAutomatedGame';
-import { AutomatedGameConfig } from '../types/automatedGame';
+import { AutomatedGameConfig } from '../services/automatedGameService';
 
 interface AutomatedGameWrapperProps {
   user: any;
@@ -28,11 +28,16 @@ export const AutomatedGameWrapper: React.FC<AutomatedGameWrapperProps> = ({ user
   const [showConfig, setShowConfig] = useState(false);
   const [showSessions, setShowSessions] = useState(false);
   const [showPersisted, setShowPersisted] = useState(false);
+  const [inputMessage, setInputMessage] = useState('');
+  const [isAIThinking, setIsAIThinking] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  
   const [config, setConfig] = useState<AutomatedGameConfig>({
     realm: 'fantasy',
     theme: 'exploration',
     maxPlayers: 4,
-    difficulty: 'medium',
+    sessionDuration: 60,
     autoStart: true,
     dmStyle: 'balanced',
     rating: 'PG-13'
@@ -69,17 +74,90 @@ export const AutomatedGameWrapper: React.FC<AutomatedGameWrapperProps> = ({ user
     return `${days} day${days > 1 ? 's' : ''} ago`;
   };
 
+  // Handle message sending for automated games
+  const handleSendMessage = async () => {
+    if (!currentSession || !inputMessage.trim()) return;
+    
+    console.log('🎮 AutomatedGameWrapper: Sending message:', inputMessage);
+    setIsAIThinking(true);
+    
+    try {
+      const success = await sendMessage(currentSession.id, inputMessage);
+      if (success) {
+        setInputMessage('');
+        console.log('✅ Message sent successfully');
+      } else {
+        console.error('❌ Failed to send message');
+      }
+    } catch (error) {
+      console.error('❌ Error sending message:', error);
+    } finally {
+      setIsAIThinking(false);
+    }
+  };
+
+  // Handle key press for input
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  // Handle leaving session
+  const handleLeaveSession = async () => {
+    if (!currentSession) return;
+    
+    if (window.confirm('Are you sure you want to leave this adventure? Your progress is saved and you can resume later.')) {
+      await leaveSession(currentSession.id);
+    }
+  };
+
   // If we have a current session, show the game interface
   if (currentSession) {
     return (
       <div className="h-full">
-        <AutomatedGameManager
-          session={currentSession}
-          user={user}
-          onSendMessage={(message) => sendMessage(currentSession.id, message)}
-          onLeaveSession={() => leaveSession(currentSession.id)}
-          onBackToLobby={onBackToLobby}
+        <GameInterface
+          campaign={{
+            id: currentSession.id,
+            theme: currentSession.config.theme,
+            background: currentSession.config.realm,
+            started: currentSession.currentPhase !== 'waiting'
+          }}
+          messages={currentSession.messages}
+          inputMessage={inputMessage}
+          setInputMessage={setInputMessage}
+          sendMessage={handleSendMessage}
+          handleKeyPress={handleKeyPress}
+          isAIThinking={isAIThinking}
+          messagesEndRef={messagesEndRef}
+          worldState={currentSession.worldState}
+          character={{
+            name: user?.displayName || user?.email || 'Player',
+            id: user?.uid
+          }}
+          inputRef={inputRef}
         />
+        
+        {/* Session Controls Overlay */}
+        <div className="absolute top-4 right-4 z-50">
+          <div className="flex gap-2">
+            <button
+              onClick={handleLeaveSession}
+              className="px-3 py-2 bg-red-600/80 hover:bg-red-700 text-white rounded-lg backdrop-blur-sm transition-colors"
+              title="Leave Session (Progress Saved)"
+            >
+              ↩️ Leave
+            </button>
+            <button
+              onClick={onBackToLobby}
+              className="px-3 py-2 bg-gray-600/80 hover:bg-gray-700 text-white rounded-lg backdrop-blur-sm transition-colors"
+              title="Back to Lobby"
+            >
+              🏠 Lobby
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -151,6 +229,22 @@ export const AutomatedGameWrapper: React.FC<AutomatedGameWrapperProps> = ({ user
             <div className="text-sm opacity-75">Return to main menu</div>
           </button>
         </div>
+
+        {/* Session Creation/Management Modals */}
+        {(showConfig || showSessions) && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-900 rounded-lg max-w-4xl w-full max-h-[80vh] overflow-y-auto">
+              <AutomatedGameManager
+                onSessionJoin={(sessionId) => {
+                  console.log('🎮 Session joined:', sessionId);
+                  // The hook should automatically detect this and set currentSession
+                  setShowConfig(false);
+                  setShowSessions(false);
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Resume Sessions Modal */}
         {showPersisted && (
@@ -251,198 +345,6 @@ export const AutomatedGameWrapper: React.FC<AutomatedGameWrapperProps> = ({ user
                   className="w-full py-2 px-4 bg-gray-600 hover:bg-gray-700 rounded transition-colors"
                 >
                   Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Config Modal */}
-        {showConfig && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-900 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b border-gray-700">
-                <h2 className="text-2xl font-bold">Configure New Adventure</h2>
-                <p className="text-gray-400 mt-2">Customize your AI game settings</p>
-              </div>
-              
-              <div className="p-6 grid gap-4">
-                <div>
-                  <label htmlFor="realm" className="block text-sm font-medium text-gray-300 mb-1">
-                    Realm
-                  </label>
-                  <select
-                    id="realm"
-                    value={config.realm}
-                    onChange={(e) => setConfig({ ...config, realm: e.target.value })}
-                    className="w-full p-2 bg-gray-800 border border-gray-700 rounded text-white"
-                  >
-                    <option value="fantasy">Fantasy</option>
-                    <option value="sci-fi">Sci-Fi</option>
-                    <option value="modern">Modern</option>
-                    <option value="historical">Historical</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="theme" className="block text-sm font-medium text-gray-300 mb-1">
-                    Theme
-                  </label>
-                  <select
-                    id="theme"
-                    value={config.theme}
-                    onChange={(e) => setConfig({ ...config, theme: e.target.value })}
-                    className="w-full p-2 bg-gray-800 border border-gray-700 rounded text-white"
-                  >
-                    <option value="exploration">Exploration</option>
-                    <option value="combat">Combat</option>
-                    <option value="mystery">Mystery</option>
-                    <option value="dungeon">Dungeon Crawl</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="maxPlayers" className="block text-sm font-medium text-gray-300 mb-1">
-                    Max Players
-                  </label>
-                  <select
-                    id="maxPlayers"
-                    value={config.maxPlayers}
-                    onChange={(e) => setConfig({ ...config, maxPlayers: parseInt(e.target.value, 10) })}
-                    className="w-full p-2 bg-gray-800 border border-gray-700 rounded text-white"
-                  >
-                    <option value="2">2 Players</option>
-                    <option value="3">3 Players</option>
-                    <option value="4">4 Players</option>
-                    <option value="5">5 Players</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="difficulty" className="block text-sm font-medium text-gray-300 mb-1">
-                    Difficulty
-                  </label>
-                  <select
-                    id="difficulty"
-                    value={config.difficulty}
-                    onChange={(e) => setConfig({ ...config, difficulty: e.target.value })}
-                    className="w-full p-2 bg-gray-800 border border-gray-700 rounded text-white"
-                  >
-                    <option value="easy">Easy</option>
-                    <option value="medium">Medium</option>
-                    <option value="hard">Hard</option>
-                    <option value="extreme">Extreme</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="autoStart" className="flex items-center text-sm font-medium text-gray-300 mb-1">
-                    <input
-                      type="checkbox"
-                      id="autoStart"
-                      checked={config.autoStart}
-                      onChange={(e) => setConfig({ ...config, autoStart: e.target.checked })}
-                      className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-600 rounded"
-                    />
-                    Auto-Start Game
-                  </label>
-                </div>
-                <div>
-                  <label htmlFor="dmStyle" className="block text-sm font-medium text-gray-300 mb-1">
-                    Dungeon Master Style
-                  </label>
-                  <select
-                    id="dmStyle"
-                    value={config.dmStyle}
-                    onChange={(e) => setConfig({ ...config, dmStyle: e.target.value })}
-                    className="w-full p-2 bg-gray-800 border border-gray-700 rounded text-white"
-                  >
-                    <option value="balanced">Balanced</option>
-                    <option value="challenging">Challenging</option>
-                    <option value="explorative">Explorative</option>
-                    <option value="combat-focused">Combat-Focused</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="rating" className="block text-sm font-medium text-gray-300 mb-1">
-                    Content Rating
-                  </label>
-                  <select
-                    id="rating"
-                    value={config.rating}
-                    onChange={(e) => setConfig({ ...config, rating: e.target.value })}
-                    className="w-full p-2 bg-gray-800 border border-gray-700 rounded text-white"
-                  >
-                    <option value="PG-13">PG-13</option>
-                    <option value="R">R</option>
-                    <option value="MA">MA</option>
-                    <option value="X">X</option>
-                  </select>
-                </div>
-              </div>
-              
-              <div className="p-6 border-t border-gray-700 flex justify-end gap-2">
-                <button
-                  onClick={() => setShowConfig(false)}
-                  className="py-2 px-4 bg-gray-600 hover:bg-gray-700 rounded transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    createSession(config);
-                    setShowConfig(false);
-                  }}
-                  className="py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded transition-colors"
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Creating...' : 'Start Adventure'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Join Session Modal */}
-        {showSessions && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-900 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b border-gray-700">
-                <h2 className="text-2xl font-bold">Join Existing Game</h2>
-                <p className="text-gray-400 mt-2">Enter the session ID to join</p>
-              </div>
-              
-              <div className="p-6 grid gap-4">
-                <div>
-                  <label htmlFor="sessionId" className="block text-sm font-medium text-gray-300 mb-1">
-                    Session ID
-                  </label>
-                  <input
-                    type="text"
-                    id="sessionId"
-                    placeholder="e.g., abc123def456"
-                    className="w-full p-2 bg-gray-800 border border-gray-700 rounded text-white"
-                  />
-                </div>
-              </div>
-              
-              <div className="p-6 border-t border-gray-700 flex justify-end gap-2">
-                <button
-                  onClick={() => setShowSessions(false)}
-                  className="py-2 px-4 bg-gray-600 hover:bg-gray-700 rounded transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    const sessionId = document.getElementById('sessionId')?.value;
-                    if (sessionId) {
-                      joinSession(sessionId);
-                      setShowSessions(false);
-                    } else {
-                      alert('Please enter a session ID to join.');
-                    }
-                  }}
-                  className="py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded transition-colors"
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Joining...' : 'Join Game'}
                 </button>
               </div>
             </div>
