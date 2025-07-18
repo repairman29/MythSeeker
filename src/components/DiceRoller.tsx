@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { diceService } from '../services/diceService';
+import { DiceSystem3D } from './DiceSystem3D';
+import { DiceRoll as EnhancedDiceRoll, DiceConfig, DiceType, DICE_PRESETS } from '../types/dice';
 
 interface DiceRollerProps {
   isOpen: boolean;
   onClose: (results?: number[]) => void;
   onRollComplete?: (results: number[]) => void;
   defaultDice?: Array<{ sides: number; count: number }>;
+  mode?: '2d' | '3d';
+  enableAdvanced?: boolean;
 }
 
-interface DiceConfig {
+interface LegacyDiceConfig {
   sides: number;
   count: number;
 }
@@ -17,12 +21,23 @@ const DiceRoller: React.FC<DiceRollerProps> = ({
   isOpen, 
   onClose, 
   onRollComplete, 
-  defaultDice = [{ sides: 20, count: 1 }] 
+  defaultDice = [{ sides: 20, count: 1 }],
+  mode = '2d',
+  enableAdvanced = true
 }) => {
-  const [diceConfigs, setDiceConfigs] = useState<DiceConfig[]>(defaultDice);
+  // Legacy 2D state
+  const [diceConfigs, setDiceConfigs] = useState<LegacyDiceConfig[]>(defaultDice);
   const [results, setResults] = useState<number[]>([]);
   const [isRolling, setIsRolling] = useState(false);
-  const [rollHistory, setRollHistory] = useState<Array<{ dice: DiceConfig[]; results: number[]; total: number; timestamp: number }>>([]);
+  const [rollHistory, setRollHistory] = useState<Array<{ dice: LegacyDiceConfig[]; results: number[]; total: number; timestamp: number }>>([]);
+  
+  // Enhanced features state
+  const [currentMode, setCurrentMode] = useState<'2d' | '3d'>(mode);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [advantage, setAdvantage] = useState<'advantage' | 'disadvantage' | 'normal'>('normal');
+  const [modifier, setModifier] = useState(0);
+  const [exploding, setExploding] = useState(false);
+  const [rerollOnes, setRerollOnes] = useState(false);
 
   // Common dice types
   const commonDice = [4, 6, 8, 10, 12, 20, 100];
@@ -42,6 +57,75 @@ const DiceRoller: React.FC<DiceRollerProps> = ({
     }
   }, [isOpen]);
 
+  // Handle 3D dice roll completion
+  const handle3DRollComplete = (roll: EnhancedDiceRoll) => {
+    const resultValues = roll.results
+      .filter(r => !r.discarded)
+      .map(r => r.value);
+    
+    setResults(resultValues);
+    
+    // Add to history
+    const historyEntry = {
+      dice: [{ sides: roll.config.sides, count: roll.config.count }],
+      results: resultValues,
+      total: roll.total,
+      timestamp: roll.timestamp
+    };
+    setRollHistory(prev => [historyEntry, ...prev.slice(0, 4)]);
+    
+    if (onRollComplete) {
+      onRollComplete(resultValues);
+    }
+  };
+
+  // Enhanced roll function
+  const rollAdvanced = () => {
+    if (isRolling || diceConfigs.length === 0) return;
+    
+    setIsRolling(true);
+    setResults([]);
+
+    // Convert to enhanced config
+    const enhancedConfig: DiceConfig = {
+      sides: diceConfigs[0].sides,
+      count: diceConfigs[0].count,
+      modifier,
+      advantage: advantage === 'advantage',
+      disadvantage: advantage === 'disadvantage',
+      exploding,
+      rerollOnes,
+      label: `${diceConfigs[0].count}d${diceConfigs[0].sides}${modifier ? `+${modifier}` : ''}`
+    };
+
+    try {
+      const roll = diceService.rollAdvanced(enhancedConfig);
+      const resultValues = roll.results
+        .filter(r => !r.discarded)
+        .map(r => r.value);
+      
+      setResults(resultValues);
+      
+      // Add to history
+      const historyEntry = {
+        dice: diceConfigs,
+        results: resultValues,
+        total: roll.total,
+        timestamp: roll.timestamp
+      };
+      setRollHistory(prev => [historyEntry, ...prev.slice(0, 4)]);
+      
+      if (onRollComplete) {
+        onRollComplete(resultValues);
+      }
+    } catch (error) {
+      console.error('Error rolling dice:', error);
+    } finally {
+      setTimeout(() => setIsRolling(false), 1000);
+    }
+  };
+
+  // Legacy roll function (for backward compatibility)
   const rollDice = () => {
     if (isRolling) return;
     

@@ -1,3 +1,19 @@
+// Import enhanced types
+import { 
+  DiceRoll as EnhancedDiceRoll, 
+  DiceResult, 
+  DiceConfig, 
+  DiceType,
+  DiceRollMetadata,
+  calculateDiceTotal,
+  applyAdvantageDisadvantage,
+  checkCritical,
+  shouldExplode,
+  shouldReroll,
+  DICE_PRESETS
+} from '../types/dice';
+
+// Legacy interface for backward compatibility
 export interface DiceRoll {
   id: string;
   sides: number;
@@ -311,6 +327,159 @@ class DiceService {
     const natural1s = rolls.filter(roll => roll.result === 1).length;
     
     return { natural20s, natural1s };
+  }
+
+  // Enhanced Dice Rolling Methods
+
+  /**
+   * Roll dice with advanced configuration
+   */
+  rollAdvanced(config: DiceConfig): EnhancedDiceRoll {
+    const results: DiceResult[] = [];
+    const rollId = `enhanced_roll_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Generate initial rolls
+    for (let i = 0; i < config.count; i++) {
+      const result = this.rollSingleDie(config.sides, `d${config.sides}` as DiceType);
+      results.push(result);
+    }
+
+    // Handle advantage/disadvantage
+    if (config.advantage || config.disadvantage) {
+      if (results.length === 2) {
+        const processedResults = config.advantage 
+          ? applyAdvantageDisadvantage(results.sort((a, b) => b.value - a.value))
+          : applyAdvantageDisadvantage(results.sort((a, b) => a.value - b.value));
+        results.splice(0, results.length, ...processedResults);
+      }
+    }
+
+    // Handle exploding dice
+    if (config.exploding) {
+      let explosionCount = 0;
+      const maxExplosions = 10; // Prevent infinite loops
+      
+      for (let i = 0; i < results.length && explosionCount < maxExplosions; i++) {
+        if (shouldExplode(results[i], config)) {
+          const explosionRoll = this.rollSingleDie(config.sides, `d${config.sides}` as DiceType);
+          explosionRoll.exploded = true;
+          results.push(explosionRoll);
+          explosionCount++;
+        }
+      }
+    }
+
+    // Handle rerolls
+    if (config.rerollOnes || config.rerollBelow) {
+      for (let i = 0; i < results.length; i++) {
+        if (shouldReroll(results[i], config) && !results[i].wasRerolled) {
+          const reroll = this.rollSingleDie(config.sides, `d${config.sides}` as DiceType);
+          reroll.wasRerolled = true;
+          results[i] = reroll;
+        }
+      }
+    }
+
+    // Calculate total
+    const total = calculateDiceTotal(results) + (config.modifier || 0);
+
+    // Create enhanced roll
+    const enhancedRoll: EnhancedDiceRoll = {
+      id: rollId,
+      config,
+      results,
+      total,
+      timestamp: Date.now()
+    };
+
+    // Save to history (convert to legacy format for storage)
+    const legacyRoll: DiceRoll = {
+      id: rollId,
+      sides: config.sides,
+      result: total,
+      timestamp: Date.now(),
+      context: config.label
+    };
+    this.addRoll(legacyRoll); // Changed from saveRoll to addRoll
+
+    return enhancedRoll;
+  }
+
+  /**
+   * Roll a single die with detailed result information
+   */
+  private rollSingleDie(sides: number, diceType: DiceType): DiceResult {
+    const value = Math.floor(Math.random() * sides) + 1;
+    
+    return {
+      value,
+      diceType,
+      isMax: value === sides,
+      isMin: value === 1,
+      isCritical: checkCritical({ value, diceType, isMax: value === sides, isMin: value === 1, isCritical: false }, sides)
+    };
+  }
+
+  /**
+   * Roll attack with advantage/disadvantage
+   */
+  rollAttack(advantage: 'advantage' | 'disadvantage' | 'normal' = 'normal', modifier: number = 0): EnhancedDiceRoll {
+    const config: DiceConfig = {
+      sides: 20,
+      count: advantage === 'normal' ? 1 : 2,
+      modifier,
+      advantage: advantage === 'advantage',
+      disadvantage: advantage === 'disadvantage',
+      label: `Attack Roll ${advantage !== 'normal' ? `(${advantage})` : ''}`
+    };
+
+    return this.rollAdvanced(config);
+  }
+
+  /**
+   * Roll damage dice
+   */
+  rollDamage(diceExpression: string): EnhancedDiceRoll {
+    // Parse dice expression like "2d6+3" or "1d8+2"
+    const match = diceExpression.match(/(\d+)d(\d+)(?:\+(\d+))?/);
+    if (!match) {
+      throw new Error(`Invalid dice expression: ${diceExpression}`);
+    }
+
+    const count = parseInt(match[1]);
+    const sides = parseInt(match[2]);
+    const modifier = match[3] ? parseInt(match[3]) : 0;
+
+    const config: DiceConfig = {
+      sides,
+      count,
+      modifier,
+      label: `Damage: ${diceExpression}`
+    };
+
+    return this.rollAdvanced(config);
+  }
+
+  /**
+   * Roll skill check with difficulty
+   */
+  rollSkillCheck(modifier: number = 0, difficulty: number = 15, advantage: 'advantage' | 'disadvantage' | 'normal' = 'normal'): EnhancedDiceRoll & { success: boolean; margin: number } {
+    const roll = this.rollAttack(advantage, modifier);
+    const success = roll.total >= difficulty;
+    const margin = roll.total - difficulty;
+
+    return {
+      ...roll,
+      success,
+      margin,
+      metadata: {
+        rollType: 'skill',
+        difficulty,
+        success,
+        margin,
+        advantage
+      }
+    };
   }
 }
 
