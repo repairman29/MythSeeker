@@ -108,15 +108,123 @@ function generateIntelligentLocalResponse(prompt, context) {
     ];
     return genericResponses[Math.floor(Math.random() * genericResponses.length)];
 }
-// Enhanced Vertex AI Gemini Pro integration
-async function callVertexAIGeminiPro(prompt, context, apiKey) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
-    // Extract context information
+// Enhanced AI integration supporting both Vertex AI and Google AI Studio
+async function callVertexAI(prompt, context, apiKey) {
+    var _a, _b, _c, _d;
+    console.log('🔮 Calling Vertex AI (Gemini)...');
+    const enrichedPrompt = buildEnrichedPrompt(prompt, context);
+    try {
+        const response = await (0, node_fetch_1.default)(`https://us-central1-aiplatform.googleapis.com/v1/projects/${process.env.GCLOUD_PROJECT}/locations/us-central1/publishers/google/models/gemini-1.5-flash:generateContent`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                contents: [
+                    {
+                        role: 'user',
+                        parts: [{ text: enrichedPrompt }]
+                    }
+                ],
+                generationConfig: {
+                    temperature: 0.8,
+                    maxOutputTokens: 1024,
+                    topP: 0.9,
+                    topK: 40
+                },
+                safetySettings: [
+                    {
+                        category: 'HARM_CATEGORY_HARASSMENT',
+                        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+                    },
+                    {
+                        category: 'HARM_CATEGORY_HATE_SPEECH',
+                        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+                    }
+                ]
+            })
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('❌ Vertex AI request failed:', response.status, errorText);
+            throw new Error(`Vertex AI API error: ${response.status} - ${errorText}`);
+        }
+        const data = await response.json();
+        if (!data.candidates || !((_d = (_c = (_b = (_a = data.candidates[0]) === null || _a === void 0 ? void 0 : _a.content) === null || _b === void 0 ? void 0 : _b.parts) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.text)) {
+            console.error('❌ Unexpected Vertex AI response structure:', data);
+            throw new Error('Invalid response structure from Vertex AI');
+        }
+        const aiResponse = data.candidates[0].content.parts[0].text.trim();
+        console.log('✅ Vertex AI response received:', aiResponse.substring(0, 100) + '...');
+        return aiResponse;
+    }
+    catch (error) {
+        console.error('❌ Vertex AI call failed:', error);
+        throw error;
+    }
+}
+// Enhanced Gemini AI integration using Google AI Studio API
+async function callGeminiAI(prompt, context, apiKey) {
+    var _a, _b, _c, _d;
+    console.log('🤖 Calling Google AI Studio (Gemini)...');
+    const enrichedPrompt = buildEnrichedPrompt(prompt, context);
+    try {
+        const response = await (0, node_fetch_1.default)(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                contents: [
+                    {
+                        parts: [{ text: enrichedPrompt }]
+                    }
+                ],
+                generationConfig: {
+                    temperature: 0.8,
+                    maxOutputTokens: 1024,
+                    topP: 0.9,
+                    topK: 40
+                },
+                safetySettings: [
+                    {
+                        category: 'HARM_CATEGORY_HARASSMENT',
+                        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+                    },
+                    {
+                        category: 'HARM_CATEGORY_HATE_SPEECH',
+                        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+                    }
+                ]
+            })
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('❌ Google AI Studio request failed:', response.status, errorText);
+            throw new Error(`Google AI Studio API error: ${response.status} - ${errorText}`);
+        }
+        const data = await response.json();
+        if (!data.candidates || !((_d = (_c = (_b = (_a = data.candidates[0]) === null || _a === void 0 ? void 0 : _a.content) === null || _b === void 0 ? void 0 : _b.parts) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.text)) {
+            console.error('❌ Unexpected Google AI Studio response structure:', data);
+            throw new Error('Invalid response structure from Google AI Studio');
+        }
+        const aiResponse = data.candidates[0].content.parts[0].text.trim();
+        console.log('✅ Google AI Studio response received:', aiResponse.substring(0, 100) + '...');
+        return aiResponse;
+    }
+    catch (error) {
+        console.error('❌ Google AI Studio call failed:', error);
+        throw error;
+    }
+}
+// Helper function to build enriched prompts
+function buildEnrichedPrompt(prompt, context) {
+    var _a, _b, _c, _d, _e, _f;
     const session = (context === null || context === void 0 ? void 0 : context.session) || {};
     const player = (context === null || context === void 0 ? void 0 : context.player) || {};
     const world = (context === null || context === void 0 ? void 0 : context.world) || {};
     const history = (context === null || context === void 0 ? void 0 : context.history) || [];
-    // Build rich context for the AI
     const sessionInfo = `
 SESSION DETAILS:
 - Phase: ${session.currentPhase || 'exploration'}
@@ -127,146 +235,39 @@ SESSION DETAILS:
 - Players: ${((_e = session.players) === null || _e === void 0 ? void 0 : _e.map((p) => p.name).join(', ')) || 'Unknown'}
 `;
     const playerInfo = `
-PLAYER CONTEXT:
-- Name: ${player.name || 'Adventurer'}
-- Character Class: ${player.characterClass || 'Hero'}
-- Experience Level: ${player.experience || 'intermediate'}
-- Preferences: ${((_f = player.preferences) === null || _f === void 0 ? void 0 : _f.join(', ')) || 'None specified'}
+PLAYER DETAILS:
+- Name: ${player.name || 'Unknown'}
+- Level: ${player.level || 1}
+- Class: ${player.class || 'Adventurer'}
+- Background: ${player.background || 'Mysterious'}
+- Current HP: ${player.hp || 'Unknown'}/${player.maxHp || 'Unknown'}
 `;
     const worldInfo = `
 WORLD STATE:
-- Current Location: ${((_g = world.locations) === null || _g === void 0 ? void 0 : _g.current) || 'Unknown'}
-- Atmosphere: ${((_h = world.atmosphere) === null || _h === void 0 ? void 0 : _h.mood) || 'neutral'} (${((_j = world.atmosphere) === null || _j === void 0 ? void 0 : _j.tension) || 'medium'} tension)
-- Active Quests: ${((_k = world.activeQuests) === null || _k === void 0 ? void 0 : _k.length) || 0}
-- NPCs Present: ${((_l = world.npcs) === null || _l === void 0 ? void 0 : _l.length) || 0}
-- Environmental Details: ${((_m = world.atmosphere) === null || _m === void 0 ? void 0 : _m.environmentalDetails) || 'Standard environment'}
+- Location: ${world.currentLocation || 'Unknown realm'}
+- Environment: ${world.environment || 'Varied terrain'}
+- Weather: ${world.weather || 'Clear'}
+- Time of Day: ${world.timeOfDay || 'Day'}
 `;
-    const conversationHistory = history.length > 0 ? `
-RECENT CONVERSATION:
-${history.map((msg) => `${msg.type}: ${msg.content}`).join('\n')}
-` : 'This is the beginning of the conversation.';
-    // Enhanced prompt engineering for Gemini-quality responses
-    const enhancedPrompt = `You are an expert AI Dungeon Master running an immersive, dynamic RPG session. You must respond with the same level of intelligence, creativity, and engagement that users experience when talking to Gemini directly.
+    const recentHistory = history.length > 0 ? `
+RECENT HISTORY:
+${history.slice(-3).map((h, i) => `${i + 1}. ${h.content || h.text || h}`).join('\n')}
+` : '';
+    return `You are an expert Dungeon Master for a tabletop RPG. Respond in character as a skilled DM, providing immersive, engaging narrative that matches the session's tone and rating.
 
-${sessionInfo}
-${playerInfo}
-${worldInfo}
-${conversationHistory}
+${sessionInfo}${playerInfo}${worldInfo}${recentHistory}
 
-PLAYER'S LATEST ACTION: ${prompt}
+CURRENT SITUATION:
+${prompt}
 
-RESPONSE REQUIREMENTS:
-1. **Be Conversational & Natural**: Respond like you're having a real conversation, not reading from a script
-2. **Show Intelligence**: Reference past events, remember NPCs, acknowledge player choices
-3. **Be Descriptive**: Paint vivid pictures with words, include sensory details
-4. **Provide Meaningful Choices**: Give 3-4 options that actually matter and lead to different outcomes
-5. **Adapt to Player Style**: If they're cautious, offer safe options. If they're bold, present challenges
-6. **Maintain Continuity**: Reference previous actions, consequences, and world changes
-7. **Be Engaging**: Use humor, tension, mystery, and emotional hooks appropriately
-8. **Show Personality**: Let your DM style shine through in your responses
+Please respond as the DM with:
+- Rich, immersive descriptions
+- Appropriate challenges and opportunities  
+- Engaging dialogue for NPCs
+- Clear options for player actions
+- Tone appropriate for ${((_f = session.config) === null || _f === void 0 ? void 0 : _f.rating) || 'PG-13'} content
 
-RESPONSE FORMAT:
-Respond with a JSON object:
-{
-  "narrative": "Your rich, descriptive response that feels like a real DM talking to a player",
-  "choices": ["Meaningful choice 1", "Meaningful choice 2", "Meaningful choice 3", "Meaningful choice 4"],
-  "atmosphere": {
-    "mood": "current emotional tone",
-    "tension": "low|medium|high",
-    "environmentalDetails": "specific sensory details about the surroundings"
-  },
-  "worldUpdates": {
-    "newLocation": "if location changed",
-    "newNPCs": ["any new characters introduced"],
-    "questProgress": "any quest updates",
-    "consequences": ["immediate consequences of player's action"]
-  },
-  "characterUpdates": {
-    "xpGain": 0,
-    "healthChange": 0,
-    "newItems": [],
-    "reputationChanges": {}
-  }
-}
-
-Make this feel like the best human DM you've ever played with - intelligent, responsive, and genuinely engaging.`;
-    const requestBody = {
-        contents: [{
-                parts: [{
-                        text: enhancedPrompt
-                    }]
-            }],
-        generationConfig: {
-            temperature: 0.85,
-            maxOutputTokens: 3072,
-            topP: 0.95,
-            topK: 40
-        },
-        safetySettings: [
-            {
-                category: "HARM_CATEGORY_HARASSMENT",
-                threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                category: "HARM_CATEGORY_HATE_SPEECH",
-                threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-                threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            }
-        ]
-    };
-    try {
-        const response = await (0, node_fetch_1.default)(`https://us-central1-aiplatform.googleapis.com/v1/projects/${process.env.GCLOUD_PROJECT}/locations/us-central1/publishers/google/models/gemini-pro:generateContent`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`,
-                'User-Agent': 'MythSeeker-AI-DM/2.0'
-            },
-            body: JSON.stringify(requestBody)
-        });
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Vertex AI API error:', response.status, errorText);
-            throw new Error(`Vertex AI API error: ${response.status} - ${errorText}`);
-        }
-        const data = await response.json();
-        if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-            const content = data.candidates[0].content.parts[0].text;
-            // Validate JSON response
-            try {
-                const parsed = JSON.parse(content);
-                if (parsed.narrative && parsed.choices) {
-                    return content;
-                }
-            }
-            catch (parseError) {
-                // If not valid JSON, wrap in proper format
-                return JSON.stringify({
-                    narrative: content,
-                    choices: ["Continue exploring", "Ask questions", "Take action", "Rest and recover"],
-                    atmosphere: {
-                        mood: "neutral",
-                        tension: "medium",
-                        environmentalDetails: "The adventure continues..."
-                    },
-                    worldUpdates: {},
-                    characterUpdates: {}
-                });
-            }
-        }
-        throw new Error('Invalid response format from Vertex AI');
-    }
-    catch (error) {
-        console.error('Vertex AI call failed:', error);
-        throw error;
-    }
+Response:`;
 }
 // Enhanced error handling and logging
 function logAIRequest(userId, campaignId, promptLength, responseTime, success, error) {
@@ -461,32 +462,44 @@ async function handleAIDungeonMasterLogic(data, context) {
         const sessionWorldState = (gameSessionData === null || gameSessionData === void 0 ? void 0 : gameSessionData.worldState) || {};
         const playerMemory = (gameSessionData === null || gameSessionData === void 0 ? void 0 : gameSessionData.playerMemory) || [];
         const npcMemory = (gameSessionData === null || gameSessionData === void 0 ? void 0 : gameSessionData.npcMemory) || [];
-        // Get Vertex AI API key from Secret Manager with error handling
+        // Try AI services in order: Vertex AI, Google AI Studio, OpenAI, then local fallback
         let aiResponse;
+        let aiServiceUsed = 'unknown';
         try {
-            console.log('🔑 Attempting to get API key from Secret Manager...');
-            const apiKey = await getSecret('vertex-ai-api-key');
-            console.log('✅ API key retrieved, calling Vertex AI...');
-            // Call enhanced Vertex AI with full context
-            aiResponse = await callVertexAIGeminiPro(prompt, data.context || { session: { config: { rating: rating || 'PG-13' } } }, apiKey);
+            console.log('🔑 Attempting Vertex AI...');
+            const vertexKey = await getSecret('vertex-ai-api-key');
+            aiResponse = await callVertexAI(prompt, data.context || { session: { config: { rating: rating || 'PG-13' } } }, vertexKey);
+            aiServiceUsed = 'vertex-ai';
             console.log('✅ Vertex AI response received');
         }
-        catch (secretError) {
-            console.error('❌ Secret Manager or Vertex AI failed:', secretError);
-            // Try OpenAI as fallback
+        catch (vertexError) {
+            console.error('❌ Vertex AI failed:', vertexError);
             try {
-                console.log('🔄 Trying OpenAI as fallback...');
-                const openaiKey = await getSecret('openai-api-key');
-                aiResponse = await callOpenAI(prompt, openaiKey);
-                console.log('✅ OpenAI fallback succeeded');
+                console.log('🔄 Trying Google AI Studio as fallback...');
+                const geminiKey = await getSecret('vertex-ai-api-key'); // Using same key for both
+                aiResponse = await callGeminiAI(prompt, data.context || { session: { config: { rating: rating || 'PG-13' } } }, geminiKey);
+                aiServiceUsed = 'google-ai-studio';
+                console.log('✅ Google AI Studio fallback succeeded');
             }
-            catch (openaiError) {
-                console.error('❌ OpenAI fallback also failed:', openaiError);
-                // Use intelligent local response as last resort
-                console.log('🔄 Using intelligent local response...');
-                aiResponse = generateIntelligentLocalResponse(prompt, data.context);
+            catch (geminiError) {
+                console.error('❌ Google AI Studio fallback failed:', geminiError);
+                try {
+                    console.log('🔄 Trying OpenAI as final AI fallback...');
+                    const openaiKey = await getSecret('openai-api-key');
+                    aiResponse = await callOpenAI(prompt, openaiKey);
+                    aiServiceUsed = 'openai';
+                    console.log('✅ OpenAI fallback succeeded');
+                }
+                catch (openaiError) {
+                    console.error('❌ All AI services failed:', openaiError);
+                    // Final fallback to intelligent local response
+                    console.log('🔄 Using intelligent local response as final fallback...');
+                    aiResponse = generateIntelligentLocalResponse(prompt, data.context);
+                    aiServiceUsed = 'local-fallback';
+                }
             }
         }
+        console.log(`📊 AI Service Used: ${aiServiceUsed}`);
         // Parse AI response for potential world state updates
         const worldStateUpdates = parseWorldStateUpdates(aiResponse);
         const playerMemoryUpdates = parsePlayerMemoryUpdates(aiResponse, playerName);
