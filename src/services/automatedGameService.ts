@@ -5,6 +5,7 @@ import { campaignService } from './campaignService';
 import { multiplayerService } from './multiplayerService';
 import { sentientAI } from './sentientAIService';
 import { unifiedAIService, UnifiedGameContext } from './unifiedAIService';
+import { enhancedAIService } from './enhancedAIService';
 
 export interface AutomatedGameConfig {
   realm: string;
@@ -61,6 +62,7 @@ export interface AIPartyMember {
 
 export interface GameSession {
   id: string;
+  campaignId?: string; // Add campaignId for Enhanced AI
   config: AutomatedGameConfig;
   players: PlayerContext[];
   aiPartyMembers: AIPartyMember[]; // AI-controlled party members
@@ -73,6 +75,7 @@ export interface GameSession {
   npcs: any[];
   playerMemory: Array<any>; // Add player memory field
   npcMemory: Array<any>; // Add NPC memory field
+  aiInsights?: string[]; // Add AI insights for Enhanced AI
 }
 
 export interface GameMessage {
@@ -859,8 +862,80 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
     return lastMessage;
   }
 
-  // Generate contextual DM response using Sentient AI
+  // Generate contextual DM response using Enhanced AI Framework
   private async generateDMResponse(session: GameSession, player: PlayerContext, input: string): Promise<string> {
+    try {
+      console.log('🚀 Using Enhanced AI Framework for market-leading response...');
+      
+      // Build advanced AI input with rich context
+      const advancedInput = {
+        content: input,
+        playerId: player.id || player.name,
+        gameContext: {
+          realm: session.config.realm,
+          location: session.worldState?.currentLocation || 'unknown',
+          session: {
+            id: session.id,
+            campaignId: session.campaignId,
+            npcs: session.npcs,
+            activeQuests: session.activeQuests,
+            worldEvents: session.worldState?.events || [],
+            config: session.config
+          },
+          worldState: session.worldState
+        },
+        playerContext: {
+          name: player.name,
+          characterClass: player.characterClass || 'Adventurer',
+          experience: player.experience || 'intermediate',
+          preferences: player.preferences || []
+        }
+      };
+
+      // Use enhanced AI service for context-aware response
+      const enhancedResult = await enhancedAIService.generateContextAwareResponse(advancedInput);
+      
+      // Update session with AI insights
+      if (enhancedResult.proactiveInsights.length > 0) {
+        console.log('🧠 Enhanced AI insights:', enhancedResult.proactiveInsights);
+        
+        // Store insights for future use
+        if (!session.aiInsights) session.aiInsights = [];
+        session.aiInsights.push(...enhancedResult.proactiveInsights);
+        session.aiInsights = session.aiInsights.slice(-10); // Keep last 10 insights
+      }
+
+      // Apply world state updates if provided
+      if (enhancedResult.worldStateUpdates && Object.keys(enhancedResult.worldStateUpdates).length > 0) {
+        session.worldState = { ...session.worldState, ...enhancedResult.worldStateUpdates };
+        console.log('🌍 Applied world state updates from Enhanced AI');
+      }
+
+      // Format response with confidence and emotional intelligence
+      let dmResponse = enhancedResult.response;
+      
+      // Add memory references if the AI is drawing from past experiences
+      if (enhancedResult.memoryReferences.length > 0 && Math.random() < 0.2) {
+        const memoryHint = `*The situation reminds you of previous encounters...*`;
+        dmResponse += `\n\n${memoryHint}`;
+      }
+      
+      // Add proactive insights occasionally for narrative depth
+      if (enhancedResult.proactiveInsights.length > 0 && Math.random() < 0.25) {
+        const insight = enhancedResult.proactiveInsights[0];
+        dmResponse += `\n\n*${insight}*`;
+      }
+
+      console.log(`✅ Enhanced AI generated response (confidence: ${enhancedResult.confidenceScore}, significance: ${enhancedResult.narrativeSignificance})`);
+      return dmResponse;
+    } catch (error) {
+      console.error('❌ Enhanced AI failed, falling back to sentient AI:', error);
+      return this.generateSentientDMResponse(session, player, input);
+    }
+  }
+
+  // Fallback to sentient AI if enhanced AI fails
+  private async generateSentientDMResponse(session: GameSession, player: PlayerContext, input: string): Promise<string> {
     try {
       // Use sentient AI for genuinely intelligent DM responses
       const sentientContext = {
