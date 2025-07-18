@@ -242,6 +242,12 @@ export const GameInterface: React.FC<GameInterfaceProps> = ({
       description: 'AI Dungeon Master & Story'
     },
     { 
+      key: 'progression', 
+      label: 'Progression', 
+      icon: <Zap size={18} />, 
+      description: 'Character progression & advancement'
+    },
+    { 
       key: 'map', 
       label: 'World Map', 
       icon: <MapPin size={18} />, 

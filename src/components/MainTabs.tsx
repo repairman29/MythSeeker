@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Sword, User, Package, Map, BookOpen, Bot } from 'lucide-react';
+import { Sword, User, Package, Map, BookOpen, Bot, TrendingUp } from 'lucide-react';
 
 const mainTabs = [
   { key: 'gameplay', label: 'Gameplay', icon: <Sword size={18} /> },
   { key: 'automated', label: 'AI Games', icon: <Bot size={18} /> },
   { key: 'character', label: 'Character Sheet', icon: <User size={18} /> },
+  { key: 'progression', label: 'Progression', icon: <TrendingUp size={18} /> },
   { key: 'inventory', label: 'Inventory', icon: <Package size={18} /> },
   { key: 'map', label: 'World Map', icon: <Map size={18} /> },
   { key: 'log', label: 'Campaign Log', icon: <BookOpen size={18} /> },
