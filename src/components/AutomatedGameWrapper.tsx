@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { GameInterface } from './GameInterface';
+import { UniversalGameInterface } from './UniversalGameInterface';
 import { AutomatedGameManager } from './AutomatedGameManager';
 import { useAutomatedGame } from '../hooks/useAutomatedGame';
 import { AutomatedGameConfig } from '../services/automatedGameService';
@@ -196,51 +196,17 @@ export const AutomatedGameWrapper: React.FC<AutomatedGameWrapperProps> = ({ user
     return colors[phase] || 'bg-gray-600 text-gray-100';
   };
 
-  // If we have a current session, show the game interface
+  // If we have a current session, show the unified game interface
   if (currentSession) {
     return (
       <div className="h-full">
-        <GameInterface
-          campaign={{
-            id: currentSession.id,
-            theme: currentSession.config.theme,
-            background: currentSession.config.realm,
-            started: currentSession.currentPhase !== 'waiting'
-          }}
-          messages={currentSession.messages}
-          inputMessage={inputMessage}
-          setInputMessage={setInputMessage}
-          sendMessage={handleSendMessage}
-          handleKeyPress={handleKeyPress}
-          isAIThinking={isAIThinking}
-          messagesEndRef={messagesEndRef}
-          worldState={currentSession.worldState}
-          character={{
-            name: user?.displayName || user?.email || 'Player',
-            id: user?.uid
-          }}
-          inputRef={inputRef}
+        <UniversalGameInterface
+          gameType="automated"
+          gameId={currentSession.id}
+          user={user}
+          onBackToLobby={onBackToLobby}
+          showManager={false}
         />
-        
-        {/* Session Controls Overlay */}
-        <div className="absolute top-4 right-4 z-50">
-          <div className="flex gap-2">
-            <button
-              onClick={handleLeaveSession}
-              className="px-3 py-2 bg-red-600/80 hover:bg-red-700 text-white rounded-lg backdrop-blur-sm transition-colors"
-              title="Leave Session (Progress Saved)"
-            >
-              ↩️ Leave
-            </button>
-            <button
-              onClick={onBackToLobby}
-              className="px-3 py-2 bg-gray-600/80 hover:bg-gray-700 text-white rounded-lg backdrop-blur-sm transition-colors"
-              title="Back to Lobby"
-            >
-              🏠 Lobby
-            </button>
-          </div>
-        </div>
       </div>
     );
   }

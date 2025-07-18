@@ -138,11 +138,12 @@ const Dashboard: React.FC<DashboardProps> = ({
     {
       id: 'ai-games',
       title: 'AI Adventures',
-      description: 'Start an AI-powered game',
+      description: 'Instant RPG with AI companions',
       icon: <Gamepad2 className="w-6 h-6" />,
       action: () => onNavigate('/automated-games'),
       color: 'from-cyan-500 to-blue-600',
-      gradient: 'bg-gradient-to-r from-cyan-500 to-blue-600'
+      gradient: 'bg-gradient-to-r from-cyan-500 to-blue-600',
+      badge: 'Quick Start'
     },
     {
       id: 'new-campaign',
