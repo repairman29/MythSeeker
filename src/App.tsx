@@ -46,6 +46,7 @@ import MagicSystem from './components/MagicSystem';
 import EnhancedCombatSystem from './components/EnhancedCombatSystem';
 import { AutomatedGameWrapper } from './components/AutomatedGameWrapper';
 import { GameInterface } from './components/GameInterface';
+import ProgressionWrapper from './components/ProgressionWrapper';
 
 // Lazy load components
 const NavBar = lazy(() => import('./components/NavBar'));
