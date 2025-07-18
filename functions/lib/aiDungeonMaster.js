@@ -400,20 +400,29 @@ async function handleAIDungeonMasterLogic(data, context) {
         let campaignData = null;
         let isAutomatedSession = campaignId === 'sentient-ai-session' ||
             campaignId === 'default-campaign' ||
-            campaignId.startsWith('automated-');
+            campaignId.startsWith('automated-') ||
+            campaignId.startsWith('auto_');
         if (!isAutomatedSession) {
             // Get campaign doc for regular campaigns
             const campaignRef = db.collection('campaigns').doc(campaignId);
             const campaignSnap = await campaignRef.get();
             if (!campaignSnap.exists) {
-                logAIRequest(userId, campaignId, prompt.length, Date.now() - startTime, false, 'Campaign not found');
-                throw new functions.https.HttpsError('not-found', 'Campaign not found');
+                console.log(`⚠️ Campaign ${campaignId} not found in Firebase, treating as automated session`);
+                // Instead of throwing error, treat as automated session
+                isAutomatedSession = true;
+                campaignData = {
+                    name: 'Local Campaign Session',
+                    setting: 'Dynamic',
+                    participants: { [userId]: true }
+                };
             }
-            campaignData = campaignSnap.data();
-            // Verify user is a participant in the campaign
-            if (!((_d = campaignData === null || campaignData === void 0 ? void 0 : campaignData.participants) === null || _d === void 0 ? void 0 : _d[userId]) && !((_e = campaignData === null || campaignData === void 0 ? void 0 : campaignData.players) === null || _e === void 0 ? void 0 : _e.some((p) => p.id === userId))) {
-                logAIRequest(userId, campaignId, prompt.length, Date.now() - startTime, false, 'User not participant in campaign');
-                throw new functions.https.HttpsError('permission-denied', 'You are not a participant in this campaign');
+            else {
+                campaignData = campaignSnap.data();
+                // Verify user is a participant in the campaign
+                if (!((_d = campaignData === null || campaignData === void 0 ? void 0 : campaignData.participants) === null || _d === void 0 ? void 0 : _d[userId]) && !((_e = campaignData === null || campaignData === void 0 ? void 0 : campaignData.players) === null || _e === void 0 ? void 0 : _e.some((p) => p.id === userId))) {
+                    logAIRequest(userId, campaignId, prompt.length, Date.now() - startTime, false, 'User not participant in campaign');
+                    throw new functions.https.HttpsError('permission-denied', 'You are not a participant in this campaign');
+                }
             }
         }
         else {

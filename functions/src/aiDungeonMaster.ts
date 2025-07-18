@@ -445,7 +445,8 @@ export async function handleAIDungeonMasterLogic(data: any, context: any) {
     let campaignData = null;
     let isAutomatedSession = campaignId === 'sentient-ai-session' || 
                            campaignId === 'default-campaign' || 
-                           campaignId.startsWith('automated-');
+                           campaignId.startsWith('automated-') ||
+                           campaignId.startsWith('auto_');
     
     if (!isAutomatedSession) {
       // Get campaign doc for regular campaigns
@@ -453,16 +454,22 @@ export async function handleAIDungeonMasterLogic(data: any, context: any) {
       const campaignSnap = await campaignRef.get();
       
       if (!campaignSnap.exists) {
-        logAIRequest(userId, campaignId, prompt.length, Date.now() - startTime, false, 'Campaign not found');
-        throw new functions.https.HttpsError('not-found', 'Campaign not found');
-      }
-      
-      campaignData = campaignSnap.data();
-      
-      // Verify user is a participant in the campaign
-      if (!campaignData?.participants?.[userId] && !campaignData?.players?.some((p: any) => p.id === userId)) {
-        logAIRequest(userId, campaignId, prompt.length, Date.now() - startTime, false, 'User not participant in campaign');
-        throw new functions.https.HttpsError('permission-denied', 'You are not a participant in this campaign');
+        console.log(`⚠️ Campaign ${campaignId} not found in Firebase, treating as automated session`);
+        // Instead of throwing error, treat as automated session
+        isAutomatedSession = true;
+        campaignData = {
+          name: 'Local Campaign Session',
+          setting: 'Dynamic',
+          participants: { [userId]: true }
+        };
+      } else {
+        campaignData = campaignSnap.data();
+        
+        // Verify user is a participant in the campaign
+        if (!campaignData?.participants?.[userId] && !campaignData?.players?.some((p: any) => p.id === userId)) {
+          logAIRequest(userId, campaignId, prompt.length, Date.now() - startTime, false, 'User not participant in campaign');
+          throw new functions.https.HttpsError('permission-denied', 'You are not a participant in this campaign');
+        }
       }
     } else {
       // For automated sessions, create a minimal campaign context
