@@ -428,20 +428,34 @@ export async function handleAIDungeonMasterLogic(data: any, context: any) {
   }
 
   try {
-    // Get campaign doc with enhanced error handling
-    const campaignRef = db.collection('campaigns').doc(campaignId);
-    const campaignSnap = await campaignRef.get();
+    // Handle automated game sessions vs regular campaigns
+    let campaignData = null;
+    let isAutomatedSession = campaignId === 'sentient-ai-session' || campaignId.startsWith('automated-');
     
-    if (!campaignSnap.exists) {
-      logAIRequest(userId, campaignId, prompt.length, Date.now() - startTime, false, 'Campaign not found');
-      throw new functions.https.HttpsError('not-found', 'Campaign not found');
-    }
-
-    // Verify user is a participant in the campaign
-    const campaignData = campaignSnap.data();
-    if (!campaignData?.participants?.[userId] && !campaignData?.players?.some((p: any) => p.id === userId)) {
-      logAIRequest(userId, campaignId, prompt.length, Date.now() - startTime, false, 'User not participant in campaign');
-      throw new functions.https.HttpsError('permission-denied', 'You are not a participant in this campaign');
+    if (!isAutomatedSession) {
+      // Get campaign doc for regular campaigns
+      const campaignRef = db.collection('campaigns').doc(campaignId);
+      const campaignSnap = await campaignRef.get();
+      
+      if (!campaignSnap.exists) {
+        logAIRequest(userId, campaignId, prompt.length, Date.now() - startTime, false, 'Campaign not found');
+        throw new functions.https.HttpsError('not-found', 'Campaign not found');
+      }
+      
+      campaignData = campaignSnap.data();
+      
+      // Verify user is a participant in the campaign
+      if (!campaignData?.participants?.[userId] && !campaignData?.players?.some((p: any) => p.id === userId)) {
+        logAIRequest(userId, campaignId, prompt.length, Date.now() - startTime, false, 'User not participant in campaign');
+        throw new functions.https.HttpsError('permission-denied', 'You are not a participant in this campaign');
+      }
+    } else {
+      // For automated sessions, create a minimal campaign context
+      campaignData = {
+        name: 'Automated Game Session',
+        setting: 'Dynamic',
+        participants: { [userId]: true }
+      };
     }
 
     // Enhanced context gathering
@@ -520,9 +534,25 @@ export async function handleAIDungeonMasterLogic(data: any, context: any) {
     }
     const responseTime = Date.now() - startTime;
 
+    // Ensure aiResponse is always a string for frontend compatibility
+    let finalResponse: string;
+    if (typeof aiResponse === 'string') {
+      finalResponse = aiResponse;
+    } else if (typeof aiResponse === 'object') {
+      // If it's a JSON object, extract the narrative content
+      try {
+        const parsed = typeof aiResponse === 'string' ? JSON.parse(aiResponse) : aiResponse;
+        finalResponse = parsed.narrative || parsed.content || JSON.stringify(parsed);
+      } catch (e) {
+        finalResponse = JSON.stringify(aiResponse);
+      }
+    } else {
+      finalResponse = String(aiResponse);
+    }
+
     // Log successful request
     logAIRequest(userId, campaignId, prompt.length, responseTime, true);
-    return { response: aiResponse };
+    return { response: finalResponse };
   } catch (error) {
     logAIRequest(userId, campaignId, prompt?.length || 0, Date.now() - startTime, false, (error instanceof Error ? error.message : String(error)) || 'Unknown error');
     console.error('AI Dungeon Master error:', error);

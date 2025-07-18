@@ -384,18 +384,31 @@ async function handleAIDungeonMasterLogic(data, context) {
         throw new functions.https.HttpsError('invalid-argument', 'Missing campaignId or prompt');
     }
     try {
-        // Get campaign doc with enhanced error handling
-        const campaignRef = db.collection('campaigns').doc(campaignId);
-        const campaignSnap = await campaignRef.get();
-        if (!campaignSnap.exists) {
-            logAIRequest(userId, campaignId, prompt.length, Date.now() - startTime, false, 'Campaign not found');
-            throw new functions.https.HttpsError('not-found', 'Campaign not found');
+        // Handle automated game sessions vs regular campaigns
+        let campaignData = null;
+        let isAutomatedSession = campaignId === 'sentient-ai-session' || campaignId.startsWith('automated-');
+        if (!isAutomatedSession) {
+            // Get campaign doc for regular campaigns
+            const campaignRef = db.collection('campaigns').doc(campaignId);
+            const campaignSnap = await campaignRef.get();
+            if (!campaignSnap.exists) {
+                logAIRequest(userId, campaignId, prompt.length, Date.now() - startTime, false, 'Campaign not found');
+                throw new functions.https.HttpsError('not-found', 'Campaign not found');
+            }
+            campaignData = campaignSnap.data();
+            // Verify user is a participant in the campaign
+            if (!((_c = campaignData === null || campaignData === void 0 ? void 0 : campaignData.participants) === null || _c === void 0 ? void 0 : _c[userId]) && !((_d = campaignData === null || campaignData === void 0 ? void 0 : campaignData.players) === null || _d === void 0 ? void 0 : _d.some((p) => p.id === userId))) {
+                logAIRequest(userId, campaignId, prompt.length, Date.now() - startTime, false, 'User not participant in campaign');
+                throw new functions.https.HttpsError('permission-denied', 'You are not a participant in this campaign');
+            }
         }
-        // Verify user is a participant in the campaign
-        const campaignData = campaignSnap.data();
-        if (!((_c = campaignData === null || campaignData === void 0 ? void 0 : campaignData.participants) === null || _c === void 0 ? void 0 : _c[userId]) && !((_d = campaignData === null || campaignData === void 0 ? void 0 : campaignData.players) === null || _d === void 0 ? void 0 : _d.some((p) => p.id === userId))) {
-            logAIRequest(userId, campaignId, prompt.length, Date.now() - startTime, false, 'User not participant in campaign');
-            throw new functions.https.HttpsError('permission-denied', 'You are not a participant in this campaign');
+        else {
+            // For automated sessions, create a minimal campaign context
+            campaignData = {
+                name: 'Automated Game Session',
+                setting: 'Dynamic',
+                participants: { [userId]: true }
+            };
         }
         // Enhanced context gathering
         // Get rules and history (for future context enhancement)
@@ -460,9 +473,27 @@ async function handleAIDungeonMasterLogic(data, context) {
             await gameSessionRef.update(updateData);
         }
         const responseTime = Date.now() - startTime;
+        // Ensure aiResponse is always a string for frontend compatibility
+        let finalResponse;
+        if (typeof aiResponse === 'string') {
+            finalResponse = aiResponse;
+        }
+        else if (typeof aiResponse === 'object') {
+            // If it's a JSON object, extract the narrative content
+            try {
+                const parsed = typeof aiResponse === 'string' ? JSON.parse(aiResponse) : aiResponse;
+                finalResponse = parsed.narrative || parsed.content || JSON.stringify(parsed);
+            }
+            catch (e) {
+                finalResponse = JSON.stringify(aiResponse);
+            }
+        }
+        else {
+            finalResponse = String(aiResponse);
+        }
         // Log successful request
         logAIRequest(userId, campaignId, prompt.length, responseTime, true);
-        return { response: aiResponse };
+        return { response: finalResponse };
     }
     catch (error) {
         logAIRequest(userId, campaignId, (prompt === null || prompt === void 0 ? void 0 : prompt.length) || 0, Date.now() - startTime, false, (error instanceof Error ? error.message : String(error)) || 'Unknown error');

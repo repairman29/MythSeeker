@@ -105,8 +105,11 @@ class AdvancedAIService {
         throw new Error('Empty response from REAL AI');
       }
       
-      console.log('✅ REAL GEMINI AI Response received:', response.substring(0, 100) + '...');
-      return response;
+      // Ensure response is a string
+      const responseString = typeof response === 'string' ? response : JSON.stringify(response);
+      
+      console.log('✅ REAL GEMINI AI Response received:', responseString.substring(0, 100) + '...');
+      return responseString;
       
     } catch (error) {
       console.error('❌ REAL AI FAILED - NO FAKE FALLBACKS!', error);
