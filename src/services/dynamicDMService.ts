@@ -1,5 +1,6 @@
 import { firebaseService } from '../firebaseService';
 import { aiService } from './aiService';
+import { enhancedAIService } from './enhancedAIService';
 import { NPCService } from './npcService';
 
 // Types for the Dynamic DM System
@@ -198,14 +199,48 @@ export class DynamicDMService {
         dmPersona
       });
 
-      // Step 4: Dynamic Response Generation
-      const aiResponse = await aiService.generateEnhancedDynamicResponse(richPrompt);
+      // Step 4: Enhanced AI Response Generation with Market-Leading Framework
+      console.log('🚀 Dynamic DM: Using Enhanced AI Framework...');
+      
+      let aiResponse: string;
+      let enhancedInsights: string[] = [];
+      
+      try {
+        // Try Enhanced AI first for market-leading responses
+        const enhancedResult = await enhancedAIService.generateContextAwareResponse({
+          content: input.message,
+          playerId: input.playerId,
+          gameContext: {
+            realm: 'fantasy',
+            location: gameState?.current_location?.description || 'unknown',
+            session: { id: input.campaignId },
+            worldState: gameState || {}
+          },
+          playerContext: {
+            name: input.playerId,
+            characterClass: 'Adventurer',
+            experience: 'intermediate',
+            preferences: []
+          }
+        });
+        
+        aiResponse = enhancedResult.response;
+        enhancedInsights = enhancedResult.proactiveInsights;
+        console.log('✅ Enhanced AI generated dynamic response');
+        console.log('🧠 AI Insights:', enhancedInsights.join(', '));
+      } catch (error) {
+        console.log('⚠️ Enhanced AI failed, using standard AI:', error);
+        // Fallback to standard AI
+        aiResponse = await aiService.generateEnhancedDynamicResponse(richPrompt);
+      }
+      
       const dynamicResponse = await this.processAIResponse(aiResponse, {
         sentiment,
         intent,
         gameState,
         playerProfile,
-        campaignId: input.campaignId
+        campaignId: input.campaignId,
+        enhancedInsights
       });
 
       // Step 5: Action Execution & Output Generation

@@ -4783,19 +4783,7 @@ export default function AppWrapper() {
           <Route path="/campaigns" element={<CampaignWrapper user={user} />} />
           <Route path="/campaigns/:id" element={<CampaignGameWrapper user={user} />} />
           <Route path="/campaigns/:id/waiting" element={<WaitingRoomWrapper user={user} />} />
-          <Route path="/automated-games" element={
-            (() => {
-              console.log('🎮 /automated-games route hit! User:', user?.uid || 'Not logged in');
-              return (
-                <div style={{padding: '20px', color: 'white', backgroundColor: 'black'}}>
-                  <h1>🎮 AUTOMATED GAMES DEBUG TEST</h1>
-                  <p>User: {user?.uid || 'Not logged in'}</p>
-                  <p>Route working! Now testing AutomatedGameWrapper...</p>
-                  <AutomatedGameWrapper user={user} />
-                </div>
-              );
-            })()
-          } />
+          <Route path="/automated-games" element={<AutomatedGamesWrapper user={user} />} />
           <Route path="/party" element={<PartyWrapper user={user} />} />
           <Route path="/world" element={<WorldWrapper user={user} />} />
           <Route path="/combat" element={<CombatWrapper user={user} />} />
@@ -5710,6 +5698,75 @@ const SettingsWrapper: React.FC<{ user: any }> = ({ user }) => {
       <Navigation user={user} onSignOut={handleSignOut} />
       <div className="flex-1 overflow-auto">
         <SettingsPage user={user} />
+      </div>
+      
+      {/* Floating Action Button */}
+      <FloatingActionButton
+        onToggleDrawer={() => setIsDrawerOpen(!isDrawerOpen)}
+        isDrawerOpen={isDrawerOpen}
+        onQuickAction={handleQuickAction}
+        isMobile={isMobile}
+        hasNotifications={false}
+        notificationCount={0}
+      />
+    </div>
+  );
+};
+
+// Automated Games Wrapper Component
+const AutomatedGamesWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const handleSignOut = () => {
+    // This will trigger the auth state change and redirect to landing page
+  };
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'chat':
+        navigate('/game');
+        break;
+      case 'party':
+        navigate('/party');
+        break;
+      case 'inventory':
+        navigate('/characters');
+        break;
+      case 'character':
+        navigate('/characters');
+        break;
+      case 'map':
+        navigate('/world');
+        break;
+      case 'settings':
+        navigate('/settings');
+        break;
+      case 'dashboard':
+        navigate('/dashboard');
+        break;
+    }
+  };
+
+  const handleBackToLobby = () => {
+    navigate('/dashboard');
+  };
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
+      <Navigation user={user} onSignOut={handleSignOut} />
+      <div className="flex-1 overflow-auto">
+        <AutomatedGameWrapper user={user} onBackToLobby={handleBackToLobby} />
       </div>
       
       {/* Floating Action Button */}

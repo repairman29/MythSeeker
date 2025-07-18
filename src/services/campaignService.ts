@@ -6,6 +6,8 @@ import { CampaignValidator, VALIDATION_LIMITS } from '../lib/validation';
 import { multiplayerService } from './multiplayerService';
 import { aiService } from './aiService';
 import { unifiedAIService, UnifiedGameContext, UnifiedAIResponse } from './unifiedAIService';
+import { enhancedAIService } from './enhancedAIService';
+import { firestoreAIContextService } from './firestoreAIContextService';
 import { AIPartyMember } from './automatedGameService';
 import { Timestamp } from 'firebase/firestore';
 import { firebaseService } from '../firebaseService';
@@ -199,140 +201,237 @@ export class CampaignService {
   }
 
   /**
-   * Send message with unified AI processing
+   * Enhanced campaign message handling with universal AI context
    */
   async sendMessage(
     campaignId: string,
     message: Partial<Message>
   ): Promise<{ success: boolean; dmResponse?: Message; aiResponses?: any[]; error?: any }> {
     return ErrorUtils.campaignOperation(async () => {
-      const campaign = this.campaigns.get(campaignId);
-      if (!campaign) {
-        throw new Error('Campaign not found');
-      }
+      console.log('📨 Campaign Service: Enhanced sendMessage called');
+      console.log('🎮 Campaign ID:', campaignId);
+      console.log('💬 Message content preview:', message.content?.substring(0, 100));
 
-      // Validate message
-      const validation = CampaignValidator.validateMessage(message);
-      if (!validation.isValid) {
-        throw new Error(`Message validation failed: ${validation.errors.join(', ')}`);
-      }
-
-      // Create player message
+      const campaign = await this.getCampaign(campaignId);
       const playerMessage: Message = {
-        ...validation.sanitizedData,
         id: Date.now().toString(),
-        timestamp: new Date()
-      } as Message;
+        type: 'player',
+        content: message.content || '',
+        playerName: message.playerName || 'Player',
+        playerId: message.playerId || 'unknown',
+        timestamp: new Date(),
+        ...message
+      };
 
-      // Enhanced AI processing with unified service
+      campaign.messages.push(playerMessage);
+      await this.saveCampaign(campaign);
+
+      let dmResponse: Message | undefined;
       let aiResponses: any[] = [];
-      let dmResponse: Message;
 
       if (campaign.aiEnabled !== false) { // Default to AI enabled
         try {
-          // Create unified game context
-          const gameContext: UnifiedGameContext = {
-            gameId: campaignId,
-            gameType: campaign.isMultiplayer ? 'multiplayer' : 'single-player',
-            realm: campaign.realm || this.inferRealmFromTheme(campaign.theme),
-            theme: campaign.theme,
-            participants: campaign.players.map(p => ({
-              id: p.id,
-              name: p.name,
-              character: p.character,
-              isHost: p.isHost
-            })),
-            aiPartyMembers: campaign.aiPartyMembers,
-            worldState: campaign.worldState,
-            messages: campaign.messages.slice(-10) // Recent context
-          };
-
-          // Process with unified AI service
-          const unifiedResponse = await unifiedAIService.processPlayerInputUnified(
-            gameContext,
+          console.log('🚀 Campaign AI: Using Enhanced AI Framework with Universal Context...');
+          
+          // Get universal player profile for cross-component intelligence
+          const universalProfile = await enhancedAIService.getUniversalPlayerProfile(
+            message.playerId || 'unknown'
+          );
+          
+          // Get AI recommendations for optimal campaign experience
+          const aiRecommendations = await enhancedAIService.getAIRecommendationsForComponent(
+            'campaigns',
             message.playerId || 'unknown',
-            playerMessage.content
+            {
+              campaignType: campaign.isMultiplayer ? 'multiplayer' : 'single-player',
+              theme: campaign.theme,
+              currentDifficulty: campaign.difficulty || 5,
+              recentMessages: campaign.messages.slice(-5),
+              timeSinceLastPlay: Date.now() - (campaign.lastActivity?.getTime() || Date.now())
+            }
           );
 
-          // Convert AI responses to messages
-          aiResponses = [
-            ...unifiedResponse.aiPartyResponses.map(response => ({
-              id: `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-              type: 'player',
-              content: response.content,
-              sender: response.characterName,
-              timestamp: new Date(),
-              metadata: response.metadata
-            })),
-            ...unifiedResponse.aiToAiConversations.map(conv => ({
-              id: `ai_conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-              type: 'player',
-              content: conv.content,
-              sender: conv.speaker,
-              timestamp: new Date(),
-              metadata: { 
-                isAI: true, 
-                conversationType: 'ai_to_ai',
-                targetAI: conv.target
+          console.log('🎯 Campaign AI: Universal profile archetype:', universalProfile.archetype);
+          console.log('🎯 Campaign AI: Recommendations:', aiRecommendations.ai_insights);
+          
+          // First, try Enhanced AI with Firestore context for NPCs
+          let enhancedAIUsed = false;
+          let enhancedResponse = null;
+          
+          // Check if this is an NPC interaction that can use Firestore context
+          const containsNPCInteraction = this.detectNPCInteraction(playerMessage.content);
+          
+          if (containsNPCInteraction) {
+            try {
+              // Use our market-leading Firestore AI Context Service
+              const npcId = this.extractNPCId(playerMessage.content) || 'campaign_npc';
+              enhancedResponse = await enhancedAIService.generateFirestoreContextAwareResponse(
+                message.playerId || 'unknown',
+                npcId,
+                playerMessage.content,
+                campaignId
+              );
+              enhancedAIUsed = true;
+              console.log('✅ Enhanced Firestore AI generated campaign response');
+            } catch (firestoreError) {
+              console.log('⚠️ Firestore AI failed, falling back to Enhanced AI:', firestoreError);
+              // Fall back to standard Enhanced AI with universal context
+              try {
+                enhancedResponse = await enhancedAIService.generateContextAwareResponse({
+                  content: playerMessage.content,
+                  playerId: message.playerId || 'unknown',
+                  gameContext: {
+                    realm: campaign.realm || this.inferRealmFromTheme(campaign.theme),
+                    location: campaign.worldState?.currentLocation || 'unknown',
+                    session: { 
+                      id: campaignId,
+                      aiRecommendations,
+                      universalProfile
+                    },
+                    worldState: campaign.worldState || {}
+                  },
+                  playerContext: {
+                    name: message.playerName || 'Player',
+                    characterClass: universalProfile.archetype || 'Adventurer',
+                    experience: universalProfile.cross_campaign_data?.interaction_frequency || 'intermediate',
+                    preferences: universalProfile.preferences || []
+                  }
+                });
+                enhancedAIUsed = true;
+                console.log('✅ Enhanced AI with Universal Context generated campaign response');
+              } catch (enhancedError) {
+                console.log('⚠️ Enhanced AI failed, using unified system:', enhancedError);
               }
-            })),
-            ...unifiedResponse.supportiveInteractions.map(support => ({
-              id: `ai_support_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-              type: 'player',
-              content: support.content,
-              sender: support.characterName,
-              timestamp: new Date(),
-              metadata: { 
-                isAI: true, 
-                messageType: 'supportive',
-                supportType: support.supportType
-              }
-            }))
-          ];
-
-          // Update campaign with AI party members if they were created
-          if (gameContext.aiPartyMembers && gameContext.aiPartyMembers.length > 0) {
-            campaign.aiPartyMembers = gameContext.aiPartyMembers;
-            campaign.realm = gameContext.realm;
-            await unifiedAIService.saveAIPartyMembers(campaignId, gameContext.aiPartyMembers);
+            }
+          } else {
+            // Use Enhanced AI for general interactions with universal context
+            try {
+              enhancedResponse = await enhancedAIService.generateContextAwareResponse({
+                content: playerMessage.content,
+                playerId: message.playerId || 'unknown',
+                gameContext: {
+                  realm: campaign.realm || this.inferRealmFromTheme(campaign.theme),
+                  location: campaign.worldState?.currentLocation || 'unknown',
+                  session: { 
+                    id: campaignId,
+                    aiRecommendations,
+                    universalProfile
+                  },
+                  worldState: campaign.worldState || {}
+                },
+                playerContext: {
+                  name: message.playerName || 'Player',
+                  characterClass: universalProfile.archetype || 'Adventurer',
+                  experience: universalProfile.cross_campaign_data?.interaction_frequency || 'intermediate',
+                  preferences: universalProfile.preferences || []
+                }
+              });
+              enhancedAIUsed = true;
+              console.log('✅ Enhanced AI with Universal Context generated general response');
+            } catch (enhancedError) {
+              console.log('⚠️ Enhanced AI failed, using unified system:', enhancedError);
+            }
           }
 
-                     // Use unified DM response or generate fallback
-           const dmContentResult = unifiedResponse.dmResponse || await this.generateFallbackDMResponse(campaign, playerMessage.content);
-           const dmContent = typeof dmContentResult === 'string' ? dmContentResult : 
-                           (dmContentResult as any)?.content || 'The adventure continues...';
-          
-          dmResponse = {
-            id: `dm_${Date.now()}`,
-            type: 'dm',
-            content: dmContent,
-            timestamp: new Date(),
-            metadata: { enhanced: true }
-          } as Message;
+          // Share context with other components for seamless transitions
+          if (enhancedAIUsed && enhancedResponse) {
+            await enhancedAIService.shareAIContextBetweenModes(
+              'campaigns',
+              'universal',
+              message.playerId || 'unknown',
+              {
+                realm: campaign.realm,
+                emotionalTone: enhancedResponse.emotionalTone,
+                relationships: { [campaignId]: 'active_campaign' },
+                npcInteractions: containsNPCInteraction,
+                lastResponse: enhancedResponse.response,
+                aiInsights: aiRecommendations.ai_insights
+              }
+            );
+          }
 
-        } catch (aiError) {
-          console.error('Enhanced AI processing failed, using fallback:', aiError);
-          // Fallback to original AI response
-          dmResponse = await this.generateAIResponse(campaign, playerMessage.content);
+          // Process enhanced response or fall back to unified AI
+          if (enhancedAIUsed && enhancedResponse) {
+            dmResponse = {
+              id: Date.now().toString(),
+              type: 'dm',
+              content: enhancedResponse.response,
+              timestamp: new Date(),
+              choices: this.generateChoicesFromResponse(enhancedResponse.response),
+              atmosphere: {
+                mood: enhancedResponse.emotionalTone || 'dynamic',
+                tension: 'medium',
+                environmentalDetails: enhancedResponse.proactiveInsights.join(' ') || 'The world responds to your actions'
+              },
+              metadata: {
+                aiSystem: 'enhanced',
+                confidenceScore: enhancedResponse.confidenceScore,
+                universalProfile: universalProfile.archetype,
+                aiInsights: aiRecommendations.ai_insights
+              }
+            };
+          } else {
+            // Fallback to unified AI system with universal context
+            const unifiedContext = {
+              gameId: campaignId,
+              gameType: campaign.isMultiplayer ? 'multiplayer' : 'single-player',
+              realm: campaign.realm || this.inferRealmFromTheme(campaign.theme),
+              theme: campaign.theme,
+              participants: [{ 
+                id: message.playerId || 'unknown', 
+                name: message.playerName || 'Player',
+                universalProfile
+              }],
+              worldState: campaign.worldState,
+              messages: campaign.messages.slice(-10)
+            };
+
+            const unifiedResponse = await unifiedAIService.processPlayerInputUnified(
+              unifiedContext,
+              message.playerId || 'unknown',
+              playerMessage.content
+            );
+
+            dmResponse = {
+              id: Date.now().toString(),
+              type: 'dm',
+              content: unifiedResponse.dmResponse || 'The adventure continues...',
+              timestamp: new Date(),
+              choices: ['Continue', 'Investigate', 'Ask questions'],
+              atmosphere: {
+                mood: 'adaptive',
+                tension: 'medium',
+                environmentalDetails: 'Your actions shape the world around you'
+              },
+              metadata: {
+                aiSystem: 'unified',
+                universalProfile: universalProfile.archetype
+              }
+            };
+
+            aiResponses = unifiedResponse.aiPartyResponses || [];
+          }
+
+        } catch (error) {
+          console.error('❌ Campaign AI Error:', error);
+          dmResponse = this.generateFallbackDMResponse(campaign, playerMessage);
         }
       } else {
-        // Original AI response if enhanced AI is disabled
-        dmResponse = await this.generateAIResponse(campaign, playerMessage.content);
+        console.log('ℹ️ Campaign AI disabled for this campaign');
       }
 
-      // Update campaign with all messages
-      const allNewMessages = [playerMessage, ...aiResponses, dmResponse];
-      const updatedCampaign: CampaignData = {
-        ...campaign,
-        messages: [...campaign.messages, ...allNewMessages],
-        lastActivity: new Date()
+      if (dmResponse) {
+        campaign.messages.push(dmResponse);
+        campaign.lastActivity = new Date();
+        await this.saveCampaign(campaign);
+      }
+
+      return {
+        success: true,
+        dmResponse,
+        aiResponses
       };
-
-      await this.saveCampaign(updatedCampaign);
-      this.campaigns.set(campaignId, updatedCampaign);
-
-      return { dmResponse, aiResponses };
-    }, 'sendMessage');
+    });
   }
 
   /**
@@ -511,6 +610,112 @@ export class CampaignService {
     }
 
     return this.createFallbackMessage(campaign);
+  }
+
+  /**
+   * Generate Enhanced AI response for campaigns with Firestore context
+   */
+  private async generateEnhancedCampaignResponse(
+    campaign: CampaignData, 
+    playerInput: string, 
+    playerId: string
+  ): Promise<Message> {
+    try {
+      console.log('🚀 Campaign: Using Enhanced AI Framework...');
+
+      // Check if this is an NPC interaction
+      const containsNPCInteraction = this.detectNPCInteraction(playerInput);
+      
+      if (containsNPCInteraction) {
+        // Use Firestore AI Context Service for NPC interactions
+        const npcId = this.extractNPCId(playerInput) || 'campaign_npc';
+        const enhancedResponse = await enhancedAIService.generateFirestoreContextAwareResponse(
+          playerId,
+          npcId,
+          playerInput,
+          campaign.id
+        );
+        
+        return {
+          id: `enhanced_dm_${Date.now()}`,
+          type: 'dm',
+          content: enhancedResponse.response,
+          timestamp: new Date(),
+          metadata: { 
+            enhanced: true,
+            confidence: enhancedResponse.confidenceScore,
+            insights: enhancedResponse.proactiveInsights.slice(0, 2),
+            memoryReferences: enhancedResponse.memoryReferences.length
+          }
+        } as Message;
+      } else {
+        // Use standard Enhanced AI for general interactions
+        const enhancedResponse = await enhancedAIService.generateContextAwareResponse({
+          content: playerInput,
+          playerId: playerId,
+          gameContext: {
+            realm: campaign.realm || this.inferRealmFromTheme(campaign.theme),
+            location: campaign.worldState?.currentLocation || 'Campaign World',
+            session: { id: campaign.id },
+            worldState: campaign.worldState || {}
+          },
+          playerContext: {
+            name: playerId,
+            characterClass: 'Adventurer',
+            experience: 'intermediate',
+            preferences: []
+          }
+        });
+        
+        return {
+          id: `enhanced_dm_${Date.now()}`,
+          type: 'dm',
+          content: enhancedResponse.response,
+          timestamp: new Date(),
+          metadata: { 
+            enhanced: true,
+            confidence: enhancedResponse.confidenceScore,
+            insights: enhancedResponse.proactiveInsights.slice(0, 2)
+          }
+        } as Message;
+      }
+    } catch (error) {
+      console.error('❌ Enhanced AI failed for campaign, using fallback:', error);
+      // Fall back to standard AI
+      return this.generateAIResponse(campaign, playerInput);
+    }
+  }
+
+  /**
+   * Detect if player input contains NPC interaction
+   */
+  private detectNPCInteraction(input: string): boolean {
+    const npcKeywords = [
+      'talk to', 'speak with', 'ask', 'tell', 'say to',
+      'innkeeper', 'shopkeeper', 'guard', 'merchant', 'wizard', 'priest',
+      'blacksmith', 'bartender', 'servant', 'noble', 'captain'
+    ];
+    
+    const lowerInput = input.toLowerCase();
+    return npcKeywords.some(keyword => lowerInput.includes(keyword));
+  }
+
+  /**
+   * Extract NPC ID from player input
+   */
+  private extractNPCId(input: string): string | null {
+    const lowerInput = input.toLowerCase();
+    
+    // Look for common NPC types
+    if (lowerInput.includes('innkeeper')) return 'innkeeper';
+    if (lowerInput.includes('shopkeeper') || lowerInput.includes('merchant')) return 'merchant';
+    if (lowerInput.includes('guard')) return 'guard';
+    if (lowerInput.includes('wizard')) return 'wizard';
+    if (lowerInput.includes('priest')) return 'priest';
+    if (lowerInput.includes('blacksmith')) return 'blacksmith';
+    if (lowerInput.includes('bartender')) return 'bartender';
+    
+    return null;
   }
 
   private async generateAIResponse(campaign: CampaignData, playerInput: string): Promise<Message> {

@@ -162,17 +162,13 @@ export const AutomatedGameWrapper: React.FC<AutomatedGameWrapperProps> = ({ user
     );
   }
 
+  // If we have no session, show the main interface
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-900 via-blue-900 to-indigo-900 text-white p-6">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
+    <div className="relative h-full bg-gradient-to-br from-blue-950 via-purple-900 to-slate-900 text-white">
+      <div className="p-6">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-yellow-400 to-purple-400 bg-clip-text text-transparent">
-            ⚡ AI-Powered Adventures
-          </h1>
-          <p className="text-xl text-gray-300">
-            Epic quests with intelligent AI companions
-          </p>
+          <h1 className="text-4xl font-bold mb-2">⚡ AI-Powered Adventures</h1>
+          <p className="text-blue-200 text-lg">Epic quests with intelligent AI companions</p>
         </div>
 
         {/* Error Display */}
@@ -188,26 +184,26 @@ export const AutomatedGameWrapper: React.FC<AutomatedGameWrapperProps> = ({ user
           </div>
         )}
 
-        {/* Quick Actions */}
+        {/* Quick Start Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <button
-            onClick={() => setShowConfig(true)}
-            className="p-6 bg-gradient-to-r from-green-500 to-blue-500 rounded-lg hover:scale-105 transition-transform"
+            onClick={handleQuickStartFantasy}
+            className="p-6 bg-gradient-to-r from-emerald-500 to-blue-600 rounded-lg hover:scale-105 transition-transform"
             disabled={isLoading}
           >
-            <div className="text-3xl mb-2">🚀</div>
-            <div className="font-bold">Start New Adventure</div>
-            <div className="text-sm opacity-75">Create a new AI game</div>
+            <div className="text-3xl mb-2">🏰</div>
+            <div className="font-bold">Quick Fantasy</div>
+            <div className="text-sm opacity-75">Start immediately</div>
           </button>
 
           <button
-            onClick={() => setShowSessions(true)}
-            className="p-6 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg hover:scale-105 transition-transform"
+            onClick={handleQuickStartSciFi}
+            className="p-6 bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg hover:scale-105 transition-transform"
             disabled={isLoading}
           >
-            <div className="text-3xl mb-2">🎮</div>
-            <div className="font-bold">Join Active Games</div>
-            <div className="text-sm opacity-75">{sessions.length} active sessions</div>
+            <div className="text-3xl mb-2">🚀</div>
+            <div className="font-bold">Quick Sci-Fi</div>
+            <div className="text-sm opacity-75">Space adventure</div>
           </button>
 
           <button
@@ -221,23 +217,56 @@ export const AutomatedGameWrapper: React.FC<AutomatedGameWrapperProps> = ({ user
           </button>
 
           <button
-            onClick={onBackToLobby}
-            className="p-6 bg-gradient-to-r from-gray-500 to-gray-600 rounded-lg hover:scale-105 transition-transform"
+            onClick={() => setShowConfig(true)}
+            className="p-6 bg-gradient-to-r from-gray-600 to-gray-700 rounded-lg hover:scale-105 transition-transform"
+            disabled={isLoading}
           >
-            <div className="text-3xl mb-2">🏠</div>
-            <div className="font-bold">Back to Lobby</div>
-            <div className="text-sm opacity-75">Return to main menu</div>
+            <div className="text-3xl mb-2">⚙️</div>
+            <div className="font-bold">Custom Game</div>
+            <div className="text-sm opacity-75">Advanced options</div>
           </button>
         </div>
 
-        {/* Session Creation/Management Modals */}
-        {(showConfig || showSessions) && (
+        {/* Join Active Games Section */}
+        {sessions.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-2xl font-semibold mb-4 flex items-center">
+              <span className="mr-2">🎮</span>
+              Join Active Games
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {sessions.slice(0, 6).map((session) => (
+                <button
+                  key={session.id}
+                  onClick={() => handleJoinSession(session.id)}
+                  className="p-4 bg-slate-800/50 hover:bg-slate-700/50 rounded-lg border border-slate-700/50 transition-all text-left"
+                  disabled={isLoading}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">{getRealmIcon(session.config.realm)}</span>
+                    <h3 className="font-semibold">{session.config.realm}</h3>
+                    <span className={`px-2 py-1 rounded text-xs ${getPhaseColor(session.currentPhase)}`}>
+                      {session.currentPhase}
+                    </span>
+                  </div>
+                  <p className="text-gray-300 text-sm mb-2">{session.config.theme}</p>
+                  <div className="text-xs text-gray-400">
+                    Players: {session.players.length}/{session.config.maxPlayers} • 
+                    {session.aiPartyMembers?.length || 0} AI companions
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Custom Configuration Modal */}
+        {showConfig && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-gray-900 rounded-lg max-w-4xl w-full max-h-[80vh] overflow-y-auto">
               <AutomatedGameManager
                 onSessionJoin={(sessionId) => {
                   console.log('🎮 Session joined:', sessionId);
-                  // The hook should automatically detect this and set currentSession
                   setShowConfig(false);
                   setShowSessions(false);
                 }}
@@ -249,88 +278,55 @@ export const AutomatedGameWrapper: React.FC<AutomatedGameWrapperProps> = ({ user
         {/* Resume Sessions Modal */}
         {showPersisted && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-900 rounded-lg max-w-4xl w-full max-h-[80vh] overflow-y-auto">
-              <div className="p-6 border-b border-gray-700">
-                <h2 className="text-2xl font-bold">Resume Saved Adventures</h2>
-                <p className="text-gray-400 mt-2">Continue your epic journeys where you left off</p>
-              </div>
-              
+            <div className="bg-gray-900 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
               <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold">Resume Adventures</h2>
+                  <button
+                    onClick={() => setShowPersisted(false)}
+                    className="text-gray-400 hover:text-white text-xl"
+                  >
+                    ×
+                  </button>
+                </div>
+                
                 {persistedSessions.length === 0 ? (
-                  <div className="text-center text-gray-400 py-8">
-                    <div className="text-6xl mb-4">📭</div>
-                    <p>No saved adventures found</p>
-                    <p className="text-sm mt-2">Start a new adventure to create your first save!</p>
+                  <div className="text-center py-8 text-gray-400">
+                    <p>No saved sessions found.</p>
+                    <p className="text-sm mt-2">Start a new adventure to begin!</p>
                   </div>
                 ) : (
-                  <div className="grid gap-4">
+                  <div className="space-y-3">
                     {persistedSessions.map((session) => (
-                      <div
-                        key={session.id}
-                        className="p-4 bg-gray-800 rounded-lg border border-gray-700 hover:border-purple-500 transition-colors"
-                      >
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <h3 className="text-lg font-semibold">
-                              {session.config.theme} Adventure in {session.config.realm}
-                            </h3>
-                            <p className="text-sm text-gray-400">
-                              {session.players.length} player{session.players.length !== 1 ? 's' : ''} • 
-                              {session.aiPartyMembers?.length || 0} AI companions • 
-                              {session.messages.length} messages
-                            </p>
+                      <div key={session.id} className="flex items-center justify-between p-4 bg-gray-800 rounded-lg">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-lg">{getRealmIcon(session.config.realm)}</span>
+                            <h3 className="font-medium">{session.config.realm}</h3>
+                            <span className="text-xs bg-gray-700 px-2 py-1 rounded">
+                              {session.config.theme}
+                            </span>
                           </div>
-                          <div className="text-right text-sm text-gray-400">
-                            <div>Started {formatSessionAge(session.startTime)}</div>
-                            <div className="text-xs">Session ID: {session.id.slice(-8)}</div>
-                          </div>
+                          <p className="text-sm text-gray-400">
+                            {session.messages.length} messages • 
+                            {session.aiPartyMembers?.length || 0} AI companions
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Last played: {new Date(session.startTime || 0).toLocaleDateString()}
+                          </p>
                         </div>
-                        
-                        {session.aiPartyMembers && session.aiPartyMembers.length > 0 && (
-                          <div className="mb-3">
-                            <p className="text-sm text-gray-500 mb-1">AI Party Members:</p>
-                            <div className="flex flex-wrap gap-2">
-                              {session.aiPartyMembers.slice(0, 3).map((ai) => (
-                                <span
-                                  key={ai.id}
-                                  className="px-2 py-1 bg-purple-500/20 text-purple-200 rounded text-xs"
-                                >
-                                  {ai.name} ({ai.characterClass})
-                                </span>
-                              ))}
-                              {session.aiPartyMembers.length > 3 && (
-                                <span className="px-2 py-1 bg-gray-600 text-gray-300 rounded text-xs">
-                                  +{session.aiPartyMembers.length - 3} more
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {session.messages.length > 0 && (
-                          <div className="mb-3 p-3 bg-gray-700 rounded">
-                            <p className="text-sm text-gray-400 mb-1">Last message:</p>
-                            <p className="text-sm italic">
-                              "{session.messages[session.messages.length - 1].content.slice(0, 100)}
-                              {session.messages[session.messages.length - 1].content.length > 100 ? '...' : ''}"
-                            </p>
-                          </div>
-                        )}
-                        
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 ml-4">
                           <button
                             onClick={() => handleResumeSession(session.id)}
-                            className="flex-1 py-2 px-4 bg-green-600 hover:bg-green-700 rounded font-medium transition-colors"
-                            disabled={isLoading}
+                            className="px-3 py-2 bg-green-600 hover:bg-green-700 rounded text-sm transition-colors"
                           >
-                            🚀 Resume Adventure
+                            Resume
                           </button>
                           <button
                             onClick={() => handleDeletePersistedSession(session.id)}
-                            className="py-2 px-4 bg-red-600 hover:bg-red-700 rounded transition-colors"
-                            disabled={isLoading}
+                            className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded text-sm transition-colors"
                           >
-                            🗑️
+                            Delete
                           </button>
                         </div>
                       </div>
@@ -338,20 +334,93 @@ export const AutomatedGameWrapper: React.FC<AutomatedGameWrapperProps> = ({ user
                   </div>
                 )}
               </div>
-              
-              <div className="p-6 border-t border-gray-700">
-                <button
-                  onClick={() => setShowPersisted(false)}
-                  className="w-full py-2 px-4 bg-gray-600 hover:bg-gray-700 rounded transition-colors"
-                >
-                  Close
-                </button>
-              </div>
             </div>
           </div>
         )}
-        
       </div>
     </div>
   );
+
+  // Helper functions
+  const handleQuickStartFantasy = async () => {
+    const quickConfig = {
+      realm: 'Fantasy',
+      theme: 'Epic Adventure',
+      maxPlayers: 4,
+      sessionDuration: 60,
+      autoStart: true,
+      dmStyle: 'balanced',
+      rating: 'PG-13' as const
+    };
+    await handleCreateAndJoinSession(quickConfig);
+  };
+
+  const handleQuickStartSciFi = async () => {
+    const quickConfig = {
+      realm: 'Sci-Fi',
+      theme: 'Space Exploration',
+      maxPlayers: 4,
+      sessionDuration: 60,
+      autoStart: true,
+      dmStyle: 'narrative',
+      rating: 'PG-13' as const
+    };
+    await handleCreateAndJoinSession(quickConfig);
+  };
+
+  const handleCreateAndJoinSession = async (config: AutomatedGameConfig) => {
+    if (!user) return;
+    
+    try {
+      setIsLoading(true);
+      console.log('🎮 Quick start: Creating session with config:', config);
+      
+      const sessionId = await createSession(config);
+      if (sessionId) {
+        console.log('🎮 Quick start: Session created, auto-joining...');
+        // The hook will automatically detect the new session and set it as current
+      }
+    } catch (error) {
+      console.error('❌ Quick start failed:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleJoinSession = async (sessionId: string) => {
+    if (!user) return;
+    
+    try {
+      setIsLoading(true);
+      await joinSession(sessionId);
+    } catch (error) {
+      console.error('❌ Failed to join session:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getRealmIcon = (realm: string): string => {
+    const icons: Record<string, string> = {
+      'Fantasy': '🏰',
+      'Sci-Fi': '🚀',
+      'Post-Apocalyptic': '☢️',
+      'Medieval': '⚔️',
+      'Cyberpunk': '🌃',
+      'Horror': '🎃',
+      'Steampunk': '⚙️'
+    };
+    return icons[realm] || '🎮';
+  };
+
+  const getPhaseColor = (phase: string): string => {
+    const colors: Record<string, string> = {
+      'waiting': 'bg-yellow-600 text-yellow-100',
+      'introduction': 'bg-blue-600 text-blue-100',
+      'exploration': 'bg-green-600 text-green-100',
+      'combat': 'bg-red-600 text-red-100',
+      'resolution': 'bg-purple-600 text-purple-100'
+    };
+    return colors[phase] || 'bg-gray-600 text-gray-100';
+  };
 }; 

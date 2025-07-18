@@ -3,6 +3,32 @@ import { embeddingsMemoryService, SemanticMemory } from './embeddingsMemoryServi
 import { sentientAI } from './sentientAIService';
 import { firestoreAIContextService } from './firestoreAIContextService';
 
+// Production-ready AI configuration
+interface ProductionAIConfig {
+  useOpenAIEmbeddings: boolean;
+  enableCaching: boolean;
+  maxContextWindow: number;
+  performanceThreshold: number;
+  enableAnalytics: boolean;
+}
+
+const AI_CONFIG: ProductionAIConfig = {
+  useOpenAIEmbeddings: true,
+  enableCaching: true,
+  maxContextWindow: 32000,
+  performanceThreshold: 2000, // 2 seconds
+  enableAnalytics: true
+};
+
+// Performance analytics
+interface AIPerformanceMetrics {
+  responseTime: number;
+  confidenceScore: number;
+  contextTokens: number;
+  memoryRetrievalTime: number;
+  cacheHitRate: number;
+}
+
 // Enhanced AI interfaces for the market-leading framework
 export interface RichContext {
   // Immediate Context (last 3 interactions)
@@ -86,11 +112,129 @@ export interface RichAIResponse {
  * with semantic memory, character evolution, and proactive storytelling.
  */
 export class EnhancedAIService {
-  private contextAnalysisCache = new Map<string, any>();
-  private responseCache = new Map<string, RichAIResponse>();
-  
+  private contextCache: Map<string, { context: any; timestamp: number }> = new Map();
+  private responseCache: Map<string, { response: any; timestamp: number }> = new Map();
+  private performanceMetrics: AIPerformanceMetrics[] = [];
+  private readonly CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
+  private readonly CONTEXT_CACHE_DURATION = 60 * 60 * 1000; // 1 hour
+
   constructor() {
     console.log('🚀 Initializing Enhanced AI Service with advanced framework...');
+  }
+
+  /**
+   * Enhanced caching system for production performance
+   */
+  private async getCachedResponse(cacheKey: string): Promise<any | null> {
+    if (!AI_CONFIG.enableCaching) return null;
+    
+    const cached = this.responseCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
+      console.log('🚀 Enhanced AI: Cache hit for response');
+      return cached.response;
+    }
+    return null;
+  }
+
+  private setCachedResponse(cacheKey: string, response: any): void {
+    if (!AI_CONFIG.enableCaching) return;
+    
+    this.responseCache.set(cacheKey, {
+      response,
+      timestamp: Date.now()
+    });
+    
+    // Clean old cache entries
+    this.cleanCache();
+  }
+
+  private async getCachedContext(contextKey: string): Promise<any | null> {
+    if (!AI_CONFIG.enableCaching) return null;
+    
+    const cached = this.contextCache.get(contextKey);
+    if (cached && Date.now() - cached.timestamp < this.CONTEXT_CACHE_DURATION) {
+      console.log('🧠 Enhanced AI: Cache hit for context');
+      return cached.context;
+    }
+    return null;
+  }
+
+  private setCachedContext(contextKey: string, context: any): void {
+    if (!AI_CONFIG.enableCaching) return;
+    
+    this.contextCache.set(contextKey, {
+      context,
+      timestamp: Date.now()
+    });
+  }
+
+  private cleanCache(): void {
+    const now = Date.now();
+    
+    // Clean response cache
+    for (const [key, value] of this.responseCache.entries()) {
+      if (now - value.timestamp > this.CACHE_DURATION) {
+        this.responseCache.delete(key);
+      }
+    }
+    
+    // Clean context cache
+    for (const [key, value] of this.contextCache.entries()) {
+      if (now - value.timestamp > this.CONTEXT_CACHE_DURATION) {
+        this.contextCache.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Performance monitoring and analytics
+   */
+  private recordPerformanceMetrics(metrics: AIPerformanceMetrics): void {
+    if (!AI_CONFIG.enableAnalytics) return;
+    
+    this.performanceMetrics.push(metrics);
+    
+    // Keep only last 100 metrics
+    if (this.performanceMetrics.length > 100) {
+      this.performanceMetrics = this.performanceMetrics.slice(-100);
+    }
+    
+    // Log slow responses
+    if (metrics.responseTime > AI_CONFIG.performanceThreshold) {
+      console.warn(`⚠️ Enhanced AI: Slow response detected (${metrics.responseTime}ms)`);
+    }
+  }
+
+  /**
+   * Get performance analytics for optimization
+   */
+  getPerformanceAnalytics(): {
+    averageResponseTime: number;
+    averageConfidence: number;
+    cacheHitRate: number;
+    slowResponseRate: number;
+  } {
+    if (this.performanceMetrics.length === 0) {
+      return {
+        averageResponseTime: 0,
+        averageConfidence: 0,
+        cacheHitRate: 0,
+        slowResponseRate: 0
+      };
+    }
+
+    const totalMetrics = this.performanceMetrics.length;
+    const avgResponseTime = this.performanceMetrics.reduce((sum, m) => sum + m.responseTime, 0) / totalMetrics;
+    const avgConfidence = this.performanceMetrics.reduce((sum, m) => sum + m.confidenceScore, 0) / totalMetrics;
+    const avgCacheHitRate = this.performanceMetrics.reduce((sum, m) => sum + m.cacheHitRate, 0) / totalMetrics;
+    const slowResponses = this.performanceMetrics.filter(m => m.responseTime > AI_CONFIG.performanceThreshold).length;
+
+    return {
+      averageResponseTime: Math.round(avgResponseTime),
+      averageConfidence: Math.round(avgConfidence * 100) / 100,
+      cacheHitRate: Math.round(avgCacheHitRate * 100) / 100,
+      slowResponseRate: Math.round((slowResponses / totalMetrics) * 100) / 100
+    };
   }
 
   /**
@@ -197,13 +341,33 @@ export class EnhancedAIService {
    * Generate context-aware response using the full advanced AI framework
    */
   async generateContextAwareResponse(input: AdvancedAIInput): Promise<RichAIResponse> {
+    const startTime = Date.now();
     console.log('🧠 Enhanced AI: Generating context-aware response...');
 
     try {
+      // Generate cache keys
+      const responseKey = this.generateCacheKey(input.content, input.playerId, input.gameContext.realm);
+      const contextKey = this.generateContextCacheKey(input.playerId, input.gameContext.realm);
+
+      // Check for cached response first
+      const cachedResponse = await this.getCachedResponse(responseKey);
+      if (cachedResponse) {
+        const responseTime = Date.now() - startTime;
+        this.recordPerformanceMetrics({
+          responseTime,
+          confidenceScore: cachedResponse.confidenceScore || 0.9,
+          contextTokens: 0,
+          memoryRetrievalTime: 0,
+          cacheHitRate: 1.0
+        });
+        return cachedResponse;
+      }
+
       // 1. Analyze input for context clues
       const contextAnalysis = await this.analyzeInputContext(input);
       
-      // 2. Retrieve semantic memories
+      // 2. Retrieve semantic memories with performance tracking
+      const memoryStartTime = Date.now();
       const relevantMemories = await embeddingsMemoryService.retrieveRelevantMemories(
         input.content,
         {
@@ -216,15 +380,21 @@ export class EnhancedAIService {
           }
         }
       );
+      const memoryRetrievalTime = Date.now() - memoryStartTime;
       
-      // 3. Build rich context
-      const richContext = await this.buildRichContext({
-        input,
-        memories: relevantMemories,
-        contextAnalysis,
-        gameState: input.gameContext,
-        playerProfile: input.playerContext
-      });
+      // 3. Check cached context
+      let richContext = await this.getCachedContext(contextKey);
+      if (!richContext) {
+        // Build rich context
+        richContext = await this.buildRichContext({
+          input,
+          memories: relevantMemories,
+          contextAnalysis,
+          gameState: input.gameContext,
+          playerProfile: input.playerContext
+        });
+        this.setCachedContext(contextKey, richContext);
+      }
       
       // 4. Generate response with optimal model selection
       const response = await this.generateWithModelOrchestration(richContext, input);
@@ -244,20 +414,45 @@ export class EnhancedAIService {
       // 6. Generate proactive insights
       const proactiveInsights = await this.generateProactiveInsights(richContext);
       
-      return {
+      const finalResponse: RichAIResponse = {
         response: response.content,
         worldStateUpdates: response.worldChanges || {},
         characterDevelopment: response.characterGrowth || {},
         proactiveInsights,
-        memoryReferences: relevantMemories.map(m => m.content.substring(0, 100)),
+        memoryReferences: relevantMemories.map(m => m.content),
         confidenceScore: response.confidence || 0.8,
         emotionalTone: contextAnalysis.emotionalTone || 'neutral',
         narrativeSignificance: contextAnalysis.significance || 5
       };
+
+      // Cache the response
+      this.setCachedResponse(responseKey, finalResponse);
+
+      // Record performance metrics
+      const responseTime = Date.now() - startTime;
+      this.recordPerformanceMetrics({
+        responseTime,
+        confidenceScore: finalResponse.confidenceScore,
+        contextTokens: JSON.stringify(richContext).length,
+        memoryRetrievalTime,
+        cacheHitRate: 0.0 // New response
+      });
+
+      return finalResponse;
     } catch (error) {
-      console.error('❌ Enhanced AI error:', error);
-      // Fallback to standard AI service
-      return this.generateFallbackResponse(input);
+      console.error('❌ Enhanced AI: generateContextAwareResponse failed:', error);
+      
+      // Record error metrics
+      const responseTime = Date.now() - startTime;
+      this.recordPerformanceMetrics({
+        responseTime,
+        confidenceScore: 0.0,
+        contextTokens: 0,
+        memoryRetrievalTime: 0,
+        cacheHitRate: 0.0
+      });
+      
+      throw error;
     }
   }
 
@@ -712,6 +907,375 @@ Generate an immersive, contextually perfect response:`;
       hash = hash & hash; // Convert to 32-bit integer
     }
     return hash.toString();
+  }
+
+  /**
+   * Generate cache keys for efficient lookup
+   */
+  private generateCacheKey(content: string, playerId: string, realm: string): string {
+    // Use content hash + player + realm for cache key
+    const contentHash = this.simpleHash(content);
+    return `resp_${contentHash}_${playerId}_${realm}`;
+  }
+
+  private generateContextCacheKey(playerId: string, realm: string): string {
+    return `ctx_${playerId}_${realm}`;
+  }
+
+  private simpleHash(str: string): string {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash).toString(36);
+  }
+
+  /**
+   * Cross-Application AI Sharing & Universal Context
+   */
+
+  /**
+   * Get universal player profile that works across all game modes
+   */
+  async getUniversalPlayerProfile(playerId: string): Promise<any> {
+    try {
+      // Gather profile data from all sources
+      const [firestoreProfile, localMemories, sentientData] = await Promise.all([
+        this.getFirestorePlayerProfile(playerId),
+        embeddingsMemoryService.getPlayerMemories(playerId),
+        this.getSentientPlayerData(playerId)
+      ]);
+
+      // Merge into universal profile
+      const universalProfile = {
+        playerId,
+        preferences: firestoreProfile?.preferences || [],
+        archetype: this.determinePlayerArchetype(localMemories, sentientData),
+        emotionalProfile: this.buildEmotionalProfile(localMemories),
+        relationship_history: firestoreProfile?.relationships || {},
+        gameplay_patterns: this.analyzeGameplayPatterns(localMemories),
+        cross_campaign_data: {
+          total_sessions: localMemories.length,
+          favorite_themes: this.extractFavoriteThemes(localMemories),
+          preferred_difficulty: this.calculatePreferredDifficulty(localMemories),
+          social_tendencies: this.analyzeSocialTendencies(localMemories)
+        },
+        last_updated: Date.now()
+      };
+
+      // Cache for cross-component access
+      this.setCachedContext(`universal_profile_${playerId}`, universalProfile);
+      
+      return universalProfile;
+    } catch (error) {
+      console.error('Error building universal player profile:', error);
+      return { playerId, archetype: 'balanced', preferences: [] };
+    }
+  }
+
+  /**
+   * Share AI context between different game components
+   */
+  async shareAIContextBetweenModes(
+    sourceMode: string,
+    targetMode: string,
+    playerId: string,
+    contextData: any
+  ): Promise<void> {
+    console.log(`🔄 Enhanced AI: Sharing context from ${sourceMode} to ${targetMode}`);
+
+    try {
+      // Store in embeddings memory for semantic retrieval
+      await embeddingsMemoryService.storeMemory(
+        `Context transition from ${sourceMode} to ${targetMode}: ${JSON.stringify(contextData)}`,
+        {
+          type: 'context_transition',
+          importance: 7,
+          timestamp: Date.now(),
+          context: {
+            characters: [playerId],
+            realm: contextData.realm || 'universal',
+            emotions: [contextData.emotionalTone || 'neutral'],
+            themes: [`${sourceMode}_to_${targetMode}_transition`],
+            sourceMode,
+            targetMode
+          }
+        }
+      );
+
+      // Update Firestore for persistence
+      if (contextData.npcInteractions) {
+        await firestoreAIContextService.updatePlayerProfile(playerId, {
+          lastTransition: {
+            from: sourceMode,
+            to: targetMode,
+            timestamp: Date.now(),
+            contextData: contextData
+          }
+        });
+      }
+
+      // Update sentient AI memory
+      if (contextData.relationships) {
+        await sentientAI.updateCrossContextRelationships(playerId, contextData.relationships);
+      }
+
+      console.log('✅ Enhanced AI: Context successfully shared between modes');
+    } catch (error) {
+      console.error('❌ Enhanced AI: Failed to share context between modes:', error);
+    }
+  }
+
+  /**
+   * Get AI recommendations for optimal experience across components
+   */
+  async getAIRecommendationsForComponent(
+    component: string,
+    playerId: string,
+    currentContext: any
+  ): Promise<{
+    recommended_npcs: string[];
+    suggested_storylines: string[];
+    optimal_difficulty: number;
+    recommended_themes: string[];
+    ai_insights: string[];
+  }> {
+    try {
+      const universalProfile = await this.getUniversalPlayerProfile(playerId);
+      
+      const recommendations = {
+        recommended_npcs: this.recommendNPCsForComponent(component, universalProfile),
+        suggested_storylines: this.recommendStorylinesForComponent(component, universalProfile),
+        optimal_difficulty: this.calculateOptimalDifficulty(universalProfile, currentContext),
+        recommended_themes: this.recommendThemesForComponent(component, universalProfile),
+        ai_insights: this.generateComponentAIInsights(component, universalProfile, currentContext)
+      };
+
+      console.log(`🎯 Enhanced AI: Generated recommendations for ${component}`, recommendations);
+      return recommendations;
+    } catch (error) {
+      console.error('Error generating AI recommendations:', error);
+      return {
+        recommended_npcs: [],
+        suggested_storylines: [],
+        optimal_difficulty: 5,
+        recommended_themes: [],
+        ai_insights: []
+      };
+    }
+  }
+
+  // Helper methods for universal AI features
+  private async getFirestorePlayerProfile(playerId: string): Promise<any> {
+    try {
+      return await firestoreAIContextService.getPlayerProfile(playerId);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  private async getSentientPlayerData(playerId: string): Promise<any> {
+    try {
+      return sentientAI.getPlayerPersonality(playerId);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  private determinePlayerArchetype(memories: any[], sentientData: any): string {
+    // Analyze patterns to determine archetype
+    const archetypes = ['explorer', 'warrior', 'diplomat', 'trickster', 'scholar', 'leader'];
+    
+    if (sentientData?.archetype) {
+      return sentientData.archetype;
+    }
+
+    // Analyze memories for patterns
+    const combatActions = memories.filter(m => m.content.includes('combat') || m.content.includes('fight')).length;
+    const socialActions = memories.filter(m => m.content.includes('talk') || m.content.includes('convince')).length;
+    const explorationActions = memories.filter(m => m.content.includes('explore') || m.content.includes('search')).length;
+
+    if (combatActions > socialActions && combatActions > explorationActions) return 'warrior';
+    if (socialActions > combatActions && socialActions > explorationActions) return 'diplomat';
+    if (explorationActions > combatActions && explorationActions > socialActions) return 'explorer';
+    
+    return 'balanced';
+  }
+
+  private buildEmotionalProfile(memories: any[]): any {
+    const emotions = {
+      joy: 0, anger: 0, fear: 0, sadness: 0, surprise: 0, trust: 0
+    };
+
+    memories.forEach(memory => {
+      if (memory.context?.emotions) {
+        memory.context.emotions.forEach((emotion: string) => {
+          if (emotions.hasOwnProperty(emotion)) {
+            emotions[emotion as keyof typeof emotions]++;
+          }
+        });
+      }
+    });
+
+    return emotions;
+  }
+
+  private analyzeGameplayPatterns(memories: any[]): any {
+    return {
+      session_length_preference: 'medium',
+      interaction_frequency: memories.length > 50 ? 'high' : memories.length > 20 ? 'medium' : 'low',
+      complexity_preference: 'adaptive',
+      social_vs_solo: 'balanced'
+    };
+  }
+
+  private extractFavoriteThemes(memories: any[]): string[] {
+    const themes = new Map<string, number>();
+    
+    memories.forEach(memory => {
+      if (memory.context?.themes) {
+        memory.context.themes.forEach((theme: string) => {
+          themes.set(theme, (themes.get(theme) || 0) + 1);
+        });
+      }
+    });
+
+    return Array.from(themes.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([theme]) => theme);
+  }
+
+  private calculatePreferredDifficulty(memories: any[]): number {
+    // Analyze success/failure patterns to determine preferred difficulty
+    const successfulActions = memories.filter(m => 
+      m.content.includes('success') || m.content.includes('achieve')
+    ).length;
+    
+    const totalActions = memories.length;
+    const successRate = totalActions > 0 ? successfulActions / totalActions : 0.5;
+
+    // Prefer difficulty that gives 60-70% success rate
+    if (successRate > 0.8) return 7; // Increase difficulty
+    if (successRate < 0.4) return 3; // Decrease difficulty
+    return 5; // Balanced
+  }
+
+  private analyzeSocialTendencies(memories: any[]): string {
+    const socialMemories = memories.filter(m => 
+      m.type === 'character_interaction' || m.content.includes('talk') || m.content.includes('npc')
+    ).length;
+    
+    const totalMemories = memories.length;
+    const socialRatio = totalMemories > 0 ? socialMemories / totalMemories : 0.5;
+
+    if (socialRatio > 0.6) return 'highly_social';
+    if (socialRatio < 0.3) return 'prefers_solo';
+    return 'balanced_social';
+  }
+
+  private recommendNPCsForComponent(component: string, profile: any): string[] {
+    const { archetype, emotionalProfile, relationship_history } = profile;
+    
+    // Component-specific NPC recommendations
+    const npcRecommendations = {
+      'automated-games': ['Ghost', 'Sage', 'Warrior', 'Merchant'],
+      'campaigns': ['Innkeeper', 'Village Elder', 'Quest Giver', 'Rival'],
+      'combat': ['Combat Instructor', 'Healer', 'Strategist'],
+      'exploration': ['Guide', 'Scholar', 'Scout', 'Cartographer']
+    };
+
+    let baseNPCs = npcRecommendations[component as keyof typeof npcRecommendations] || [];
+    
+    // Customize based on archetype
+    if (archetype === 'scholar') baseNPCs = ['Sage', 'Scholar', 'Librarian', ...baseNPCs];
+    if (archetype === 'warrior') baseNPCs = ['Combat Instructor', 'Warrior', 'Blacksmith', ...baseNPCs];
+    if (archetype === 'diplomat') baseNPCs = ['Ambassador', 'Merchant', 'Noble', ...baseNPCs];
+
+    return [...new Set(baseNPCs)].slice(0, 4);
+  }
+
+  private recommendStorylinesForComponent(component: string, profile: any): string[] {
+    const { archetype, cross_campaign_data } = profile;
+    const favoriteThemes = cross_campaign_data?.favorite_themes || [];
+    
+    const storylineRecommendations = [];
+    
+    // Add archetype-specific storylines
+    if (archetype === 'explorer') {
+      storylineRecommendations.push('Ancient ruins discovery', 'Uncharted territory mapping');
+    }
+    if (archetype === 'diplomat') {
+      storylineRecommendations.push('Political intrigue', 'Peace negotiations');
+    }
+    if (archetype === 'warrior') {
+      storylineRecommendations.push('Epic battles', 'Tournament competition');
+    }
+
+    // Add theme-based storylines
+    favoriteThemes.forEach(theme => {
+      if (theme.includes('mystery')) storylineRecommendations.push('Mystery investigation');
+      if (theme.includes('magic')) storylineRecommendations.push('Magical artifact quest');
+      if (theme.includes('horror')) storylineRecommendations.push('Supernatural encounters');
+    });
+
+    return [...new Set(storylineRecommendations)].slice(0, 3);
+  }
+
+  private calculateOptimalDifficulty(profile: any, currentContext: any): number {
+    const baseDifficulty = profile.cross_campaign_data?.preferred_difficulty || 5;
+    
+    // Adjust based on current context
+    if (currentContext?.recentFailures > 2) return Math.max(1, baseDifficulty - 1);
+    if (currentContext?.recentSuccesses > 3) return Math.min(10, baseDifficulty + 1);
+    
+    return baseDifficulty;
+  }
+
+  private recommendThemesForComponent(component: string, profile: any): string[] {
+    const favoriteThemes = profile.cross_campaign_data?.favorite_themes || [];
+    const archetype = profile.archetype;
+    
+    const themeRecommendations = [...favoriteThemes];
+    
+    // Add archetype-specific themes
+    if (archetype === 'scholar') themeRecommendations.push('ancient_lore', 'magical_research');
+    if (archetype === 'warrior') themeRecommendations.push('epic_battles', 'heroic_deeds');
+    if (archetype === 'diplomat') themeRecommendations.push('political_intrigue', 'social_dynamics');
+    if (archetype === 'explorer') themeRecommendations.push('discovery', 'adventure');
+
+    return [...new Set(themeRecommendations)].slice(0, 4);
+  }
+
+  private generateComponentAIInsights(component: string, profile: any, currentContext: any): string[] {
+    const insights = [];
+    
+    // General insights based on profile
+    if (profile.cross_campaign_data?.social_tendencies === 'highly_social') {
+      insights.push('Player enjoys character interactions - emphasize NPC dialogue');
+    }
+    
+    if (profile.archetype === 'explorer') {
+      insights.push('Player loves discovery - include hidden secrets and exploration rewards');
+    }
+    
+    // Component-specific insights
+    if (component === 'combat' && profile.cross_campaign_data?.preferred_difficulty > 7) {
+      insights.push('Player prefers challenging combat - use advanced tactics');
+    }
+    
+    if (component === 'campaigns' && profile.emotionalProfile?.trust > 5) {
+      insights.push('Player forms strong NPC relationships - develop long-term character arcs');
+    }
+
+    // Context-specific insights
+    if (currentContext?.timeSinceLastPlay > 7 * 24 * 60 * 60 * 1000) { // 7 days
+      insights.push('Player returning after break - provide gentle reintroduction to story');
+    }
+
+    return insights.slice(0, 3);
   }
 }
 

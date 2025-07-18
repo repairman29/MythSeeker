@@ -136,6 +136,15 @@ const Dashboard: React.FC<DashboardProps> = ({
       badge: activeCampaigns.length > 0 ? `${activeCampaigns.length} Active` : undefined
     },
     {
+      id: 'ai-games',
+      title: 'AI Adventures',
+      description: 'Start an AI-powered game',
+      icon: <Gamepad2 className="w-6 h-6" />,
+      action: () => onNavigate('/automated-games'),
+      color: 'from-cyan-500 to-blue-600',
+      gradient: 'bg-gradient-to-r from-cyan-500 to-blue-600'
+    },
+    {
       id: 'new-campaign',
       title: 'New Campaign',
       description: 'Start a fresh adventure',
@@ -152,15 +161,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       action: onJoinCampaign,
       color: 'from-purple-500 to-pink-600',
       gradient: 'bg-gradient-to-r from-purple-500 to-pink-600'
-    },
-    {
-      id: 'dice-roller',
-      title: 'Dice Roller',
-      description: 'Roll some dice!',
-      icon: <Target className="w-6 h-6" />,
-      action: onOpenDiceRoller,
-      color: 'from-orange-500 to-red-600',
-      gradient: 'bg-gradient-to-r from-orange-500 to-red-600'
     }
   ];
 
@@ -241,6 +241,20 @@ const Dashboard: React.FC<DashboardProps> = ({
       stats: [
         { label: 'Spells', value: '24' },
         { label: 'Prepared', value: '8' }
+      ]
+    },
+    {
+      id: 'automated-games',
+      title: 'AI Games',
+      description: 'AI-powered adventures',
+      icon: <Gamepad2 className="w-8 h-8" />,
+      path: '/automated-games',
+      color: 'from-cyan-500 to-blue-600',
+      gradient: 'bg-gradient-to-br from-cyan-500 to-blue-600',
+      isNew: true,
+      stats: [
+        { label: 'Active', value: '2' },
+        { label: 'Saved', value: '5' }
       ]
     },
     {
