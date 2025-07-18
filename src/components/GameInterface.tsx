@@ -16,7 +16,8 @@ import {
   Dice1
 } from 'lucide-react';
 import Tooltip from './Tooltip';
-import DiceRoller from './DiceRoller';
+import EnhancedDiceSystem from './EnhancedDiceSystem';
+import DiceRollMessage from './DiceRollMessage';
 import { gameStateService } from '../services/gameStateService';
 import AIPartyManager from './AIPartyManager';
 
@@ -37,7 +38,7 @@ interface GameInterfaceProps {
   inputRef?: React.RefObject<HTMLInputElement>;
 }
 
-const GameInterface: React.FC<GameInterfaceProps> = ({
+export const GameInterface: React.FC<GameInterfaceProps> = ({
   campaign,
   messages,
   inputMessage,
@@ -57,10 +58,173 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
   const [showWorldState, setShowWorldState] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [diceRollMessages, setDiceRollMessages] = useState<any[]>([]);
   
   // Use provided inputRef or create a stable local one
   const localInputRef = useRef<HTMLInputElement>(null);
   const inputRef = propInputRef || localInputRef;
+
+  // Enhanced message sending with AI party integration
+  const handleSendMessage = async () => {
+    if (inputMessage.trim()) {
+      // Send the original message using the parent's sendMessage function
+      await sendMessage();
+      
+      // Trigger AI party processing if available
+      if ((window as any).aiPartyManager) {
+        try {
+          await (window as any).aiPartyManager.processPlayerInput(character?.id || 'player', inputMessage.trim());
+        } catch (error) {
+          console.error('Error processing AI party input:', error);
+        }
+      }
+    }
+  };
+
+  // Handle dice roll completion
+  const handleDiceRollComplete = (rollData: any) => {
+    console.log('🎲 Dice roll completed:', rollData);
+    
+    // Add dice roll message to chat
+    const diceMessage = {
+      id: `dice_${rollData.id}`,
+      type: 'dice_roll',
+      content: `🎲 ${rollData.player || character?.name || 'Player'} rolled ${rollData.diceType} = ${rollData.total}`,
+      sender: rollData.player || character?.name || 'Player',
+      timestamp: new Date(rollData.timestamp),
+      rollData: rollData,
+      metadata: { isDiceRoll: true }
+    };
+
+    // Add to local dice roll messages
+    setDiceRollMessages(prev => [...prev, diceMessage]);
+    
+    // Also send as a regular message for context
+    const contextMessage = rollData.context 
+      ? `I rolled ${rollData.diceType} for ${rollData.context} and got ${rollData.total}!`
+      : `I rolled ${rollData.diceType} and got ${rollData.total}!`;
+    
+    setInputMessage(contextMessage);
+    // Trigger send after setting the message
+    setTimeout(() => sendMessage(), 50);
+    
+    // Close the dice roller
+    setShowDiceRoller(false);
+  };
+
+  // Enhanced message rendering to include dice rolls
+  const renderMessage = (message: any, index: number) => {
+    // Handle dice roll messages
+    if (message.type === 'dice_roll' && message.rollData) {
+      return (
+        <DiceRollMessage
+          key={message.id}
+          rollData={message.rollData}
+          isOwnRoll={message.sender === (character?.name || 'Player')}
+        />
+      );
+    }
+
+    // Regular message rendering (existing code)
+    const isPlayer = message.type === 'player';
+    const isDM = message.type === 'dm';
+    const isAI = message.metadata?.isAI;
+    
+    return (
+      <div
+        key={message.id}
+        className={`mb-4 ${isPlayer ? 'flex justify-end' : 'flex justify-start'}`}
+      >
+        <div
+          className={`max-w-3xl p-4 rounded-lg ${
+            isPlayer 
+              ? 'bg-blue-600/30 text-blue-100 border border-blue-400/30' 
+              : isDM 
+              ? 'bg-purple-600/30 text-purple-100 border border-purple-400/30'
+              : isAI
+              ? 'bg-green-600/30 text-green-100 border border-green-400/30'
+              : 'bg-gray-600/30 text-gray-100 border border-gray-400/30'
+          }`}
+        >
+          {/* Message Header */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center space-x-2">
+              <span className="font-bold">
+                {isAI && '🤖 '}
+                {message.sender || (isDM ? 'Dungeon Master' : 'System')}
+              </span>
+              {isAI && message.metadata?.characterClass && (
+                <span className="text-xs bg-gray-600/50 px-2 py-1 rounded">
+                  {message.metadata.characterClass}
+                </span>
+              )}
+            </div>
+            <span className="text-xs text-gray-300">
+              {new Date(message.timestamp).toLocaleTimeString()}
+            </span>
+          </div>
+          
+          {/* Message Content */}
+          <div className="text-white">
+            {message.content}
+          </div>
+          
+          {/* DM Message Choices */}
+          {isDM && message.choices && (
+            <div className="mt-3 space-y-2">
+              <div className="text-sm text-purple-200 font-medium">Suggested actions:</div>
+              <div className="grid grid-cols-1 gap-2">
+                {message.choices.map((choice: string, choiceIndex: number) => (
+                  <button
+                    key={choiceIndex}
+                    onClick={() => setInputMessage(choice)}
+                    className="text-left p-2 bg-purple-500/20 hover:bg-purple-500/40 rounded border border-purple-400/30 text-purple-100 transition-colors"
+                  >
+                    {choice}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Combine all messages (regular + dice rolls) and sort by timestamp
+  const allMessages = [...messages, ...diceRollMessages].sort((a, b) => 
+    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
+
+  // Get contextual dice roll suggestions based on game state
+  const getContextualDiceRolls = () => {
+    const suggestions = [];
+    
+    if (worldState?.inCombat) {
+      suggestions.push(
+        { label: 'Attack Roll', dice: '1d20', context: 'Combat attack' },
+        { label: 'Initiative', dice: '1d20', context: 'Combat initiative' },
+        { label: 'Damage', dice: '1d8', context: 'Weapon damage' }
+      );
+    }
+    
+    if (worldState?.nearbyNPCs?.length > 0) {
+      suggestions.push(
+        { label: 'Persuasion', dice: '1d20', context: 'Persuasion check' },
+        { label: 'Insight', dice: '1d20', context: 'Insight check' },
+        { label: 'Deception', dice: '1d20', context: 'Deception check' }
+      );
+    }
+    
+    // Always include basic checks
+    suggestions.push(
+      { label: 'Perception', dice: '1d20', context: 'Perception check' },
+      { label: 'Investigation', dice: '1d20', context: 'Investigation check' },
+      { label: 'Stealth', dice: '1d20', context: 'Stealth check' }
+    );
+    
+    return suggestions;
+  };
 
   // Ensure input focus is maintained
   useEffect(() => {
@@ -221,10 +385,7 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
     setInputMessage(e.target.value);
   }, [setInputMessage]);
 
-  const handleSendClick = () => {
-    if (!inputMessage.trim() || isAIThinking) return;
-    sendMessage();
-  };
+
 
   // Memoized tab rendering
   const renderedTabs = useMemo(() => {
@@ -245,44 +406,15 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
     ));
   }, [tabs, activeTab, onTabChange]);
 
-  // Enhanced message sending with AI party integration
-  const handleSendMessage = async (message: string) => {
-    if (message.trim()) {
-      // Send the original message
-      await sendMessage();
-      
-      // Trigger AI party processing if available
-      if ((window as any).aiPartyManager) {
-        try {
-          await (window as any).aiPartyManager.processPlayerInput(character?.id || 'player', message.trim());
-        } catch (error) {
-          console.error('Error processing AI party input:', error);
-        }
-      }
-    }
-  };
-
   // Handle AI messages from the party manager
   const handleAIMessage = (message: any) => {
-    // setAIMessages(prev => [...prev, message]); // This state is not defined in the original file
-    
-    // Add to the main message stream
-    const enhancedMessage = {
-      ...message,
-      id: message.id || Date.now(),
-      type: 'player', // AI party members speak as players
-      content: message.content,
-      sender: message.sender,
-      timestamp: message.timestamp || new Date()
-    };
-    
-    // Update the messages display immediately
-    // setMessages(prev => [...prev, enhancedMessage]); // This state is not defined in the original file
+    console.log('🤖 AI message received:', message);
+    // AI messages are handled through the external message system
+    // The parent component should handle adding these to the main message stream
   };
 
   // Handle AI party members update
   const handleAIPartyMembersUpdated = (members: any[]) => {
-    // setAIPartyMembers(members); // This state is not defined in the original file
     console.log(`🎭 Game Interface: AI party updated with ${members.length} members:`, 
       members.map(m => `${m.name} (${m.characterClass})`));
   };
@@ -330,7 +462,25 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-blue-950 via-indigo-950 to-purple-950">
+    <div className="h-full flex flex-col bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      {/* AI Party Manager Integration */}
+      <AIPartyManager
+        {...getGameContext()}
+        onAIMessage={handleAIMessage}
+        onAIPartyMembersUpdated={handleAIPartyMembersUpdated}
+      />
+
+      {/* Enhanced Dice Button */}
+      <div className="absolute top-4 left-4 z-40">
+        <button
+          onClick={() => setShowDiceRoller(true)}
+          className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-4 py-2 rounded-lg shadow-lg transition-all transform hover:scale-105 flex items-center gap-2"
+          title="TTRPG Dice Roller"
+        >
+          🎲 <span className="hidden md:inline">Roll Dice</span>
+        </button>
+      </div>
+
       {/* Enhanced Top Controls with World State */}
       <div className="flex items-center justify-between p-4 border-b border-white/20 bg-black/20">
         <div className="flex items-center space-x-4">
@@ -449,7 +599,7 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
       <div className="flex-1 flex flex-col min-h-0">
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {renderedMessages}
+          {allMessages.map(renderMessage)}
           
           {/* AI Thinking Indicator */}
           {isAIThinking && (
@@ -477,7 +627,7 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
               autoFocus
             />
             <button
-              onClick={handleSendClick}
+              onClick={handleSendMessage}
               disabled={isAIThinking || !inputMessage.trim()}
               className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed rounded-lg transition-all text-white font-semibold shadow-lg"
             >
@@ -487,36 +637,20 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
         </div>
       </div>
 
-      {/* Dice Roller Modal */}
+      {/* Enhanced Dice Roller Modal */}
       {showDiceRoller && (
-        <DiceRoller
+        <EnhancedDiceSystem
           isOpen={showDiceRoller}
-          onClose={(results) => {
-            setShowDiceRoller(false);
-            if (results && results.length > 0) {
-              const total = results.reduce((sum, result) => sum + result, 0);
-              setInputMessage(`I rolled ${results.join(', ')} for a total of ${total}!`);
-              sendMessage();
-            }
-          }}
-          onRollComplete={(results) => {
-            const total = results.reduce((sum, result) => sum + result, 0);
-            setInputMessage(`I rolled ${results.join(', ')} for a total of ${total}!`);
-            sendMessage();
-          }}
-          defaultDice={[{ sides: 20, count: 1 }]}
+          onClose={() => setShowDiceRoller(false)}
+          onRollComplete={handleDiceRollComplete}
+          context={`${character?.name || 'Player'} in ${campaign?.theme || 'adventure'}`}
+          suggestedRolls={getContextualDiceRolls()}
+          playerName={character?.name || 'Player'}
         />
-      )}
-
-      {/* AI Party Manager Integration */}
-      <AIPartyManager
-        {...getGameContext()}
-        onAIMessage={handleAIMessage}
-        onAIPartyMembersUpdated={handleAIPartyMembersUpdated}
-      />
-    </div>
-  );
-};
+              )}
+      </div>
+    );
+  };
 
 GameInterface.displayName = 'GameInterface';
 

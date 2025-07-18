@@ -17,6 +17,8 @@ export const ToastNotifications = lazy(() => import('./ToastNotifications'));
 export const VirtualizedMessageList = lazy(() => import('./VirtualizedMessageList'));
 export const GameInterface = lazy(() => import('./GameInterface'));
 export { default as AIPartyManager, useAIPartyManager } from './AIPartyManager';
+export { default as EnhancedDiceSystem } from './EnhancedDiceSystem';
+export { default as DiceRollMessage } from './DiceRollMessage';
 
 // Non-lazy components (smaller, frequently used)
 export { default as Tooltip } from './Tooltip';
