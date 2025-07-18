@@ -84,10 +84,18 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
         setInputMessage('');
       } else {
         // Use campaign service
-        const result = await campaignService.sendMessage(gameId, { content: inputMessage, playerId: user.uid });
+        const result = await campaignService.sendMessage(gameId, { 
+          content: inputMessage, 
+          playerId: user.uid,
+          playerName: user.displayName || user.email || 'Player'
+        });
         if (result.success) {
           setInputMessage('');
-          // Reload messages or handle real-time updates
+          
+          // Update local messages with the new player message and AI response
+          const updatedCampaign = await campaignService.getCampaign(gameId);
+          setMessages(updatedCampaign.messages || []);
+          setCampaign(updatedCampaign);
         }
       }
     } catch (error) {
