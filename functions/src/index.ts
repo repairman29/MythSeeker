@@ -927,7 +927,7 @@ export const testEndpoint = functions.https.onRequest(async (req, res) => {
         result = await handleStartGameSession(data, { auth: { uid: 'test-user' } });
         break;
       case 'aiDungeonMaster':
-        const { prompt: aiPrompt, context: aiContext } = data;
+        const { prompt: aiPrompt } = data;
         
         if (!aiPrompt) {
           throw new Error('Prompt is required');
@@ -1386,12 +1386,12 @@ export const aiDungeonMaster = functions.https.onCall(async (data: any, context)
   try {
     console.log('AI Dungeon Master called with data:', data);
     
+    const { prompt } = data;
+
     // Rate limiting
     if (context.auth && !checkRateLimit(context.auth.uid, 'aiDungeonMaster', 20, 60000)) { // 20 per minute
       throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please wait before making another request.');
     }
-
-    const { prompt, context } = data;
     
     if (!prompt) {
       throw new functions.https.HttpsError('invalid-argument', 'Prompt is required');
@@ -1412,12 +1412,12 @@ export const geminiAIFunction = functions.https.onCall(async (data: any, context
   try {
     console.log('Gemini AI Function called with data:', data);
     
+    const { prompt } = data;
+
     // Rate limiting
     if (context.auth && !checkRateLimit(context.auth.uid, 'geminiAIFunction', 20, 60000)) { // 20 per minute
       throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please wait before making another request.');
     }
-
-    const { prompt, context } = data;
     
     if (!prompt) {
       throw new functions.https.HttpsError('invalid-argument', 'Prompt is required');

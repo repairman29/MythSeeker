@@ -42,6 +42,7 @@ import CampaignCreator from './components/CampaignCreator';
 import WorldMap from './components/WorldMap';
 import MagicSystem from './components/MagicSystem';
 import EnhancedCombatSystem from './components/EnhancedCombatSystem';
+import { AutomatedGameWrapper } from './components/AutomatedGameWrapper';
 
 // Lazy load components
 const NavBar = lazy(() => import('./components/NavBar'));
@@ -4778,6 +4779,7 @@ export default function AppWrapper() {
           <Route path="/campaigns" element={<CampaignWrapper user={user} />} />
           <Route path="/campaigns/:id" element={<CampaignGameWrapper user={user} />} />
           <Route path="/campaigns/:id/waiting" element={<WaitingRoomWrapper user={user} />} />
+          <Route path="/automated-games" element={<AutomatedGameWrapper user={user} />} />
           <Route path="/party" element={<PartyWrapper user={user} />} />
           <Route path="/world" element={<WorldWrapper user={user} />} />
           <Route path="/combat" element={<CombatWrapper user={user} />} />

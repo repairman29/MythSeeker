@@ -655,6 +655,10 @@ exports.testEndpoint = functions.https.onRequest(async (req, res) => {
                 result = await handleStartGameSession(data, { auth: { uid: 'test-user' } });
                 break;
             case 'aiDungeonMaster':
+                const { prompt: aiPrompt } = data;
+                if (!aiPrompt) {
+                    throw new Error('Prompt is required');
+                }
                 result = await handleAIDungeonMaster(data, { auth: { uid: 'test-user' } });
                 break;
             case 'saveGameProgress':
@@ -1032,11 +1036,11 @@ async function handleEndCombat(data, context) {
 exports.aiDungeonMaster = functions.https.onCall(async (data, context) => {
     try {
         console.log('AI Dungeon Master called with data:', data);
+        const { prompt } = data;
         // Rate limiting
         if (context.auth && !(0, validation_1.checkRateLimit)(context.auth.uid, 'aiDungeonMaster', 20, 60000)) { // 20 per minute
             throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please wait before making another request.');
         }
-        const { prompt, context: aiContext } = data;
         if (!prompt) {
             throw new functions.https.HttpsError('invalid-argument', 'Prompt is required');
         }
@@ -1053,11 +1057,11 @@ exports.aiDungeonMaster = functions.https.onCall(async (data, context) => {
 exports.geminiAIFunction = functions.https.onCall(async (data, context) => {
     try {
         console.log('Gemini AI Function called with data:', data);
+        const { prompt } = data;
         // Rate limiting
         if (context.auth && !(0, validation_1.checkRateLimit)(context.auth.uid, 'geminiAIFunction', 20, 60000)) { // 20 per minute
             throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please wait before making another request.');
         }
-        const { prompt, context: aiContext } = data;
         if (!prompt) {
             throw new functions.https.HttpsError('invalid-argument', 'Prompt is required');
         }

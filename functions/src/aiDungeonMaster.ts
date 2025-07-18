@@ -371,13 +371,15 @@ export const aiDungeonMaster = functions.https.onCall(async (data, context) => {
     }
 
     // Enhanced context gathering
-    const [rulesSnap, historySnap] = await Promise.all([
-      campaignRef.collection('rules').doc('main').get(),
-      campaignRef.collection('history').doc('main').get()
-    ]);
+    // Get rules and history (for future context enhancement)
+    // const [rulesSnap, historySnap] = await Promise.all([
+    //   campaignRef.collection('rules').doc('main').get(),
+    //   campaignRef.collection('history').doc('main').get()
+    // ]);
 
-    const rules = rulesSnap.exists ? rulesSnap.data()?.content || '' : '';
-    const history = historySnap.exists ? historySnap.data()?.content || '' : '';
+    // Get rules and history data (available for future enhancements)
+    // const rules = rulesSnap.exists ? rulesSnap.data()?.content || '' : '';
+    // const history = historySnap.exists ? historySnap.data()?.content || '' : '';
 
     // Get the current game session data for world state and memory
     const gameSessionRef = db.collection('games').doc(campaignId);

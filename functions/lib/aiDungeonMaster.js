@@ -294,7 +294,7 @@ function parseNPCMemoryUpdates(aiResponse) {
 }
 // Main enhanced function
 exports.aiDungeonMaster = functions.https.onCall(async (data, context) => {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d;
     const startTime = Date.now();
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -333,14 +333,14 @@ exports.aiDungeonMaster = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('permission-denied', 'You are not a participant in this campaign');
         }
         // Enhanced context gathering
-        const [rulesSnap, historySnap, worldStateSnap] = await Promise.all([
-            campaignRef.collection('rules').doc('main').get(),
-            campaignRef.collection('history').doc('main').get(),
-            campaignRef.collection('worldState').doc('current').get()
-        ]);
-        const rules = rulesSnap.exists ? ((_e = rulesSnap.data()) === null || _e === void 0 ? void 0 : _e.content) || '' : '';
-        const history = historySnap.exists ? ((_f = historySnap.data()) === null || _f === void 0 ? void 0 : _f.content) || '' : '';
-        const worldState = worldStateSnap.exists ? worldStateSnap.data() || {} : {};
+        // Get rules and history (for future context enhancement)
+        // const [rulesSnap, historySnap] = await Promise.all([
+        //   campaignRef.collection('rules').doc('main').get(),
+        //   campaignRef.collection('history').doc('main').get()
+        // ]);
+        // Get rules and history data (available for future enhancements)
+        // const rules = rulesSnap.exists ? rulesSnap.data()?.content || '' : '';
+        // const history = historySnap.exists ? historySnap.data()?.content || '' : '';
         // Get the current game session data for world state and memory
         const gameSessionRef = db.collection('games').doc(campaignId);
         const gameSessionSnap = await gameSessionRef.get();
@@ -348,24 +348,6 @@ exports.aiDungeonMaster = functions.https.onCall(async (data, context) => {
         const sessionWorldState = (gameSessionData === null || gameSessionData === void 0 ? void 0 : gameSessionData.worldState) || {};
         const playerMemory = (gameSessionData === null || gameSessionData === void 0 ? void 0 : gameSessionData.playerMemory) || [];
         const npcMemory = (gameSessionData === null || gameSessionData === void 0 ? void 0 : gameSessionData.npcMemory) || [];
-        // --- Pass the rating into the prompt for creative/mature content control ---
-        const contextText = `CAMPAIGN RULES:
-${rules}
-
-WORLD STATE:
-${JSON.stringify(sessionWorldState, null, 2)}
-
-PLAYER MEMORY (Key Actions/Outcomes):
-${playerMemory.map((memory) => `- ${memory.action}: ${memory.outcome}`).join('\n')}
-
-NPC MEMORY (Relationships/Traits):
-${npcMemory.map((npc) => { var _a; return `- ${npc.name}: ${((_a = npc.traits) === null || _a === void 0 ? void 0 : _a.join(', ')) || 'No traits'} (${npc.relationship || 'neutral'} relationship)`; }).join('\n')}
-
-HISTORY SO FAR:
-${history}
-
-PLAYER NAME: ${playerName}
-GAME RATING: ${rating || 'PG-13'} // This controls how wild/creative the AI can be.`;
         // Get Vertex AI API key from Secret Manager
         const apiKey = await getSecret('vertex-ai-api-key');
         // Call enhanced Vertex AI with full context
