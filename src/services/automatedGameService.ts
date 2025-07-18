@@ -313,6 +313,8 @@ class AutomatedGameService {
     return session || null;
   }
 
+
+
   /**
    * Delete a session permanently
    */
@@ -1126,6 +1128,32 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
     });
     
     return achievements.slice(0, 3);
+  }
+
+  /**
+   * Get all active sessions
+   */
+  getAllSessions(): GameSession[] {
+    return Array.from(this.activeSessions.values());
+  }
+
+  /**
+   * Get persisted sessions from localStorage
+   */
+  getPersistedSessions(): GameSession[] {
+    try {
+      return this.loadFromLocalStorage();
+    } catch (error) {
+      console.error('Failed to load persisted sessions:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get a specific session by ID
+   */
+  getSession(sessionId: string): GameSession | null {
+    return this.activeSessions.get(sessionId) || null;
   }
 
   // ... existing code ...
