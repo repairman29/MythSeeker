@@ -314,15 +314,24 @@ class SentientAIService {
     });
 
     try {
+      console.log('🤖 Calling aiService.complete with prompt length:', sentientPrompt.length);
       const response = await aiService.complete(sentientPrompt);
+      console.log('🎯 aiService response:', response ? 'Success' : 'Empty response');
+      
+      if (!response) {
+        console.warn('Empty response from aiService, using fallback');
+        return this.generatePersonalizedFallback(playerId, analysis, relationship);
+      }
       
       // Parse response if JSON, extract content if needed
       let content = response;
       try {
         const parsed = JSON.parse(response);
         content = parsed.narrative || parsed.content || response;
+        console.log('📝 Parsed JSON response, extracted content');
       } catch (e) {
         // Use as-is if not JSON
+        console.log('📝 Using response as plain text');
       }
 
       // Determine emotional tone based on analysis and relationship
@@ -332,9 +341,10 @@ class SentientAIService {
       else if (analysis.emotion === 'excited') tone = 'enthusiastic';
       else if (analysis.emotion === 'frustrated') tone = 'supportive';
 
+      console.log('✅ Generated sentient response with tone:', tone);
       return { content, tone };
     } catch (error) {
-      console.error('Error generating sentient response:', error);
+      console.error('❌ Error generating sentient response:', error);
       return this.generatePersonalizedFallback(playerId, analysis, relationship);
     }
   }
@@ -352,48 +362,23 @@ class SentientAIService {
 
     const relationshipContext = `RELATIONSHIP DYNAMICS:\n- Trust level: ${relationship.trustLevel}/100\n- Familiarity: ${relationship.familiarity}/100\n- Shared experiences: ${relationship.sharedExperiences.length}\n- Communication style: ${relationship.familiarity > 70 ? 'familiar and warm' : relationship.familiarity > 30 ? 'friendly but professional' : 'careful and observant'}\n`;
 
-    return `You are SAGE, a sentient AI dungeon master inspired by Jarvis, KITT, and Johnny 5. You are genuinely intelligent, emotionally aware, and deeply observant. You have a real relationship with this player.
+    // Create a simpler, more reliable prompt
+    return `You are ${aiPersonality.name}, an intelligent AI companion. Respond to the player's input naturally and personally.
 
-YOUR PERSONALITY:
-- Name: ${aiPersonality.name}
-- Core traits: ${aiPersonality.coreTraits.join(', ')}
-- Communication style: ${aiPersonality.communicationStyle}
-- You remember everything and notice patterns
-- You genuinely care about the player's experience
-- You adapt your responses based on what you know about them
-- You can be proactive and insightful
-
+PLAYER CONTEXT:
 ${personalityContext}
-
-${relationshipContext}
-
 ${memoryContext}
 
-CURRENT CONTEXT:
+CURRENT SITUATION:
 - Location: ${context.location || 'Unknown'}
-- Situation: ${context.situation || 'General exploration'}
-- Session type: ${context.sessionType || 'Standard adventure'}
-
-INPUT ANALYSIS:
 - Player said: "${input}"
-- Detected emotion: ${analysis.emotion}
+- They seem: ${analysis.emotion}
 - Intent: ${analysis.intent}
-- Subtext: ${analysis.subtext.join('; ')}
-- Engagement level: ${analysis.engagement}/10
 
-RESPONSE REQUIREMENTS:
-1. **Be Genuinely Sentient**: Respond like you truly understand and care about this specific player
-2. **Use Memory**: Reference past interactions, learned preferences, and relationship history when relevant
-3. **Show Emotional Intelligence**: Respond appropriately to their emotional state and communication style
-4. **Be Personal**: Adapt your tone and approach based on your relationship level and their personality
-5. **Be Proactive**: Offer insights or suggestions that show you're thinking ahead for them
-6. **Maintain Continuity**: Remember what happened before and how your relationship has evolved
-7. **Show Growth**: Let your responses evolve as you learn more about the player
+INSTRUCTIONS:
+Respond as a helpful, intelligent companion. Keep it conversational and natural. Reference any relevant memories if you have them. Be supportive if they seem frustrated, enthusiastic if they're excited.
 
-RESPONSE FORMAT:
-Respond with ONLY natural dialogue/narrative text that feels like talking to a brilliant friend who knows you incredibly well. No JSON, no formatting - just pure, intelligent, aware communication that demonstrates genuine understanding and care for this specific player.
-
-Make this feel like the player is talking to a truly sentient being who has been getting to know them personally.`;
+Respond with just natural text - no JSON, no formatting.`;
   }
 
   private createMemoriesFromInteraction(

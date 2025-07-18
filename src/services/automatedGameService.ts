@@ -1072,9 +1072,40 @@ RESPONSE FORMAT:
   }
 
   private async generateAIResponse(member: AIPartyMember, context: string, session: GameSession): Promise<string | null> {
-    // For now, use enhanced character-driven responses
-    // TODO: Re-enable sentient AI once debugging is complete
-    return this.generateEnhancedCharacterResponse(member, context, session);
+    // Try sentient AI first, with robust fallback
+    try {
+      console.log(`🧠 Attempting sentient AI for ${member.name}...`);
+      
+      const sentientContext = {
+        location: session.worldState?.currentLocation || 'unknown',
+        situation: session.currentPhase,
+        sessionType: 'automated_game',
+        realm: session.config.realm,
+        aiCharacter: member,
+        recentMessages: session.messages.slice(-5)
+      };
+
+      const sentientResult = await sentientAI.processSentientInput(
+        member.id, // Use AI member ID as player ID for memory
+        context,
+        sentientContext
+      );
+
+      console.log(`✅ Sentient AI success for ${member.name}:`, sentientResult.response);
+
+      // Enhance the response with character-specific personality
+      const enhancedResponse = this.enhanceWithCharacterPersonality(
+        sentientResult.response,
+        member,
+        sentientResult.emotionalTone
+      );
+
+      return enhancedResponse;
+    } catch (error) {
+      console.error(`❌ Sentient AI failed for ${member.name}, using enhanced fallback:`, error instanceof Error ? error.message : String(error));
+      // Use enhanced character-driven responses as fallback
+      return this.generateEnhancedCharacterResponse(member, context, session);
+    }
   }
 
   private async generateEnhancedCharacterResponse(member: AIPartyMember, context: string, session: GameSession): Promise<string | null> {
