@@ -1,6 +1,7 @@
 import { aiService } from './aiService';
 import { embeddingsMemoryService, SemanticMemory } from './embeddingsMemoryService';
 import { sentientAI } from './sentientAIService';
+import { firestoreAIContextService } from './firestoreAIContextService';
 
 // Enhanced AI interfaces for the market-leading framework
 export interface RichContext {
@@ -93,6 +94,106 @@ export class EnhancedAIService {
   }
 
   /**
+   * Generate context-aware response using Firestore + Enhanced AI (spec implementation)
+   */
+  async generateFirestoreContextAwareResponse(
+    playerId: string,
+    npcId: string,
+    playerInput: string,
+    campaignId: string
+  ): Promise<RichAIResponse> {
+    console.log('🏛️ Enhanced AI: Using Firestore context service...');
+
+    try {
+      // Get comprehensive context from Firestore
+      const firestoreContext = await firestoreAIContextService.getContextForNPCInteraction(
+        playerId,
+        npcId,
+        playerInput,
+        campaignId
+      );
+
+      // Generate AI response using Firestore context
+      const aiResponse = await this.generateWithModelOrchestration(
+        this.buildRichContextFromFirestore(firestoreContext),
+        {
+          content: playerInput,
+          playerId,
+          gameContext: {
+            realm: firestoreContext.gameContext.weatherConditions,
+            location: firestoreContext.playerContext.lastKnownLocation,
+            session: firestoreContext.gameContext,
+            worldState: firestoreContext.gameContext
+          },
+          playerContext: {
+            name: firestoreContext.playerContext.playerId,
+            characterClass: firestoreContext.playerContext.playerArchetype,
+            experience: 'intermediate',
+            preferences: firestoreContext.playerContext.preferences
+          }
+        }
+      );
+
+      // Record interaction in Firestore
+      await firestoreAIContextService.recordAIInteraction(
+        playerId,
+        npcId,
+        playerInput,
+        aiResponse.content,
+        firestoreContext
+      );
+
+      // Store interaction in semantic memory
+      await embeddingsMemoryService.storeInteraction(
+        playerId,
+        playerInput,
+        aiResponse.content,
+        {
+          location: firestoreContext.playerContext.lastKnownLocation,
+          emotions: [firestoreContext.npcContext.emotionalState],
+          themes: firestoreContext.npcContext.personalityTraits,
+          realm: firestoreContext.gameContext.weatherConditions
+        },
+        {
+          emotionalTone: firestoreContext.npcContext.emotionalState,
+          themes: firestoreContext.npcContext.personalityTraits,
+          significance: 7
+        }
+      );
+
+      return {
+        response: aiResponse.content,
+        worldStateUpdates: aiResponse.worldChanges || {},
+        characterDevelopment: aiResponse.characterGrowth || {},
+        proactiveInsights: [`Firestore context includes ${firestoreContext.relevantLore.length} lore entries`],
+        memoryReferences: firestoreContext.semanticMemories.map(m => m.content.substring(0, 50)),
+        confidenceScore: aiResponse.confidence || 0.85,
+        emotionalTone: firestoreContext.npcContext.emotionalState,
+        narrativeSignificance: 8
+      };
+    } catch (error) {
+      console.error('❌ Firestore context AI failed:', error);
+      // Fallback to standard enhanced AI
+      return this.generateContextAwareResponse({
+        content: playerInput,
+        playerId,
+        gameContext: {
+          realm: 'fantasy',
+          location: 'unknown',
+          session: { id: campaignId },
+          worldState: {}
+        },
+        playerContext: {
+          name: playerId,
+          characterClass: 'adventurer',
+          experience: 'intermediate',
+          preferences: []
+        }
+      });
+    }
+  }
+
+  /**
    * Generate context-aware response using the full advanced AI framework
    */
   async generateContextAwareResponse(input: AdvancedAIInput): Promise<RichAIResponse> {
@@ -129,7 +230,16 @@ export class EnhancedAIService {
       const response = await this.generateWithModelOrchestration(richContext, input);
       
       // 5. Store new memories from this interaction
-      await this.storeInteractionMemories(input, response, contextAnalysis);
+      await this.storeInteractionMemories(input, {
+        response: response.content,
+        worldStateUpdates: response.worldChanges || {},
+        characterDevelopment: response.characterGrowth || {},
+        proactiveInsights: [],
+        memoryReferences: [],
+        confidenceScore: response.confidence || 0.8,
+        emotionalTone: contextAnalysis.emotionalTone || 'neutral',
+        narrativeSignificance: contextAnalysis.significance || 5
+      }, contextAnalysis);
       
       // 6. Generate proactive insights
       const proactiveInsights = await this.generateProactiveInsights(richContext);
@@ -489,6 +599,52 @@ Generate an immersive, contextually perfect response:`;
         narrativeSignificance: 1
       };
     }
+  }
+
+  /**
+   * Build rich context from Firestore data
+   */
+  private buildRichContextFromFirestore(firestoreContext: any): RichContext {
+    return {
+      immediate: {
+        lastPlayerAction: 'recent interaction',
+        aiResponse: '',
+        currentEmotionalTone: firestoreContext.npcContext.emotionalState,
+        activeNPCs: [firestoreContext.npcContext]
+      },
+      session: {
+        objectives: firestoreContext.gameContext.activeQuests.map((q: any) => q.id),
+        narrativeArcs: [],
+        worldEvents: firestoreContext.gameContext.globalEvents,
+        playerChoices: [],
+        config: {}
+      },
+      character: {
+        playerArchetype: firestoreContext.playerContext.playerArchetype,
+        relationshipDynamics: [],
+        emotionalJourney: [],
+        characterGrowth: []
+      },
+      world: {
+        currentLocation: {
+          name: firestoreContext.playerContext.lastKnownLocation,
+          description: 'Current game location'
+        },
+        weatherAndTime: {
+          weather: firestoreContext.gameContext.weatherConditions,
+          timeOfDay: firestoreContext.gameContext.timeOfDay
+        },
+        activeQuests: firestoreContext.gameContext.activeQuests,
+        npcs: [firestoreContext.npcContext],
+        worldState: firestoreContext.gameContext
+      },
+      semantic: {
+        relevantMemories: firestoreContext.semanticMemories,
+        thematicConnections: firestoreContext.npcContext.personalityTraits,
+        emotionalResonance: [firestoreContext.npcContext.emotionalState],
+        narrativeParallels: firestoreContext.relevantLore.map((l: any) => l.topic)
+      }
+    };
   }
 
   // ======= UTILITY METHODS =======
