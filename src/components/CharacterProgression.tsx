@@ -12,22 +12,33 @@ import { characterProgressionService } from '../services/characterProgressionSer
 
 interface CharacterProgressionProps {
   characterId: string;
+  progressionData?: ProgressionData; // Optional pre-loaded data for demo mode
   onProgressionUpdate?: (progression: ProgressionData) => void;
 }
 
 export const CharacterProgression: React.FC<CharacterProgressionProps> = ({
   characterId,
+  progressionData,
   onProgressionUpdate
 }) => {
-  const [progression, setProgression] = useState<ProgressionData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [progression, setProgression] = useState<ProgressionData | null>(progressionData || null);
+  const [loading, setLoading] = useState(!progressionData); // Skip loading if data provided
   const [activeTab, setActiveTab] = useState<'overview' | 'levelup' | 'feats' | 'skills'>('overview');
   const [pendingLevelUp, setPendingLevelUp] = useState<LevelUpData | null>(null);
   const [selectedASIChoices, setSelectedASIChoices] = useState<AbilityScoreChoice[]>([]);
 
   useEffect(() => {
-    loadProgression();
-  }, [characterId]);
+    // Only load from Firebase if no progression data was provided (demo mode)
+    if (!progressionData) {
+      loadProgression();
+    } else {
+      // Use provided data and notify parent
+      setProgression(progressionData);
+      if (onProgressionUpdate) {
+        onProgressionUpdate(progressionData);
+      }
+    }
+  }, [characterId, progressionData]);
 
   const loadProgression = async () => {
     try {
@@ -48,18 +59,46 @@ export const CharacterProgression: React.FC<CharacterProgressionProps> = ({
     if (!progression) return;
 
     try {
-      const result = await characterProgressionService.addExperience(characterId, amount, {
-        type: type as any,
-        description,
-        amount
-      });
+      // If we have progressionData (demo mode), handle locally
+      if (progressionData) {
+        const newSource = {
+          id: `demo-${Date.now()}`,
+          type: type as any,
+          amount,
+          description,
+          timestamp: new Date()
+        };
 
-      if (result.leveledUp && result.levelUpData) {
-        setPendingLevelUp(result.levelUpData);
-        setActiveTab('levelup');
+        const updatedProgression = {
+          ...progression,
+          experience: {
+            ...progression.experience,
+            current: progression.experience.current + amount,
+            total: progression.experience.total + amount,
+            sources: [...progression.experience.sources, newSource]
+          }
+        };
+
+        setProgression(updatedProgression);
+        if (onProgressionUpdate) {
+          onProgressionUpdate(updatedProgression);
+        }
+      } else {
+        // Use Firebase service for real data
+        const result = await characterProgressionService.addExperience(characterId, amount, {
+          type: type as any,
+          description,
+          amount
+        });
+
+        if (result.leveledUp && result.levelUpData) {
+          setPendingLevelUp(result.levelUpData);
+          setActiveTab('levelup');
+        }
+
+        // Refresh progression data
+        await loadProgression();
       }
-
-      await loadProgression();
     } catch (error) {
       console.error('Error adding experience:', error);
     }

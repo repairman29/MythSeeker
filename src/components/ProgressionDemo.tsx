@@ -269,6 +269,7 @@ export const ProgressionDemo: React.FC<ProgressionDemoProps> = ({ onBack }) => {
           <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-6">
             <CharacterProgression
               characterId="demo-character"
+              progressionData={demoProgression}
               onProgressionUpdate={(progression) => {
                 setDemoProgression(progression);
               }}
