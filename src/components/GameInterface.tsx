@@ -1,6 +1,23 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { MessageSquare, Map, Target, Sword, Dice1, Settings, Volume2, VolumeX, Maximize2, Minimize2, MapPin, Clock, Users, Zap, Shield, Eye } from 'lucide-react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { 
+  Send, 
+  Eye, 
+  Sword, 
+  Shield, 
+  Users, 
+  MapPin, 
+  Volume2, 
+  VolumeX, 
+  Maximize2, 
+  Minimize2, 
+  Settings, 
+  Zap, 
+  Clock,
+  Dice1
+} from 'lucide-react';
 import Tooltip from './Tooltip';
+import DiceRoller from './DiceRoller';
+import { gameStateService } from '../services/gameStateService';
 
 interface GameInterfaceProps {
   campaign: any;
@@ -35,12 +52,11 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
   activeTab = 'gameplay',
   inputRef: propInputRef
 }) => {
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
   const [showDiceRoller, setShowDiceRoller] = useState(false);
-  const [diceResult, setDiceResult] = useState<number | null>(null);
-  const [showWorldState, setShowWorldState] = useState(true);
-
+  const [showWorldState, setShowWorldState] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  
   // Use provided inputRef or create a stable local one
   const localInputRef = useRef<HTMLInputElement>(null);
   const inputRef = propInputRef || localInputRef;
@@ -57,19 +73,19 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
     { 
       key: 'gameplay', 
       label: 'Adventure', 
-      icon: <MessageSquare size={18} />, 
+      icon: <Dice1 size={18} />, 
       description: 'AI Dungeon Master & Story'
     },
     { 
       key: 'map', 
       label: 'World Map', 
-      icon: <Map size={18} />, 
+      icon: <MapPin size={18} />, 
       description: 'Explore the world'
     },
     { 
       key: 'quests', 
       label: 'Quests', 
-      icon: <Target size={18} />, 
+      icon: <Dice1 size={18} />, 
       description: 'Active quests & objectives'
     },
     { 
@@ -83,15 +99,13 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
   // Memoized dice rolling function
   const rollDice = useCallback((sides: number) => {
     const result = Math.floor(Math.random() * sides) + 1;
-    setDiceResult(result);
-    setTimeout(() => setDiceResult(null), 2000);
     return result;
   }, []);
 
   // Dynamic quick actions based on context
   const quickActions = useMemo(() => {
     const actions = [
-      { label: 'Roll d20', action: () => rollDice(20), icon: <Dice1 size={16} /> },
+      { label: 'Roll Dice', action: () => setShowDiceRoller(true), icon: <Dice1 size={16} /> },
       { label: 'Look around', action: () => setInputMessage('I look around to see what\'s here.'), icon: <Eye size={16} /> },
       { label: 'Check character', action: () => onTabChange?.(character ? 'gameplay' : 'combat'), icon: <Shield size={16} /> },
     ];
@@ -206,9 +220,10 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
     setInputMessage(e.target.value);
   }, [setInputMessage]);
 
-  const handleSendClick = useCallback(() => {
+  const handleSendClick = () => {
+    if (!inputMessage.trim() || isAIThinking) return;
     sendMessage();
-  }, [sendMessage]);
+  };
 
   // Memoized tab rendering
   const renderedTabs = useMemo(() => {
@@ -389,33 +404,23 @@ const GameInterface: React.FC<GameInterfaceProps> = ({
 
       {/* Dice Roller Modal */}
       {showDiceRoller && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
-            <h3 className="text-xl font-bold mb-4 text-white">Dice Roller</h3>
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              {[4, 6, 8, 10, 12, 20].map(sides => (
-                <button
-                  key={sides}
-                  onClick={() => rollDice(sides)}
-                  className="p-3 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-white"
-                >
-                  d{sides}
-                </button>
-              ))}
-            </div>
-            {diceResult && (
-              <div className="text-center text-2xl font-bold text-blue-400">
-                Result: {diceResult}
-              </div>
-            )}
-            <button
-              onClick={() => setShowDiceRoller(false)}
-              className="w-full mt-4 px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg transition-colors text-white"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+        <DiceRoller
+          isOpen={showDiceRoller}
+          onClose={(results) => {
+            setShowDiceRoller(false);
+            if (results && results.length > 0) {
+              const total = results.reduce((sum, result) => sum + result, 0);
+              setInputMessage(`I rolled ${results.join(', ')} for a total of ${total}!`);
+              sendMessage();
+            }
+          }}
+          onRollComplete={(results) => {
+            const total = results.reduce((sum, result) => sum + result, 0);
+            setInputMessage(`I rolled ${results.join(', ')} for a total of ${total}!`);
+            sendMessage();
+          }}
+          defaultDice={[{ sides: 20, count: 1 }]}
+        />
       )}
     </div>
   );

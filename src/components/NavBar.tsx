@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Home, Book, Users, Map, User, Sword, Sparkles, Menu, Settings, Award, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Home, Book, Users, Map, User, Sword, Sparkles, Menu, Settings, Award, ChevronLeft, ChevronRight, Bot } from 'lucide-react';
 
 const navItems = [
   { label: 'Dashboard', icon: <Home size={22} />, key: 'dashboard', description: 'Overview and quick actions', showInGameplay: false },
   { label: 'Campaigns', icon: <Book size={22} />, key: 'campaigns', description: 'Create and manage campaigns', showInGameplay: false },
+  { label: "AI Games", icon: <Bot size={22} />, key: "automated-games", description: "Join AI-powered RPG sessions", showInGameplay: false },
   { label: 'Characters', icon: <User size={22} />, key: 'characters', description: 'Character creation and management', showInGameplay: false },
   { label: 'Profile', icon: <Award size={22} />, key: 'profile', description: 'Player profile and achievements', showInGameplay: false },
   { label: 'DM Center', icon: <Settings size={22} />, key: 'dm-center', description: 'Dungeon Master tools and resources', showInGameplay: true },

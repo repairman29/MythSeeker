@@ -40,6 +40,8 @@ import Navigation from './components/Navigation';
 import CharacterSheet from './components/CharacterSheet';
 import CampaignCreator from './components/CampaignCreator';
 import WorldMap from './components/WorldMap';
+import MagicSystem from './components/MagicSystem';
+import EnhancedCombatSystem from './components/EnhancedCombatSystem';
 
 // Lazy load components
 const NavBar = lazy(() => import('./components/NavBar'));
@@ -5260,6 +5262,8 @@ const CombatWrapper: React.FC<{ user: any }> = ({ user }) => {
   const navigate = useNavigate();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [selectedCharacter, setSelectedCharacter] = useState<any>(null);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -5269,6 +5273,22 @@ const CombatWrapper: React.FC<{ user: any }> = ({ user }) => {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  useEffect(() => {
+    // Load user's characters
+    const loadCharacters = async () => {
+      try {
+        const userCharacters = await firebaseService.getUserCharacters(user.uid);
+        setCharacters(userCharacters || []);
+        if (userCharacters && userCharacters.length > 0) {
+          setSelectedCharacter(userCharacters[0]); // Default to first character
+        }
+      } catch (error) {
+        console.error('Error loading characters:', error);
+      }
+    };
+    loadCharacters();
+  }, [user.uid]);
 
   const handleSignOut = () => {
     // This will trigger the auth state change and redirect to landing page
@@ -5297,11 +5317,27 @@ const CombatWrapper: React.FC<{ user: any }> = ({ user }) => {
     }
   };
 
+  const handleStartTraining = (type: string) => {
+    console.log('Starting training:', type);
+    // Implement training logic
+  };
+
+  const handleEquipWeapon = (weaponId: string) => {
+    console.log('Equipping weapon:', weaponId);
+    // Implement weapon equipping logic
+  };
+
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
       <div className="flex-1 overflow-auto">
-        <AIDungeonMaster initialScreen="combat" />
+        <EnhancedCombatSystem 
+          character={selectedCharacter}
+          worldState={{}}
+          isInCombat={false}
+          onStartTraining={handleStartTraining}
+          onEquipWeapon={handleEquipWeapon}
+        />
       </div>
       
       {/* Floating Action Button */}
@@ -5322,6 +5358,8 @@ const MagicWrapper: React.FC<{ user: any }> = ({ user }) => {
   const navigate = useNavigate();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [selectedCharacter, setSelectedCharacter] = useState<any>(null);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -5331,6 +5369,27 @@ const MagicWrapper: React.FC<{ user: any }> = ({ user }) => {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  useEffect(() => {
+    // Load user's characters
+    const loadCharacters = async () => {
+      try {
+        const userCharacters = await firebaseService.getUserCharacters(user.uid);
+        setCharacters(userCharacters || []);
+        // Prioritize mage characters or default to first character
+        const mageCharacter = userCharacters?.find(char => 
+          char.class && (char.class.toLowerCase().includes('mage') || 
+          char.class.toLowerCase().includes('wizard') || 
+          char.class.toLowerCase().includes('sorcerer') ||
+          char.class.toLowerCase().includes('warlock'))
+        );
+        setSelectedCharacter(mageCharacter || (userCharacters && userCharacters[0]) || null);
+      } catch (error) {
+        console.error('Error loading characters:', error);
+      }
+    };
+    loadCharacters();
+  }, [user.uid]);
 
   const handleSignOut = () => {
     // This will trigger the auth state change and redirect to landing page
@@ -5359,11 +5418,32 @@ const MagicWrapper: React.FC<{ user: any }> = ({ user }) => {
     }
   };
 
+  const handleCastSpell = (spell: any, target?: any) => {
+    console.log('Casting spell:', spell.name, 'on target:', target);
+    // Implement spell casting logic
+  };
+
+  const handlePrepareSpell = (spellId: string) => {
+    console.log('Preparing spell:', spellId);
+    // Implement spell preparation logic
+  };
+
+  const handleUnprepareSpell = (spellId: string) => {
+    console.log('Unpreparing spell:', spellId);
+    // Implement spell unpreparing logic
+  };
+
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       <Navigation user={user} onSignOut={handleSignOut} />
       <div className="flex-1 overflow-auto">
-        <AIDungeonMaster initialScreen="magic" />
+        <MagicSystem
+          character={selectedCharacter}
+          worldState={{}}
+          onCastSpell={handleCastSpell}
+          onPrepareSpell={handlePrepareSpell}
+          onUnprepareSpell={handleUnprepareSpell}
+        />
       </div>
       
       {/* Floating Action Button */}

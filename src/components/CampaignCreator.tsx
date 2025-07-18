@@ -79,6 +79,7 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ user, onClose, onCamp
     dynamicEvents: true,
     worldPersistence: true
   });
+  const [selectedRating, setSelectedRating] = useState<'G' | 'PG' | 'PG-13' | 'R' | 'NC-17'>('PG-13');
 
   // Comprehensive Adventure Catalog
   const adventureCatalog: AdventureTemplate[] = [
@@ -207,7 +208,8 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ user, onClose, onCamp
         aiSettings,
         gameplaySettings,
         environmentSettings,
-        adventureType: selectedAdventure?.id || 'custom'
+        adventureType: selectedAdventure?.id || 'custom',
+        rating: selectedRating
       };
 
       const { gameId, code } = await firebaseService.createGameSession(campaignData);
@@ -248,6 +250,7 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ user, onClose, onCamp
       dynamicEvents: true,
       worldPersistence: true
     });
+    setSelectedRating('PG-13');
   };
 
   return (
@@ -291,6 +294,25 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ user, onClose, onCamp
             >
               ⚙️ Advanced Setup
             </button>
+          </div>
+
+          {/* Game Rating */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Content Rating</label>
+            <select
+              value={selectedRating}
+              onChange={e => setSelectedRating(e.target.value as any)}
+              className="w-full px-3 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:border-blue-400"
+            >
+              <option value="G">G - General Audiences (Family-friendly)</option>
+              <option value="PG">PG - Parental Guidance (Mild content)</option>
+              <option value="PG-13">PG-13 - Teens (Moderate content)</option>
+              <option value="R">R - Mature (Adult themes)</option>
+              <option value="NC-17">NC-17 - Adults Only (Explicit content)</option>
+            </select>
+            <p className="text-slate-400 text-sm mt-1">
+              This controls how mature or creative the AI can be in your campaign.
+            </p>
           </div>
 
           {/* Adventure Catalog */}

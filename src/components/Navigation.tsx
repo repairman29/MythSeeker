@@ -19,7 +19,8 @@ import {
   Target,
   Sparkles,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Bot
 } from 'lucide-react';
 import { auth, firebaseService } from '../firebaseService';
 
@@ -58,6 +59,14 @@ const Navigation: React.FC<NavigationProps> = ({ user, onSignOut }) => {
       path: '/campaigns',
       icon: <Book className="w-5 h-5" />,
       description: 'Manage your adventures'
+    },
+    {
+      id: 'automated-games',
+      label: 'AI Games',
+      path: '/automated-games',
+      icon: <Bot className="w-5 h-5" />,
+      description: 'Join AI-powered RPG sessions',
+      isNew: true
     },
     {
       id: 'characters',

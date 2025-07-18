@@ -162,13 +162,13 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
     }
     
     return [
-      { key: 'chat', label: 'Chat', icon: <MessageSquare size={20} />, description: 'Real-time messaging' },
-      { key: 'log', label: 'Campaign Log', icon: <BookOpen size={20} />, description: 'Story and events' },
+    { key: 'chat', label: 'Chat', icon: <MessageSquare size={20} />, description: 'Real-time messaging' },
+    { key: 'log', label: 'Campaign Log', icon: <BookOpen size={20} />, description: 'Story and events' },
       { key: 'players', label: 'Players', icon: <Users size={20} />, description: 'Player management' },
-      { key: 'world', label: 'World', icon: <Map size={20} />, description: 'World state & events' },
-      { key: 'achievements', label: 'Achievements', icon: <Award size={20} />, description: 'Progress & rewards' },
-      { key: 'settings', label: 'Settings', icon: <Settings size={20} />, description: 'Game preferences' }
-    ];
+    { key: 'world', label: 'World', icon: <Map size={20} />, description: 'World state & events' },
+    { key: 'achievements', label: 'Achievements', icon: <Award size={20} />, description: 'Progress & rewards' },
+    { key: 'settings', label: 'Settings', icon: <Settings size={20} />, description: 'Game preferences' }
+  ];
   };
 
   const tabs = getTabs();
@@ -234,10 +234,10 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
               <span className={`text-sm font-semibold text-white ${
                 msg.type === 'player' ? 'bg-blue-500/50 text-blue-100' :
                 msg.type === 'dm' ? 'bg-purple-500/50 text-purple-100' :
-                'bg-gray-500/50 text-gray-100'
-              }`}>
+                  'bg-gray-500/50 text-gray-100'
+                }`}>
                 {msg.type === 'player' ? 'Player' : msg.type === 'dm' ? 'DM' : 'System'}
-              </span>
+                </span>
               <span className="text-xs text-gray-400">
                 {new Date(msg.timestamp).toLocaleTimeString()}
               </span>
@@ -290,13 +290,13 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
             <Search size={16} />
           </button>
         </div>
-        <input
-          type="text"
-          placeholder="Search log entries..."
-          value={logSearchTerm}
-          onChange={(e) => setLogSearchTerm(e.target.value)}
+          <input
+            type="text"
+            placeholder="Search log entries..."
+            value={logSearchTerm}
+            onChange={(e) => setLogSearchTerm(e.target.value)}
           className="w-full px-3 py-2 bg-white/10 text-white placeholder-gray-300 rounded-lg border border-white/20 focus:outline-none focus:border-blue-400"
-        />
+          />
       </div>
       
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -306,9 +306,9 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
             <Calendar size={14} className="text-blue-400" />
             <span className="text-sm font-semibold text-white">Session Start</span>
             <span className="text-xs text-gray-400">2 hours ago</span>
-          </div>
+              </div>
           <p className="text-gray-200">The party entered the ancient ruins...</p>
-        </div>
+            </div>
         
         <div className="p-3 bg-white/5 rounded-lg border border-white/10">
           <div className="flex items-center space-x-2 mb-1">
@@ -331,7 +331,7 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {players.map((player, index) => (
           <div key={index} className="p-3 bg-white/5 rounded-lg border border-white/10">
-            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-3">
               <div className={`w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold`}>
                 {player.name?.charAt(0) || 'P'}
               </div>
@@ -339,17 +339,17 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
                 <div className="font-semibold text-white">{player.name}</div>
                 <div className="text-sm text-gray-300">
                   Level {player.level} {player.class}
-                </div>
+              </div>
                 <div className="flex items-center space-x-4">
                   <span className="flex items-center space-x-1">
-                    <Heart size={12} className="text-red-400" />
+                <Heart size={12} className="text-red-400" />
                     <span>{player.health}/{player.maxHealth}</span>
                   </span>
                   <span className="flex items-center space-x-1">
                     <Shield size={12} className="text-blue-400" />
                     <span>AC {player.armorClass}</span>
-                  </span>
-                </div>
+                </span>
+              </div>
               </div>
             </div>
           </div>
@@ -367,26 +367,26 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {worldState && (
           <>
-            <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+        <div className="p-3 bg-white/5 rounded-lg border border-white/10">
               <div className="flex items-center space-x-2 mb-2">
                 <MapPin size={16} className="text-blue-400" />
                 <span className="font-semibold text-white">Current Location</span>
-              </div>
+          </div>
               <p className="text-gray-200">{worldState.currentLocation || 'Unknown Location'}</p>
-            </div>
-            
-            <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+        </div>
+
+        <div className="p-3 bg-white/5 rounded-lg border border-white/10">
               <div className="flex items-center space-x-2 mb-2">
                 <Clock size={16} className="text-green-400" />
                 <span className="font-semibold text-white">Time & Weather</span>
-              </div>
+                  </div>
               <p className="text-gray-200">
                 {worldState.currentTime || 'Day'} - {worldState.weather || 'Clear'}
               </p>
-            </div>
-            
+        </div>
+
             {worldState.activeQuests && worldState.activeQuests.length > 0 && (
-              <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+        <div className="p-3 bg-white/5 rounded-lg border border-white/10">
                 <div className="flex items-center space-x-2 mb-2">
                   <Target size={16} className="text-yellow-400" />
                   <span className="font-semibold text-white">Active Quests</span>
@@ -439,9 +439,9 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
             </label>
           </div>
         </div>
-        
-        <div className="p-3 bg-white/5 rounded-lg border border-white/10">
-          <div className="flex items-center space-x-2 mb-2">
+
+          <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+            <div className="flex items-center space-x-2 mb-2">
             <Bell size={16} className="text-yellow-400" />
             <span className="font-semibold text-white">Notifications</span>
           </div>
@@ -486,49 +486,49 @@ const RightDrawer: React.FC<RightDrawerProps> = ({
       
       {/* Resize handle for desktop */}
       {!isMobile && setDrawerWidth && (
-        <div
+          <div
           className="absolute left-0 top-0 bottom-0 bg-blue-600 cursor-col-resize hover:bg-blue-400 transition-colors"
           onMouseDown={handleMouseDown}
         />
-      )}
+        )}
       
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-white/20">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-white/20">
         <div className="flex items-center space-x-2">
           <h2 className="text-lg font-semibold text-white">GameTools</h2>
         </div>
-        <button
-          onClick={onClose}
+          <button
+            onClick={onClose}
           className="p-2 text-blue-200 hover:text-white transition-colors"
-        >
-          <X size={20} />
-        </button>
-      </div>
+          >
+            <X size={20} />
+          </button>
+        </div>
       
       {/* Tabs */}
-      <div className="flex border-b border-white/20 overflow-x-auto">
+        <div className="flex border-b border-white/20 overflow-x-auto">
         {tabs.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => onTabChange(tab.key)}
+            <button
+              key={tab.key}
+              onClick={() => onTabChange(tab.key)}
             className={`flex items-center space-x-2 p-3 min-w-0 flex-1 transition-colors ${
-              activeTab === tab.key
+                activeTab === tab.key
                 ? 'bg-blue-600 text-white border-b-2 border-blue-400'
                 : 'text-blue-200 hover:text-white hover:bg-white/10'
-            }`}
-            title={tab.description}
-          >
-            {tab.icon}
+              }`}
+              title={tab.description}
+            >
+              {tab.icon}
             <span className="text-sm font-medium">{tab.label}</span>
-          </button>
-        ))}
-      </div>
+            </button>
+          ))}
+        </div>
       
       {/* Content */}
-      <div className="flex-1 overflow-hidden">
-        {renderTabContent()}
+        <div className="flex-1 overflow-hidden">
+          {renderTabContent()}
+        </div>
       </div>
-    </div>
   );
 };
 

@@ -9,7 +9,6 @@ import {
   validateCampaignData,
   checkRateLimit
 } from './validation';
-import { aiDungeonMaster } from './aiDungeonMaster';
 
 // Types
 // interface UserProfile {
@@ -75,6 +74,9 @@ interface GameSession {
   createdAt: number;
   lastActivity: number;
   completedAt?: number;
+  worldState?: Record<string, any>; // Persistent world state
+  playerMemory?: Array<any>; // Log of key player actions/outcomes
+  npcMemory?: Array<any>; // NPCs, traits, relationships, etc.
 }
 
 interface CombatState {
@@ -236,7 +238,10 @@ export const createGameSession = functions.https.onCall(async (data: Partial<Gam
     customPrompt: validation.sanitizedData.customPrompt || '',
     maxPlayers: validation.sanitizedData.maxPlayers || 6,
     createdAt: Date.now(),
-    lastActivity: Date.now()
+    lastActivity: Date.now(),
+    worldState: {}, // Initialize empty world state
+    playerMemory: [], // Initialize empty player memory
+    npcMemory: [] // Initialize empty npc memory
   };
 
   const docRef = await admin.firestore().collection('games').add(gameSession);
@@ -542,9 +547,6 @@ export const cleanupOldGames = functions.pubsub.schedule('every 24 hours').onRun
   }
 });
 
-// Export AI Dungeon Master function
-export { aiDungeonMaster }; 
-
 // Combat System Endpoints
 
 // Start combat
@@ -826,6 +828,63 @@ export const endCombat = functions.https.onCall(async (data: { combatId: string;
   return { success: true, result };
 });
 
+// Update game state (world state, player memory, NPC memory)
+export const updateGameState = functions.https.onCall(async (data: { 
+  gameId: string; 
+  worldState?: Record<string, any>; 
+  playerMemory?: Array<any>; 
+  npcMemory?: Array<any>; 
+}, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  // Rate limiting
+  if (!checkRateLimit(context.auth.uid, 'updateGameState', 30, 60000)) { // 30 per minute
+    throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please wait before updating again.');
+  }
+
+  // Validate game ID
+  const gameIdValidation = validateGameId(data.gameId);
+  if (!gameIdValidation.isValid) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid game ID: ${gameIdValidation.errors.join(', ')}`);
+  }
+
+  const gameDoc = await admin.firestore().collection('games').doc(gameIdValidation.sanitizedData).get();
+  if (!gameDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Game not found');
+  }
+
+  const gameData = gameDoc.data() as GameSession;
+  
+  // Check if user is a participant in the game
+  const isParticipant = gameData.players.some(p => p.id === context.auth!.uid);
+  if (!isParticipant && gameData.hostId !== context.auth!.uid) {
+    throw new functions.https.HttpsError('permission-denied', 'You are not a participant in this game');
+  }
+
+  // Prepare update data
+  const updateData: any = {
+    lastActivity: Date.now()
+  };
+
+  if (data.worldState !== undefined) {
+    updateData.worldState = data.worldState;
+  }
+
+  if (data.playerMemory !== undefined) {
+    updateData.playerMemory = data.playerMemory;
+  }
+
+  if (data.npcMemory !== undefined) {
+    updateData.npcMemory = data.npcMemory;
+  }
+
+  await gameDoc.ref.update(updateData);
+
+  return { success: true, updatedFields: Object.keys(updateData).filter(key => key !== 'lastActivity') };
+});
+
 // Test endpoint for development (bypasses auth)
 export const testEndpoint = functions.https.onRequest(async (req, res) => {
   // Set CORS headers
@@ -868,6 +927,12 @@ export const testEndpoint = functions.https.onRequest(async (req, res) => {
         result = await handleStartGameSession(data, { auth: { uid: 'test-user' } });
         break;
       case 'aiDungeonMaster':
+        const { prompt: aiPrompt, context: aiContext } = data;
+        
+        if (!aiPrompt) {
+          throw new Error('Prompt is required');
+        }
+
         result = await handleAIDungeonMaster(data, { auth: { uid: 'test-user' } });
         break;
       case 'saveGameProgress':
@@ -944,7 +1009,10 @@ async function handleCreateGameSession(data: any, context: any) {
     customPrompt: data.customPrompt || '',
     maxPlayers: 6,
     createdAt: Date.now(),
-    lastActivity: Date.now()
+    lastActivity: Date.now(),
+    worldState: {}, // Initialize empty world state
+    playerMemory: [], // Initialize empty player memory
+    npcMemory: [] // Initialize empty npc memory
   };
 
   const docRef = await admin.firestore().collection('games').add(gameSession);
@@ -1312,3 +1380,55 @@ async function handleEndCombat(data: any, context: any) {
 
   return { success: true, result };
 } 
+
+// AI Dungeon Master function
+export const aiDungeonMaster = functions.https.onCall(async (data: any, context) => {
+  try {
+    console.log('AI Dungeon Master called with data:', data);
+    
+    // Rate limiting
+    if (context.auth && !checkRateLimit(context.auth.uid, 'aiDungeonMaster', 20, 60000)) { // 20 per minute
+      throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please wait before making another request.');
+    }
+
+    const { prompt, context } = data;
+    
+    if (!prompt) {
+      throw new functions.https.HttpsError('invalid-argument', 'Prompt is required');
+    }
+
+    // Call the AI Dungeon Master service
+    const response = await handleAIDungeonMaster(data, context);
+    
+    return { response };
+  } catch (error) {
+    console.error('AI Dungeon Master error:', error);
+    throw new functions.https.HttpsError('internal', 'AI service temporarily unavailable');
+  }
+});
+
+// Gemini AI Function (alias for aiDungeonMaster for compatibility)
+export const geminiAIFunction = functions.https.onCall(async (data: any, context) => {
+  try {
+    console.log('Gemini AI Function called with data:', data);
+    
+    // Rate limiting
+    if (context.auth && !checkRateLimit(context.auth.uid, 'geminiAIFunction', 20, 60000)) { // 20 per minute
+      throw new functions.https.HttpsError('resource-exhausted', 'Rate limit exceeded. Please wait before making another request.');
+    }
+
+    const { prompt, context } = data;
+    
+    if (!prompt) {
+      throw new functions.https.HttpsError('invalid-argument', 'Prompt is required');
+    }
+
+    // Call the AI Dungeon Master service
+    const response = await handleAIDungeonMaster(data, context);
+    
+    return { response };
+  } catch (error) {
+    console.error('Gemini AI Function error:', error);
+    throw new functions.https.HttpsError('internal', 'AI service temporarily unavailable');
+  }
+}); 

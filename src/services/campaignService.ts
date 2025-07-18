@@ -6,6 +6,7 @@ import { CampaignValidator, VALIDATION_LIMITS } from '../lib/validation';
 import { multiplayerService } from './multiplayerService';
 import { aiService } from './aiService';
 import { Timestamp } from 'firebase/firestore';
+import { firebaseService } from '../firebaseService';
 
 // Constants to eliminate magic numbers
 export const CAMPAIGN_CONSTANTS = {
@@ -33,6 +34,7 @@ export interface CampaignData {
   createdAt?: number | Date | import("firebase/firestore").Timestamp;
   lastActivity?: number | Date | import("firebase/firestore").Timestamp;
   participants?: Record<string, boolean>; // For Firebase compatibility
+  rating?: 'G' | 'PG' | 'PG-13' | 'R' | 'NC-17'; // Add rating for mature/creative content
 }
 
 export interface Player {
@@ -281,7 +283,7 @@ export class CampaignService {
 
       // Load from Firebase (multiplayer campaigns)
       try {
-        const firebaseCampaigns = await multiplayerService.getUserCampaigns();
+        const firebaseCampaigns = await firebaseService.getUserCampaigns();
         
         // Merge campaigns (Firebase takes precedence for multiplayer)
         const mergedCampaigns = this.mergeCampaigns(localCampaigns, firebaseCampaigns);
@@ -497,7 +499,7 @@ export class CampaignService {
 
     // Try Firebase
     try {
-      const firebaseCampaigns = await multiplayerService.getUserCampaigns();
+      const firebaseCampaigns = await firebaseService.getUserCampaigns();
       return firebaseCampaigns.find(c => c.code === code) || null;
     } catch (error) {
       console.warn('Failed to search Firebase campaigns:', error);

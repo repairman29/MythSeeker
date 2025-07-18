@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-07-17T17:27:18.189Z",
+  "timestamp": "2025-07-17T17:33:34.590Z",
   "success": 10,
   "errors": 0,
   "successRate": 100,
@@ -7,59 +7,59 @@
     {
       "action": "character_creation",
       "user": "test-user-1",
-      "duration": 443,
+      "duration": 415,
       "success": true
     },
     {
       "action": "character_creation",
       "user": "test-user-2",
-      "duration": 246,
+      "duration": 259,
       "success": true
     },
     {
       "action": "character_creation",
       "user": "test-user-3",
-      "duration": 271,
+      "duration": 303,
       "success": true
     },
     {
       "action": "campaign_setup",
-      "duration": 2585,
+      "duration": 2649,
       "success": true
     },
     {
       "action": "ai_dm_response",
       "player": "test-user-1",
-      "duration": 123,
+      "duration": 249,
       "success": true
     },
     {
       "action": "ai_dm_response",
       "player": "test-user-2",
-      "duration": 160,
+      "duration": 163,
       "success": true
     },
     {
       "action": "ai_dm_response",
       "player": "test-user-3",
-      "duration": 124,
+      "duration": 206,
       "success": true
     },
     {
       "action": "ai_dm_response",
       "player": "test-user-1",
-      "duration": 144,
+      "duration": 149,
       "success": true
     },
     {
       "action": "ai_dm_response",
       "player": "test-user-2",
-      "duration": 119,
+      "duration": 139,
       "success": true
     },
     {
       "action": "campaign_completion",
-      "duration": 141,
+      "duration": 129,
       "success": true
     }
   ],

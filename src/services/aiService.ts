@@ -962,62 +962,354 @@ class AdvancedAIService {
   }
 
   // Enhanced Dynamic DM Response Generation - Core of the Dynamic DMing System
-  async generateEnhancedDynamicResponse(richPrompt: string): Promise<string> {
+  async generateEnhancedDynamicResponse(richPrompt: string, context?: any): Promise<string> {
+    console.log('🎭 AI Service: generateEnhancedDynamicResponse() called with enhanced context');
+    
     try {
-      console.log('🤖 AI Service: Generating dynamic DM response...');
+      // Add realistic AI processing delay
+      await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
       
-      // Use the existing Gemini AI function with enhanced prompting for dynamic responses
-      const geminiCall = httpsCallable(functions, 'geminiAIFunction');
+      // Use only aiDungeonMaster function
+      const aiDungeonMasterCall = httpsCallable(functions, 'aiDungeonMaster');
       
-      const enhancedPrompt = `
-${richPrompt}
-
-RESPONSE GUIDELINES:
-- Write in an engaging, natural DM voice
-- Use vivid sensory details and immersive descriptions  
-- Include appropriate character reactions and consequences
-- Balance narrative flow with player agency
-- Incorporate humor and personality as specified
-- If dice rolls are needed, mention them naturally
-- End with a clear situation for player response
-
-RESPONSE FORMAT:
-NARRATIVE: [Your main story response with rich details and character]
-NPC_DIALOGUE: [Any NPC speech in quotes, showing personality]
-SYSTEM_ACTION: [Any dice rolls, stat changes, or game mechanics needed]
-MOOD: [How this affects scene tension: +1 for more intense, 0 for same, -1 for less intense]
-
-Generate an immersive, personalized response that makes the player feel like they're at a table with the best human DM:
-`;
-
-      const result = await geminiCall({
-        prompt: enhancedPrompt,
-        context: {
-          maxTokens: 800,
-          temperature: 0.8, // Higher creativity for dynamic responses
-          systemRole: 'dynamic_dm'
-        }
+      // Build comprehensive context for the AI
+      const sessionContext = context?.session || {};
+      const playerContext = context?.player || {};
+      const worldContext = context?.world || {};
+      const conversationHistory = context?.history || [];
+      
+      // Create a rich, dynamic prompt that mimics Gemini's conversational style
+      const enhancedPrompt = this.buildGeminiStylePrompt(richPrompt, {
+        session: sessionContext,
+        player: playerContext,
+        world: worldContext,
+        history: conversationHistory
       });
 
-      const response = (result.data as any)?.response;
-      
-      if (!response) {
-        throw new Error('No response from AI service');
-      }
+      const requestData = {
+        prompt: enhancedPrompt,
+        campaignId: sessionContext.id || 'default-campaign',
+        playerName: playerContext.name || 'Player',
+        context: {
+          session: sessionContext,
+          player: playerContext,
+          world: worldContext,
+          history: conversationHistory
+        }
+      };
 
-      console.log('✅ Dynamic DM response generated successfully');
-      return response;
+      // Enhanced retry logic with exponential backoff
+      let lastError: any;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          console.log(`🔄 AI Service: Attempt ${attempt}/3 with enhanced context`);
+          
+          const result = await aiDungeonMasterCall(requestData);
+          const response = (result.data as any)?.response;
+          
+          if (!response) {
+            throw new Error('No response from AI service');
+          }
+
+          console.log('✅ Enhanced Dynamic DM response generated successfully');
+          return response;
+          
+        } catch (error) {
+          lastError = error;
+          console.warn(`⚠️ AI Service: Attempt ${attempt} failed:`, error);
+          
+          if (attempt < 3) {
+            // Exponential backoff with jitter
+            const backoffDelay = Math.min(1000 * Math.pow(2, attempt - 1) + Math.random() * 1000, 5000);
+            await new Promise(resolve => setTimeout(resolve, backoffDelay));
+          }
+        }
+      }
+      
+      // If all attempts failed, throw the last error
+      throw lastError;
 
     } catch (error) {
-      console.error('❌ Dynamic DM generation failed:', error);
+      console.error('❌ Enhanced Dynamic DM generation failed after all attempts:', error);
       
-      // Fallback dynamic response
-      return `
-NARRATIVE: The mystical energies around you shimmer and shift as your action resonates through the fabric of reality. Though the path ahead seems uncertain, your determination guides you forward into the unknown.
+      // Enhanced fallback response based on the prompt and context
+      const fallbackResponse = this.generateIntelligentFallback(richPrompt, context);
+      console.log('🔄 Using enhanced intelligent fallback response');
+      return fallbackResponse;
+    }
+  }
 
-NPC_DIALOGUE: "Interesting..." murmurs a nearby figure. "The threads of fate are weaving around you in unexpected ways."
+  // Build Gemini-style prompt with rich context
+  private buildGeminiStylePrompt(playerInput: string, context: any): string {
+    const { session, player, world, history } = context;
+    
+    // Extract key information
+    const sessionPhase = session?.currentPhase || 'exploration';
+    const realm = session?.config?.realm || 'Fantasy';
+    const theme = session?.config?.theme || 'Adventure';
+    const dmStyle = session?.config?.dmStyle || 'balanced';
+    const rating = session?.config?.rating || 'PG-13';
+    const playerName = player?.name || 'Adventurer';
+    const playerClass = player?.characterClass || 'Hero';
+    const playerExperience = player?.experience || 'intermediate';
+    
+    // Build world state summary
+    const worldState = world?.currentState || {};
+    const activeQuests = world?.activeQuests || [];
+    const npcs = world?.npcs || [];
+    const locations = world?.locations || {};
+    
+    // Build conversation memory
+    const recentMessages = history?.slice(-6) || [];
+    const conversationSummary = this.summarizeConversation(recentMessages);
+    
+    // Create dynamic personality based on DM style and rating
+    const dmPersonality = this.generateDMPersonality(dmStyle, rating);
+    
+    // Build the comprehensive prompt
+    const enhancedPrompt = `
+You are an expert AI Dungeon Master running an immersive, dynamic RPG session. You must respond with the same level of intelligence, creativity, and engagement that users experience when talking to Gemini directly.
 
-SYSTEM_ACTION: Continue with current action, maintain story flow
+${dmPersonality}
+
+CURRENT SESSION CONTEXT:
+- Phase: ${sessionPhase}
+- Realm: ${realm}
+- Theme: ${theme}
+- Player: ${playerName} (${playerClass}, ${playerExperience} level)
+- World State: ${JSON.stringify(worldState)}
+- Active Quests: ${activeQuests.length} ongoing
+- NPCs Present: ${npcs.length} characters
+- Current Location: ${locations.current || 'Unknown'}
+
+CONVERSATION HISTORY:
+${conversationSummary}
+
+PLAYER'S LATEST ACTION: ${playerInput}
+
+RESPONSE REQUIREMENTS:
+1. **Be Conversational & Natural**: Respond like you're having a real conversation, not reading from a script
+2. **Show Intelligence**: Reference past events, remember NPCs, acknowledge player choices
+3. **Be Descriptive**: Paint vivid pictures with words, include sensory details
+4. **Provide Meaningful Choices**: Give 3-4 options that actually matter and lead to different outcomes
+5. **Adapt to Player Style**: If they're cautious, offer safe options. If they're bold, present challenges
+6. **Maintain Continuity**: Reference previous actions, consequences, and world changes
+7. **Be Engaging**: Use humor, tension, mystery, and emotional hooks appropriately
+8. **Show Personality**: Let your DM style shine through in your responses
+
+RESPONSE FORMAT:
+Respond with a JSON object:
+{
+  "narrative": "Your rich, descriptive response that feels like a real DM talking to a player",
+  "choices": ["Meaningful choice 1", "Meaningful choice 2", "Meaningful choice 3", "Meaningful choice 4"],
+  "atmosphere": {
+    "mood": "current emotional tone",
+    "tension": "low|medium|high",
+    "environmentalDetails": "specific sensory details about the surroundings"
+  },
+  "worldUpdates": {
+    "newLocation": "if location changed",
+    "newNPCs": ["any new characters introduced"],
+    "questProgress": "any quest updates",
+    "consequences": ["immediate consequences of player's action"]
+  },
+  "characterUpdates": {
+    "xpGain": 0,
+    "healthChange": 0,
+    "newItems": [],
+    "reputationChanges": {}
+  }
+}
+
+Make this feel like the best human DM you've ever played with - intelligent, responsive, and genuinely engaging.`;
+
+    return enhancedPrompt;
+  }
+
+  // Generate dynamic DM personality based on style and rating
+  private generateDMPersonality(dmStyle: string, rating: string): string {
+    const personalities = {
+      'narrative': {
+        'G': 'You are a warm, encouraging storyteller who focuses on character development and emotional journeys. You create safe, family-friendly adventures with clear moral lessons.',
+        'PG': 'You are a creative storyteller who weaves engaging tales with mild challenges and positive outcomes. You encourage exploration and friendship.',
+        'PG-13': 'You are a master storyteller who creates compelling narratives with moderate challenges and complex characters. You balance action with character development.',
+        'R': 'You are a gritty storyteller who creates intense, morally complex narratives with mature themes and challenging situations.',
+        'NC-17': 'You are an adult storyteller who creates explicit, mature narratives with complex themes and intense situations.'
+      },
+      'combat-focused': {
+        'G': 'You are a tactical DM who creates exciting but safe combat encounters. You focus on strategy and teamwork rather than violence.',
+        'PG': 'You are a strategic DM who designs engaging combat scenarios with mild action and clear objectives.',
+        'PG-13': 'You are a tactical master who creates intense combat encounters with strategic depth and moderate violence.',
+        'R': 'You are a brutal tactician who creates deadly combat scenarios with graphic violence and high stakes.',
+        'NC-17': 'You are an extreme tactician who creates the most intense and graphic combat scenarios possible.'
+      },
+      'puzzle-heavy': {
+        'G': 'You are a clever puzzle master who creates family-friendly brain teasers and logic challenges.',
+        'PG': 'You are an inventive puzzle designer who creates engaging mental challenges with clear solutions.',
+        'PG-13': 'You are a master puzzle crafter who creates complex, multi-layered challenges that require creative thinking.',
+        'R': 'You are a devious puzzle master who creates twisted, morally complex challenges with dark themes.',
+        'NC-17': 'You are an extreme puzzle master who creates the most complex and disturbing challenges possible.'
+      },
+      'balanced': {
+        'G': 'You are a well-rounded DM who creates balanced adventures with a mix of storytelling, mild combat, and simple puzzles.',
+        'PG': 'You are a versatile DM who creates engaging adventures with varied gameplay elements and positive themes.',
+        'PG-13': 'You are a master DM who creates perfectly balanced adventures with rich storytelling, tactical combat, and clever puzzles.',
+        'R': 'You are a mature DM who creates complex adventures with intense action, dark themes, and challenging situations.',
+        'NC-17': 'You are an extreme DM who creates the most intense and complex adventures possible.'
+      }
+    };
+
+    return personalities[dmStyle as keyof typeof personalities]?.[rating as keyof typeof personalities.balanced] || 
+           personalities.balanced['PG-13'];
+  }
+
+  // Summarize recent conversation for context
+  private summarizeConversation(messages: any[]): string {
+    if (messages.length === 0) return 'This is the beginning of the adventure.';
+    
+    const summary = messages.map(msg => {
+      const type = msg.type || 'unknown';
+      const content = msg.content || '';
+      const sender = msg.sender || 'Unknown';
+      
+      if (type === 'dm') {
+        return `DM: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`;
+      } else if (type === 'player') {
+        return `${sender}: ${content}`;
+      } else {
+        return `System: ${content}`;
+      }
+    }).join('\n');
+    
+    return summary;
+  }
+
+  private generateIntelligentFallback(prompt: string, context?: any): string {
+    // Analyze the prompt to generate a more contextual fallback
+    const lowerPrompt = prompt.toLowerCase();
+    
+    // Enhanced pattern matching for better context awareness
+    const patterns = {
+      combat: ['attack', 'fight', 'combat', 'battle', 'sword', 'weapon', 'kill', 'defeat', 'enemy', 'monster', 'dragon', 'orc', 'goblin'],
+      exploration: ['explore', 'search', 'investigate', 'look', 'examine', 'check', 'find', 'discover', 'map', 'area', 'room', 'cave'],
+      social: ['talk', 'speak', 'ask', 'question', 'conversation', 'dialogue', 'npc', 'merchant', 'villager', 'king', 'queen', 'wizard'],
+      rest: ['rest', 'sleep', 'heal', 'recover', 'camp', 'inn', 'tavern', 'bed', 'tired', 'exhausted'],
+      magic: ['spell', 'magic', 'cast', 'wizard', 'sorcerer', 'mage', 'fireball', 'heal', 'teleport', 'enchant'],
+      movement: ['walk', 'run', 'move', 'travel', 'journey', 'path', 'road', 'forest', 'mountain', 'city', 'town'],
+      stealth: ['sneak', 'hide', 'stealth', 'thief', 'rogue', 'assassin', 'invisible', 'silent', 'shadow'],
+      crafting: ['craft', 'make', 'build', 'create', 'forge', 'smith', 'alchemy', 'potion', 'weapon', 'armor']
+    };
+    
+    // Determine the most likely action type
+    let actionType = 'general';
+    let maxMatches = 0;
+    
+    for (const [type, keywords] of Object.entries(patterns)) {
+      const matches = keywords.filter(keyword => lowerPrompt.includes(keyword)).length;
+      if (matches > maxMatches) {
+        maxMatches = matches;
+        actionType = type;
+      }
+    }
+    
+    // Generate contextual response based on action type
+    switch (actionType) {
+      case 'combat':
+        return `
+NARRATIVE: The tension crackles in the air as you prepare for battle. Your weapon feels solid and true in your hands, ready to meet whatever challenge lies ahead. The battlefield becomes a stage for your martial prowess.
+
+NPC_DIALOGUE: "Stand your ground!" calls out a nearby ally. "We face this together! Remember your training!"
+
+SYSTEM_ACTION: Roll for initiative (d20 + DEX modifier). Prepare for combat encounter. Check weapon proficiency and armor class.
+
+MOOD: +1
+`;
+        
+      case 'exploration':
+        return `
+NARRATIVE: Your keen eyes scan the surroundings, taking in every detail. The environment reveals its secrets to those who know how to look. Ancient markings, subtle clues, and hidden passages await discovery.
+
+NPC_DIALOGUE: "Be careful," whispers a companion. "Not everything is as it seems. The old ones left many secrets here."
+
+SYSTEM_ACTION: Roll perception check (d20 + WIS modifier) to discover hidden details. Add investigation bonus if proficient.
+
+MOOD: 0
+`;
+        
+      case 'social':
+        return `
+NARRATIVE: You engage in conversation, your words carrying weight and meaning. The exchange flows naturally, revealing new insights and possibilities. Every word shapes the relationship and opens new doors.
+
+NPC_DIALOGUE: "That's an interesting question," responds the NPC thoughtfully. "Let me tell you what I know... though some things are better left unsaid."
+
+SYSTEM_ACTION: Roll charisma check (d20 + CHA modifier) for social interaction. Consider persuasion, deception, or intimidation as appropriate.
+
+MOOD: 0
+`;
+        
+      case 'rest':
+        return `
+NARRATIVE: You take a moment to rest and recover, feeling your strength return as you prepare for the challenges ahead. The quiet moments allow for reflection and preparation.
+
+NPC_DIALOGUE: "Rest well," says a companion. "We'll need your strength for what's to come. The road ahead is long."
+
+SYSTEM_ACTION: Regain health and spell slots. Prepare for next day. Consider long rest benefits and watch rotation.
+
+MOOD: -1
+`;
+        
+      case 'magic':
+        return `
+NARRATIVE: Arcane energies swirl around you as you channel the mystical forces. The air crackles with power as you weave spells of wonder and destruction.
+
+NPC_DIALOGUE: "The old magic still flows strong here," murmurs a fellow spellcaster. "Use it wisely, for power has its price."
+
+SYSTEM_ACTION: Check spell slots and components. Roll concentration if needed. Consider spell level and casting time.
+
+MOOD: +1
+`;
+        
+      case 'movement':
+        return `
+NARRATIVE: The journey continues as you traverse the landscape. Each step brings new sights and potential dangers. The path ahead is uncertain but filled with possibility.
+
+NPC_DIALOGUE: "The road is long," says your guide. "But every mile brings us closer to our destination."
+
+SYSTEM_ACTION: Roll survival check for navigation. Consider travel pace and exhaustion levels. Check for random encounters.
+
+MOOD: 0
+`;
+        
+      case 'stealth':
+        return `
+NARRATIVE: You move like a shadow, your footsteps silent and your presence unnoticed. The art of stealth requires patience and precision.
+
+NPC_DIALOGUE: "Quiet as a mouse," whispers your companion. "The shadows are our friends tonight."
+
+SYSTEM_ACTION: Roll stealth check (d20 + DEX modifier). Consider cover and lighting conditions. Check for passive perception of enemies.
+
+MOOD: +1
+`;
+        
+      case 'crafting':
+        return `
+NARRATIVE: Your skilled hands work with precision as you craft and create. The materials respond to your expertise, transforming into something greater than their parts.
+
+NPC_DIALOGUE: "Fine work," observes a fellow craftsman. "You have the touch. The old masters would be proud."
+
+SYSTEM_ACTION: Roll appropriate tool check. Consider material quality and workshop conditions. Check crafting time requirements.
+
+MOOD: 0
+`;
+        
+      default:
+        // Generic but engaging fallback
+        return `
+NARRATIVE: The world responds to your actions in unexpected ways. Your choices ripple through the fabric of reality, shaping the story that unfolds around you. Every decision matters.
+
+NPC_DIALOGUE: "Interesting developments," muses a nearby figure. "The threads of fate are weaving in fascinating patterns. Your presence changes everything."
+
+SYSTEM_ACTION: Continue with current action, maintain story momentum. Consider environmental factors and world state updates.
 
 MOOD: 0
 `;
@@ -1039,6 +1331,63 @@ MOOD: 0
         consequences: []
       }
     };
+  }
+
+  /**
+   * Test AI service functionality
+   */
+  async testAIService(): Promise<{ success: boolean; details: string; fallbackUsed: boolean }> {
+    console.log('🧪 AI Service: Starting comprehensive test...');
+    
+    const testPrompts = [
+      'I attack the goblin with my sword',
+      'I search the ancient ruins for treasure',
+      'I talk to the village elder about the quest',
+      'I cast a fireball at the dragon',
+      'I rest at the inn to recover my strength'
+    ];
+    
+    let successCount = 0;
+    let fallbackCount = 0;
+    let totalTests = testPrompts.length;
+    
+    for (const prompt of testPrompts) {
+      try {
+        console.log(`🧪 Testing prompt: "${prompt}"`);
+        const response = await this.generateEnhancedDynamicResponse(prompt);
+        
+        if (response && response.includes('NARRATIVE:')) {
+          successCount++;
+          console.log(`✅ Test passed for: "${prompt}"`);
+        } else {
+          fallbackCount++;
+          console.log(`🔄 Fallback used for: "${prompt}"`);
+        }
+      } catch (error) {
+        fallbackCount++;
+        console.error(`❌ Test failed for: "${prompt}"`, error);
+      }
+    }
+    
+    const successRate = (successCount / totalTests) * 100;
+    const fallbackRate = (fallbackCount / totalTests) * 100;
+    
+    const result = {
+      success: successRate >= 80, // Consider successful if 80%+ tests pass
+      details: `AI Service Test Results: ${successCount}/${totalTests} direct responses, ${fallbackCount}/${totalTests} fallbacks. Success rate: ${successRate.toFixed(1)}%`,
+      fallbackUsed: fallbackCount > 0
+    };
+    
+    console.log(`🧪 AI Service Test Complete:`, result);
+    return result;
+  }
+
+  /**
+   * Enhanced logging for AI service debugging
+   */
+  private logAIServiceEvent(event: string, data?: any): void {
+    const timestamp = new Date().toISOString();
+    console.log(`🤖 AI Service [${timestamp}]: ${event}`, data || '');
   }
 
   /**

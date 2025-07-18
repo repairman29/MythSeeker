@@ -250,17 +250,15 @@ function validateAIPrompt(data) {
     if (data.worldState && typeof data.worldState !== 'object') {
         errors.push('World state must be an object');
     }
-    // Content filtering - basic check for inappropriate content
-    if (data.prompt) {
-        const lowerPrompt = data.prompt.toLowerCase();
-        const inappropriateTerms = ['hack', 'exploit', 'bypass', 'admin', 'root', 'system'];
-        const hasInappropriateContent = inappropriateTerms.some(term => lowerPrompt.includes(term));
-        if (hasInappropriateContent) {
-            errors.push('AI prompt contains potentially inappropriate content');
-        }
-    }
+    // --- LOOSE FILTER: Only block empty or extremely long prompts. Allow all creative content. ---
+    // (If you want to block truly egregious content, add a minimal forbidden list here.)
+    // Example:
+    // const forbidden = /(hate speech|illegal|child|terrorism)/i;
+    // if (forbidden.test(data.prompt)) {
+    //   errors.push('AI prompt contains forbidden content');
+    // }
     // Sanitize data
-    const sanitizedData = Object.assign(Object.assign({}, data), { prompt: data.prompt ? sanitizeString(data.prompt) : '', context: data.context && typeof data.context === 'object' ? data.context : {}, character: data.character && typeof data.character === 'object' ? data.character : {}, worldState: data.worldState && typeof data.worldState === 'object' ? data.worldState : {}, timestamp: typeof data.timestamp === 'number' ? data.timestamp : Date.now() });
+    const sanitizedData = Object.assign(Object.assign({}, data), { prompt: data.prompt ? sanitizeString(data.prompt) : '', context: data.context && typeof data.context === 'object' ? data.context : {}, character: data.character && typeof data.character === 'object' ? data.character : {}, worldState: data.worldState && typeof data.worldState === 'object' ? data.worldState : {}, timestamp: typeof data.timestamp === 'number' ? data.timestamp : Date.now(), rating: data.rating || 'PG-13' });
     return {
         isValid: errors.length === 0,
         errors,

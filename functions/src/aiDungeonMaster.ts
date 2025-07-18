@@ -41,40 +41,92 @@ async function getSecret(secretName: string): Promise<string> {
 }
 
 // Enhanced Vertex AI Gemini Pro integration
-async function callVertexAIGeminiPro(prompt: string, context: string, apiKey: string): Promise<string> {
+async function callVertexAIGeminiPro(prompt: string, context: any, apiKey: string): Promise<string> {
   
-  // Enhanced prompt engineering for better RPG responses
-  const enhancedPrompt = `You are an expert AI Dungeon Master for a tabletop RPG game. You must respond with engaging, dynamic storytelling that adapts to player actions.
+  // Extract context information
+  const session = context?.session || {};
+  const player = context?.player || {};
+  const world = context?.world || {};
+  const history = context?.history || [];
+  
+  // Build rich context for the AI
+  const sessionInfo = `
+SESSION DETAILS:
+- Phase: ${session.currentPhase || 'exploration'}
+- Realm: ${session.config?.realm || 'Fantasy'}
+- Theme: ${session.config?.theme || 'Adventure'}
+- DM Style: ${session.config?.dmStyle || 'balanced'}
+- Content Rating: ${session.config?.rating || 'PG-13'}
+- Players: ${session.players?.map((p: any) => p.name).join(', ') || 'Unknown'}
+`;
 
-CONTEXT:
-${context}
+  const playerInfo = `
+PLAYER CONTEXT:
+- Name: ${player.name || 'Adventurer'}
+- Character Class: ${player.characterClass || 'Hero'}
+- Experience Level: ${player.experience || 'intermediate'}
+- Preferences: ${player.preferences?.join(', ') || 'None specified'}
+`;
 
-PLAYER INPUT:
-${prompt}
+  const worldInfo = `
+WORLD STATE:
+- Current Location: ${world.locations?.current || 'Unknown'}
+- Atmosphere: ${world.atmosphere?.mood || 'neutral'} (${world.atmosphere?.tension || 'medium'} tension)
+- Active Quests: ${world.activeQuests?.length || 0}
+- NPCs Present: ${world.npcs?.length || 0}
+- Environmental Details: ${world.atmosphere?.environmentalDetails || 'Standard environment'}
+`;
 
-INSTRUCTIONS:
-- Respond in character as the Dungeon Master
-- Be descriptive and atmospheric
-- Provide 3-4 meaningful choices for the player
-- Consider the campaign context and history
-- Keep responses engaging but concise
-- Use natural, conversational language
-- Include environmental details and NPC reactions
-- Make the world feel alive and responsive
+  const conversationHistory = history.length > 0 ? `
+RECENT CONVERSATION:
+${history.map((msg: any) => `${msg.type}: ${msg.content}`).join('\n')}
+` : 'This is the beginning of the conversation.';
+
+  // Enhanced prompt engineering for Gemini-quality responses
+  const enhancedPrompt = `You are an expert AI Dungeon Master running an immersive, dynamic RPG session. You must respond with the same level of intelligence, creativity, and engagement that users experience when talking to Gemini directly.
+
+${sessionInfo}
+${playerInfo}
+${worldInfo}
+${conversationHistory}
+
+PLAYER'S LATEST ACTION: ${prompt}
+
+RESPONSE REQUIREMENTS:
+1. **Be Conversational & Natural**: Respond like you're having a real conversation, not reading from a script
+2. **Show Intelligence**: Reference past events, remember NPCs, acknowledge player choices
+3. **Be Descriptive**: Paint vivid pictures with words, include sensory details
+4. **Provide Meaningful Choices**: Give 3-4 options that actually matter and lead to different outcomes
+5. **Adapt to Player Style**: If they're cautious, offer safe options. If they're bold, present challenges
+6. **Maintain Continuity**: Reference previous actions, consequences, and world changes
+7. **Be Engaging**: Use humor, tension, mystery, and emotional hooks appropriately
+8. **Show Personality**: Let your DM style shine through in your responses
 
 RESPONSE FORMAT:
-Respond with a JSON object containing:
+Respond with a JSON object:
 {
-  "narrative": "Your descriptive response to the player's action,",
-  "choices": ["Choice1", "Choice2", "Choice 3", "Choice4"],
+  "narrative": "Your rich, descriptive response that feels like a real DM talking to a player",
+  "choices": ["Meaningful choice 1", "Meaningful choice 2", "Meaningful choice 3", "Meaningful choice 4"],
   "atmosphere": {
-    "mood": "current mood",
+    "mood": "current emotional tone",
     "tension": "low|medium|high",
-    "environmentalDetails": "specific details about surroundings"
+    "environmentalDetails": "specific sensory details about the surroundings"
+  },
+  "worldUpdates": {
+    "newLocation": "if location changed",
+    "newNPCs": ["any new characters introduced"],
+    "questProgress": "any quest updates",
+    "consequences": ["immediate consequences of player's action"]
+  },
+  "characterUpdates": {
+    "xpGain": 0,
+    "healthChange": 0,
+    "newItems": [],
+    "reputationChanges": {}
   }
 }
 
-Ensure your response is valid JSON and maintains the immersive RPG experience.`;
+Make this feel like the best human DM you've ever played with - intelligent, responsive, and genuinely engaging.`;
 
   const requestBody = {
     contents: [{
@@ -83,9 +135,9 @@ Ensure your response is valid JSON and maintains the immersive RPG experience.`;
       }]
     }],
     generationConfig: {
-      temperature: 0.8,
-      maxOutputTokens: 2048,
-      topP: 0.9,
+      temperature: 0.85, // Slightly higher for more creativity
+      maxOutputTokens: 3072, // Increased for richer responses
+      topP: 0.95,
       topK: 40
     },
     safetySettings: [
@@ -114,7 +166,7 @@ Ensure your response is valid JSON and maintains the immersive RPG experience.`;
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
-        'User-Agent': 'MythSeeker-AI-DM/10'
+        'User-Agent': 'MythSeeker-AI-DM/2.0'
       },
       body: JSON.stringify(requestBody)
     });
@@ -145,7 +197,9 @@ Ensure your response is valid JSON and maintains the immersive RPG experience.`;
             mood: "neutral",
             tension: "medium",
             environmentalDetails: "The adventure continues..."
-          }
+          },
+          worldUpdates: {},
+          characterUpdates: {}
         });
       }
     }
@@ -180,6 +234,91 @@ function logAIRequest(userId: string, campaignId: string, promptLength: number, 
   console.log('AI Request Log:', logEntry);
 }
 
+// Helper functions to parse AI responses for updates
+function parseWorldStateUpdates(aiResponse: string): Record<string, any> {
+  const updates: Record<string, any> = {};
+  
+  // Look for patterns that indicate world state changes
+  const worldStatePatterns = [
+    /(?:new location|moved to|arrived at|entered):\s*([^.!?]+)/gi,
+    /(?:weather changed to|weather is now):\s*([^.!?]+)/gi,
+    /(?:time is now|current time):\s*([^.!?]+)/gi,
+    /(?:new npc|met|encountered):\s*([^.!?]+)/gi
+  ];
+
+  worldStatePatterns.forEach((pattern, index) => {
+    const matches = aiResponse.match(pattern);
+    if (matches) {
+      switch (index) {
+        case 0:
+          updates.currentLocation = matches[1].trim();
+          break;
+        case 1:
+          updates.weather = matches[1].trim();
+          break;
+        case 2:
+          updates.timeOfDay = matches[1].trim();
+          break;
+        case 3:
+          if (!updates.npcs) updates.npcs = [];
+          updates.npcs.push(matches[1].trim());
+          break;
+      }
+    }
+  });
+
+  return updates;
+}
+
+function parsePlayerMemoryUpdates(aiResponse: string, playerName: string): Array<any> {
+  const updates: Array<any> = [];
+  
+  // Look for patterns that indicate player actions and outcomes
+  const playerActionPatterns = [
+    new RegExp(`${playerName}\\s+(?:chose|decided|opted)\\s+to\\s+([^.!?]+)`, 'gi'),
+    new RegExp(`${playerName}\\s+(?:successfully|failed to)\\s+([^.!?]+)`, 'gi'),
+    new RegExp(`${playerName}\\s+(?:gained|lost|found)\\s+([^.!?]+)`, 'gi')
+  ];
+
+  playerActionPatterns.forEach((pattern, index) => {
+    const matches = aiResponse.match(pattern);
+    if (matches) {
+      updates.push({
+        action: matches[1].trim(),
+        outcome: index === 1 ? (aiResponse.includes('successfully') ? 'success' : 'failure') : 'completed',
+        timestamp: Date.now()
+      });
+    }
+  });
+
+  return updates;
+}
+
+function parseNPCMemoryUpdates(aiResponse: string): Array<any> {
+  const updates: Array<any> = [];
+  
+  // Look for patterns that indicate NPC interactions and relationship changes
+  const npcPatterns = [
+    /(?:npc|character)\s+([^.!?]+?)\s+(?:is|became|now)\s+([^.!?]+)/gi,
+    /([^.!?]+?)\s+(?:reacted|responded)\s+([^.!?]+)/gi,
+    /([^.!?]+?)\s+(?:likes|dislikes|trusts|distrusts)\s+([^.!?]+)/gi
+  ];
+
+  npcPatterns.forEach((pattern, index) => {
+    const matches = aiResponse.match(pattern);
+    if (matches) {
+      updates.push({
+        name: matches[1].trim(),
+        traits: [matches[2].trim()],
+        relationship: index === 2 ? matches[2].trim() : 'neutral',
+        timestamp: Date.now()
+      });
+    }
+  });
+
+  return updates;
+}
+
 // Main enhanced function
 export const aiDungeonMaster = functions.https.onCall(async (data, context) => {
   const startTime = Date.now();
@@ -207,7 +346,7 @@ export const aiDungeonMaster = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('invalid-argument', `Invalid AI prompt data: ${validation.errors.join(', ')}`);
   }
 
-  const { campaignId, prompt, playerName } = validation.sanitizedData;
+  const { campaignId, prompt, playerName, rating } = validation.sanitizedData;
   
   if (!campaignId || !prompt) {
     logAIRequest(userId, campaignId || 'unknown', prompt?.length || 0, Date.now() - startTime, false, 'Missing campaignId or prompt');
@@ -232,72 +371,63 @@ export const aiDungeonMaster = functions.https.onCall(async (data, context) => {
     }
 
     // Enhanced context gathering
-    const [rulesSnap, historySnap, worldStateSnap] = await Promise.all([
+    const [rulesSnap, historySnap] = await Promise.all([
       campaignRef.collection('rules').doc('main').get(),
-      campaignRef.collection('history').doc('main').get(),
-      campaignRef.collection('worldState').doc('current').get()
+      campaignRef.collection('history').doc('main').get()
     ]);
 
     const rules = rulesSnap.exists ? rulesSnap.data()?.content || '' : '';
     const history = historySnap.exists ? historySnap.data()?.content || '' : '';
-    const worldState = worldStateSnap.exists ? worldStateSnap.data() || {} : {};
 
-    // Enhanced context composition
-    const contextText = `CAMPAIGN RULES:
-${rules}
-
-WORLD STATE:
-${JSON.stringify(worldState, null, 2)}
-
-HISTORY SO FAR:
-${history}
-
-PLAYER NAME: ${playerName}`;
+    // Get the current game session data for world state and memory
+    const gameSessionRef = db.collection('games').doc(campaignId);
+    const gameSessionSnap = await gameSessionRef.get();
+    const gameSessionData = gameSessionSnap.exists ? gameSessionSnap.data() : {};
+    
+    const sessionWorldState = gameSessionData?.worldState || {};
+    const playerMemory = gameSessionData?.playerMemory || [];
+    const npcMemory = gameSessionData?.npcMemory || [];
 
     // Get Vertex AI API key from Secret Manager
     const apiKey = await getSecret('vertex-ai-api-key');
 
-    // Call enhanced Vertex AI
-    const aiResponse = await callVertexAIGeminiPro(prompt, contextText, apiKey);
+    // Call enhanced Vertex AI with full context
+    const aiResponse = await callVertexAIGeminiPro(prompt, data.context || { session: { config: { rating: rating || 'PG-13' } } }, apiKey);
+
+    // Parse AI response for potential world state updates
+    const worldStateUpdates = parseWorldStateUpdates(aiResponse);
+    const playerMemoryUpdates = parsePlayerMemoryUpdates(aiResponse, playerName);
+    const npcMemoryUpdates = parseNPCMemoryUpdates(aiResponse);
+
+    // Update the game session with any new world state, player memory, or NPC memory
+    if (Object.keys(worldStateUpdates).length > 0 || playerMemoryUpdates.length > 0 || npcMemoryUpdates.length > 0) {
+      const updateData: any = {
+        lastActivity: Date.now()
+      };
+
+      if (Object.keys(worldStateUpdates).length > 0) {
+        updateData.worldState = { ...sessionWorldState, ...worldStateUpdates };
+      }
+
+      if (playerMemoryUpdates.length > 0) {
+        updateData.playerMemory = [...playerMemory, ...playerMemoryUpdates];
+      }
+
+      if (npcMemoryUpdates.length > 0) {
+        updateData.npcMemory = [...npcMemory, ...npcMemoryUpdates];
+      }
+
+      await gameSessionRef.update(updateData);
+    }
     const responseTime = Date.now() - startTime;
 
     // Log successful request
     logAIRequest(userId, campaignId, prompt.length, responseTime, true);
-
-    // Update campaign history with enhanced data
-    const historyUpdate = {
-      content: history + `\n${new Date().toISOString()}: ${playerName}: ${prompt}\nDM: ${aiResponse}`,
-      lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
-      totalRequests: admin.firestore.FieldValue.increment(1)
-    };
-    
-    await campaignRef.collection('history').doc('main').set(historyUpdate, { merge: true });
-
-    return {      response: aiResponse,
-      metadata: {
-        responseTime,
-        model: 'gemini-pro',
-        userTier,
-        timestamp: new Date().toISOString()
-      }
-    };
-    
+    return { response: aiResponse };
   } catch (error) {
-    const responseTime = Date.now() - startTime;
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    
-    logAIRequest(userId, campaignId || 'unknown', prompt?.length || 0, responseTime, false, errorMessage);
-    
+    logAIRequest(userId, campaignId, prompt?.length || 0, Date.now() - startTime, false, (error instanceof Error ? error.message : String(error)) || 'Unknown error');
     console.error('AI Dungeon Master error:', error);
-    
-    // Provide more specific error messages
-    if (errorMessage.includes('Vertex AI API error')) {
-      throw new functions.https.HttpsError('internal', 'AI service is experiencing high demand. Please try again in a moment.');
-    } else if (errorMessage.includes('Secret access failed')) {
-      throw new functions.https.HttpsError('internal', 'AI service configuration error. Please contact support.');
-    } else {
-      throw new functions.https.HttpsError('internal', 'AI service temporarily unavailable. Please try again later.');
-    }
+    throw new functions.https.HttpsError('internal', 'AI service temporarily unavailable');
   }
 });
 
