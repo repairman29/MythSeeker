@@ -78,13 +78,19 @@ class AutomatedGameService {
 
   // Initialize automated game session
   async createAutomatedSession(config: AutomatedGameConfig): Promise<string> {
+    console.log('🏗️ createAutomatedSession called with config:', config);
     const sessionId = `auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log('🆔 Generated session ID:', sessionId);
+    
+    console.log('🤖 Generating AI party members...');
+    const aiPartyMembers = this.generateAIPartyMembers(config);
+    console.log('🤖 Generated AI party members:', aiPartyMembers.map(m => `${m.name} (${m.characterClass})`));
     
     const session: GameSession = {
       id: sessionId,
       config,
       players: [],
-      aiPartyMembers: this.generateAIPartyMembers(config), // Generate AI party members
+      aiPartyMembers: aiPartyMembers, // Generate AI party members
       currentPhase: 'waiting',
       messages: [],
       worldState: this.generateInitialWorldState(config),
@@ -95,11 +101,13 @@ class AutomatedGameService {
     };
 
     this.activeSessions.set(sessionId, session);
+    console.log('💾 Session stored in activeSessions map');
     
     // Start session monitoring
     this.startSessionMonitoring(sessionId);
+    console.log('⏰ Session monitoring started');
     
-    console.log(`🎮 Automated session created: ${sessionId}`);
+    console.log(`✅ Automated session created: ${sessionId} with ${aiPartyMembers.length} AI members`);
     return sessionId;
   }
 

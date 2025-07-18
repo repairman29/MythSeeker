@@ -7,6 +7,8 @@ interface AutomatedGameManagerProps {
 }
 
 export const AutomatedGameManager: React.FC<AutomatedGameManagerProps> = ({ onSessionJoin }) => {
+  console.log('🎮 AutomatedGameManager component mounted');
+  
   const { user } = useAuth();
   const [sessions, setSessions] = useState<GameSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<GameSession | null>(null);
@@ -14,6 +16,13 @@ export const AutomatedGameManager: React.FC<AutomatedGameManagerProps> = ({ onSe
   const [playerInput, setPlayerInput] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [selectedRating, setSelectedRating] = useState<'G' | 'PG' | 'PG-13' | 'R' | 'NC-17'>('PG-13');
+
+  console.log('🎮 AutomatedGameManager state:', { 
+    user: user?.uid, 
+    sessionsCount: sessions.length, 
+    selectedSession: selectedSession?.id,
+    showCreateForm 
+  });
 
   // Default game configurations
   const defaultConfigs: AutomatedGameConfig[] = [
@@ -65,21 +74,32 @@ export const AutomatedGameManager: React.FC<AutomatedGameManagerProps> = ({ onSe
   }, []);
 
   const createSession = async (config: AutomatedGameConfig) => {
-    if (!user) return;
+    console.log('🎮 Creating session with config:', config);
+    if (!user) {
+      console.log('❌ No user found, cannot create session');
+      return;
+    }
 
     try {
+      console.log('🎮 Calling automatedGameService.createAutomatedSession...');
       const sessionId = await automatedGameService.createAutomatedSession(config);
+      console.log('✅ Session created with ID:', sessionId);
       setShowCreateForm(false);
       
       // Auto-join the created session
+      console.log('🎮 Auto-joining session...');
       await joinSession(sessionId);
     } catch (error) {
-      console.error('Error creating session:', error);
+      console.error('❌ Error creating session:', error);
     }
   };
 
   const joinSession = async (sessionId: string) => {
-    if (!user) return;
+    console.log('🎮 Joining session:', sessionId);
+    if (!user) {
+      console.log('❌ No user found, cannot join session');
+      return;
+    }
 
     setIsJoining(true);
     try {
@@ -91,14 +111,22 @@ export const AutomatedGameManager: React.FC<AutomatedGameManagerProps> = ({ onSe
         joinTime: Date.now()
       };
 
+      console.log('🎮 Adding player to session with context:', playerContext);
       await automatedGameService.addPlayerToSession(sessionId, playerContext);
+      
+      console.log('🎮 Getting updated session...');
       const session = automatedGameService.getSession(sessionId);
+      console.log('🎮 Retrieved session:', session?.id, 'AI members:', session?.aiPartyMembers?.length);
+      
       if (session) {
         setSelectedSession(session);
+        console.log('✅ Selected session set, calling onSessionJoin callback');
         onSessionJoin?.(sessionId);
+      } else {
+        console.log('❌ Failed to retrieve session after joining');
       }
     } catch (error) {
-      console.error('Error joining session:', error);
+      console.error('❌ Error joining session:', error);
     } finally {
       setIsJoining(false);
     }
