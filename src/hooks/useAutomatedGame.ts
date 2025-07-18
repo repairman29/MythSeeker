@@ -120,9 +120,10 @@ export const useAutomatedGame = () => {
     }
   }, [user, currentSession, refreshSessions]);
 
-  // Clean up expired sessions
+  // Clean up expired sessions and inactive players
   const cleanupExpiredSessions = useCallback(() => {
     const cleanedCount = automatedGameService.cleanupExpiredSessions();
+    automatedGameService.cleanupInactivePlayers();
     if (cleanedCount > 0) {
       refreshSessions();
     }
@@ -174,8 +175,10 @@ export const useAutomatedGame = () => {
 
   // Leave session
   const leaveSession = (): void => {
-    if (currentSession) {
+    if (currentSession && user) {
       console.log('🎮 useAutomatedGame: Leaving session:', currentSession.id);
+      // Remove player from session on server side
+      automatedGameService.removePlayerFromSession(currentSession.id, user.uid);
       setCurrentSession(null);
       refreshSessions();
     }

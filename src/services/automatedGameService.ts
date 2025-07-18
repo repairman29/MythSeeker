@@ -489,6 +489,14 @@ class AutomatedGameService {
       throw new Error('Session not found');
     }
 
+    // Check if player is already in session
+    const existingPlayerIndex = session.players.findIndex(p => p.id === player.id);
+    if (existingPlayerIndex >= 0) {
+      // Update existing player data instead of adding duplicate
+      session.players[existingPlayerIndex] = { ...session.players[existingPlayerIndex], ...player, joinTime: Date.now() };
+      return true;
+    }
+
     if (session.players.length >= session.config.maxPlayers) {
       throw new Error('Session is full');
     }
@@ -510,6 +518,77 @@ class AutomatedGameService {
     }
 
     return true;
+  }
+
+  // Remove player from automated session
+  removePlayerFromSession(sessionId: string, playerId: string): boolean {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) {
+      return false;
+    }
+
+    const playerIndex = session.players.findIndex(p => p.id === playerId);
+    if (playerIndex === -1) {
+      return false;
+    }
+
+    const player = session.players[playerIndex];
+    session.players.splice(playerIndex, 1);
+    
+    // Add leave message
+    const leaveMessage: GameMessage = {
+      id: `msg_${Date.now()}`,
+      type: 'system',
+      content: `${player.name} has left the adventure.`,
+      timestamp: Date.now()
+    };
+    session.messages.push(leaveMessage);
+
+    // Save session state
+    this.saveToLocalStorage();
+
+    return true;
+  }
+
+  // Clean up inactive players from sessions (remove players who haven't been active)
+  cleanupInactivePlayers(): void {
+    const now = Date.now();
+    const INACTIVITY_THRESHOLD = 30 * 60 * 1000; // 30 minutes
+
+    this.activeSessions.forEach((session, sessionId) => {
+      const activePlayerIds = new Set<string>();
+      
+      // Check for recent activity in messages
+      const recentMessages = session.messages.filter(m => 
+        now - m.timestamp < INACTIVITY_THRESHOLD && 
+        m.type === 'player' && 
+        m.sender
+      );
+      
+      recentMessages.forEach(msg => {
+        if (msg.sender) {
+          const player = session.players.find(p => p.name === msg.sender);
+          if (player) {
+            activePlayerIds.add(player.id);
+          }
+        }
+      });
+
+      // Remove inactive players
+      const initialPlayerCount = session.players.length;
+      session.players = session.players.filter(player => {
+        const isActive = activePlayerIds.has(player.id) || 
+                        (player.joinTime && now - player.joinTime < INACTIVITY_THRESHOLD);
+        return isActive;
+      });
+
+      // Log cleanup if players were removed
+      if (session.players.length < initialPlayerCount) {
+        console.log(`🧹 Cleaned up ${initialPlayerCount - session.players.length} inactive players from session ${sessionId}`);
+      }
+    });
+
+    this.saveToLocalStorage();
   }
 
   // Start the automated session
