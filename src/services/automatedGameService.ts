@@ -3,6 +3,7 @@ import { functions } from '../firebase';
 import { aiService } from './aiService';
 import { campaignService } from './campaignService';
 import { multiplayerService } from './multiplayerService';
+import { sentientAI } from './sentientAIService';
 
 export interface AutomatedGameConfig {
   realm: string;
@@ -514,8 +515,54 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
     return dmMessage;
   }
 
-  // Generate contextual DM response
+  // Generate contextual DM response using Sentient AI
   private async generateDMResponse(session: GameSession, player: PlayerContext, input: string): Promise<string> {
+    try {
+      // Use sentient AI for genuinely intelligent DM responses
+      const sentientContext = {
+        location: session.worldState?.currentLocation || 'unknown',
+        situation: session.currentPhase,
+        sessionType: 'automated_game',
+        realm: session.config.realm,
+        theme: session.config.theme,
+        dmStyle: session.config.dmStyle,
+        rating: session.config.rating,
+        players: session.players,
+        aiPartyMembers: session.aiPartyMembers,
+        npcs: session.npcs,
+        worldState: session.worldState,
+        recentMessages: session.messages.slice(-10)
+      };
+
+      const sentientResult = await sentientAI.processSentientInput(
+        player.id || player.name, // Use player ID for memory tracking
+        input,
+        sentientContext
+      );
+
+      // Update session based on sentient insights
+      if (sentientResult.proactiveInsights.length > 0) {
+        console.log('🧠 SAGE insights:', sentientResult.proactiveInsights);
+      }
+
+      // Format response for DM context
+      let dmResponse = sentientResult.response;
+      
+      // Add proactive insights if the AI detected something important
+      if (sentientResult.proactiveInsights.length > 0 && Math.random() < 0.3) {
+        const insight = sentientResult.proactiveInsights[0];
+        dmResponse += `\n\n*${insight}*`;
+      }
+
+      return dmResponse;
+    } catch (error) {
+      console.error('Error generating sentient DM response:', error);
+      return this.generateClassicDMResponse(session, player, input);
+    }
+  }
+
+  // Fallback to classic DM response generation
+  private async generateClassicDMResponse(session: GameSession, player: PlayerContext, input: string): Promise<string> {
     const currentLocation = this.getCurrentLocation(session);
     const currentAtmosphere = this.getCurrentAtmosphere(session);
     const conversationHistory = this.getConversationHistory(session);
@@ -558,7 +605,7 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
       
       return parsedResponse.narrative || response;
     } catch (error) {
-      console.error('Error generating DM response:', error);
+      console.error('Error generating classic DM response:', error);
       return this.getEnhancedFallbackResponse(session, player, input);
     }
   }
@@ -1026,6 +1073,39 @@ RESPONSE FORMAT:
 
   private async generateAIResponse(member: AIPartyMember, context: string, session: GameSession): Promise<string | null> {
     try {
+      // Use sentient AI for more intelligent, aware responses
+      const sentientContext = {
+        location: session.worldState?.currentLocation || 'unknown',
+        situation: session.currentPhase,
+        sessionType: 'automated_game',
+        realm: session.config.realm,
+        aiCharacter: member,
+        recentMessages: session.messages.slice(-5)
+      };
+
+      const sentientResult = await sentientAI.processSentientInput(
+        member.id, // Use AI member ID as player ID for memory
+        context,
+        sentientContext
+      );
+
+      // Enhance the response with character-specific personality
+      const enhancedResponse = this.enhanceWithCharacterPersonality(
+        sentientResult.response,
+        member,
+        sentientResult.emotionalTone
+      );
+
+      return enhancedResponse;
+    } catch (error) {
+      console.error('Error generating sentient AI response:', error);
+      // Fallback to original method
+      return this.generateClassicAIResponse(member, context, session);
+    }
+  }
+
+  private async generateClassicAIResponse(member: AIPartyMember, context: string, session: GameSession): Promise<string | null> {
+    try {
       const recentMessages = session.messages.slice(-5).map(m => `${m.sender}: ${m.content}`).join('\n');
       
       const prompt = `You are ${member.name}, a ${member.race} ${member.characterClass} in a ${session.config.realm} adventure.
@@ -1061,9 +1141,85 @@ IMPORTANT: Respond with ONLY the character's dialogue as plain text. Do not incl
       
       return response || null;
     } catch (error) {
-      console.error('Error generating AI response:', error);
+      console.error('Error generating classic AI response:', error);
       return this.getFallbackResponse(member, context);
     }
+  }
+
+  private enhanceWithCharacterPersonality(baseResponse: string, member: AIPartyMember, tone: string): string {
+    // Add character-specific speech patterns and mannerisms
+    let enhanced = baseResponse;
+
+    // Apply character class specific enhancements
+    switch (member.characterClass.toLowerCase()) {
+      case 'scavenger':
+        // Ghost-specific enhancements for post-apocalyptic setting
+        if (member.name === 'Ghost') {
+          enhanced = this.applyGhostPersonality(enhanced, tone);
+        }
+        break;
+      case 'ranger':
+        enhanced = this.applyRangerPersonality(enhanced, member, tone);
+        break;
+      case 'cleric':
+        enhanced = this.applyClericPersonality(enhanced, member, tone);
+        break;
+      case 'wizard':
+        enhanced = this.applyWizardPersonality(enhanced, member, tone);
+        break;
+    }
+
+    return enhanced;
+  }
+
+  private applyGhostPersonality(response: string, tone: string): string {
+    // Ghost is paranoid, resourceful, and speaks in short, careful phrases
+    const ghostMannerisms = [
+      'Keep your voice down.',
+      'Someone might be listening.',
+      'That\'s how people get dead.',
+      'Trust but verify.',
+      'I\'ve seen this before.',
+      'Stay alert.'
+    ];
+
+    // Add occasional mannerisms based on tone
+    if (tone === 'cautious' || Math.random() < 0.3) {
+      const mannerism = ghostMannerisms[Math.floor(Math.random() * ghostMannerisms.length)];
+      return `${response} ${mannerism}`;
+    }
+
+    return response;
+  }
+
+  private applyRangerPersonality(response: string, member: AIPartyMember, tone: string): string {
+    // Rangers are observant and nature-focused
+    if (tone === 'observant' || Math.random() < 0.2) {
+      const rangerPhrases = ['The tracks tell a story.', 'Nature has its own warnings.', 'I hear something...'];
+      const phrase = rangerPhrases[Math.floor(Math.random() * rangerPhrases.length)];
+      return `${response} ${phrase}`;
+    }
+    return response;
+  }
+
+  private applyClericPersonality(response: string, member: AIPartyMember, tone: string): string {
+    // Clerics are protective and spiritual
+    if (tone === 'supportive' || Math.random() < 0.2) {
+      const clericPhrases = ['May the light guide us.', 'I sense a blessing here.', 'Fear not, I am with you.'];
+      const phrase = clericPhrases[Math.floor(Math.random() * clericPhrases.length)];
+      return `${response} ${phrase}`;
+    }
+    return response;
+  }
+
+  private applyWizardPersonality(response: string, member: AIPartyMember, tone: string): string {
+    // Wizards are analytical and curious
+    if (tone === 'curious' || Math.random() < 0.2) {
+      const wizardPhrases = ['Fascinating...', 'The magical resonance here is unusual.', 'I must study this further.'];
+      const phrase = wizardPhrases[Math.floor(Math.random() * wizardPhrases.length)];
+      return `${response} ${phrase}`;
+    }
+    return response;
   }
 
   private getFallbackResponse(member: AIPartyMember, context: string): string {
