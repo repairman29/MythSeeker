@@ -1,9 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from './firebaseService';
+import ErrorBoundary from './components/ErrorBoundary';
+import LandingPage from './components/LandingPage';
+import { UnifiedGameExperience } from './components/UnifiedGameExperience';
 
-// Minimal components
+// Import all wrapper components
+import {
+  DashboardWrapper,
+  GameWrapper,
+  CharacterWrapper,
+  CharacterCreationWrapper,
+  CampaignWrapper,
+  CampaignGameWrapper,
+  WaitingRoomWrapper,
+  AutomatedGamesWrapper,
+  PartyWrapper,
+  WorldWrapper,
+  CombatWrapper,
+  MagicWrapper,
+  DMCenterWrapper,
+  ProfileWrapper,
+  AchievementsWrapper,
+  SettingsWrapper,
+  HelpWrapper,
+  ProgressionWrapperComponent
+} from './wrappers';
+
+// Loading component for Suspense fallback
 const LoadingSpinner = () => (
   <div className="min-h-screen bg-gradient-to-br from-blue-950 via-indigo-950 to-purple-950 flex items-center justify-center">
     <div className="text-center space-y-4">
@@ -18,102 +43,13 @@ const LoadingSpinner = () => (
   </div>
 );
 
-const LandingPage = ({ onOpenAuth }: { onOpenAuth: () => void }) => (
-  <div className="min-h-screen bg-gradient-to-br from-blue-950 via-indigo-950 to-purple-950 flex items-center justify-center">
-    <div className="text-center space-y-6">
-      <h1 className="text-6xl font-bold text-white mb-4">MythSeeker</h1>
-      <p className="text-xl text-blue-200 mb-8">Your AI-Powered D&D Adventure Platform</p>
-      <p className="text-sm text-blue-300 mb-8">
-        🤖 Powered by Vertex AI & Google AI Studio<br/>
-        🎲 3D Physics-Based Dice Rolling<br/>
-        ⚔️ Real-time Multiplayer Adventures
-      </p>
-      <button
-        onClick={onOpenAuth}
-        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg transition-colors shadow-lg"
-      >
-        Sign In with Google
-      </button>
-    </div>
-  </div>
-);
-
-const Dashboard = ({ user }: { user: any }) => (
-  <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 p-8">
-    <div className="max-w-6xl mx-auto">
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-white mb-2">Welcome, {user.displayName || 'Player'}!</h1>
-        <p className="text-blue-200">Your D&D adventures await</p>
-        <div className="mt-4 text-sm text-green-400">
-          ✅ AI Service: Operational with Premium APIs<br/>
-          ✅ 3D Dice System: Ready<br/>
-          ✅ Multiplayer: Connected
-        </div>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700 hover:border-blue-500 transition-colors">
-          <h3 className="text-xl font-semibold text-white mb-2">🤖 AI Adventure</h3>
-          <p className="text-slate-300 mb-4">Start an AI-powered adventure with premium Gemini AI</p>
-          <button className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg transition-colors">
-            Start AI Game
-          </button>
-        </div>
-        
-        <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700 hover:border-purple-500 transition-colors">
-          <h3 className="text-xl font-semibold text-white mb-2">⚔️ Characters</h3>
-          <p className="text-slate-300 mb-4">Create and manage your D&D characters</p>
-          <button className="w-full bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-lg transition-colors">
-            Manage Characters
-          </button>
-        </div>
-        
-        <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700 hover:border-green-500 transition-colors">
-          <h3 className="text-xl font-semibold text-white mb-2">🎲 Campaigns</h3>
-          <p className="text-slate-300 mb-4">Join or create multiplayer campaigns</p>
-          <button className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg transition-colors">
-            Browse Campaigns
-          </button>
-        </div>
-      </div>
-      
-      <div className="mt-8 bg-slate-800/30 rounded-xl p-6 border border-slate-700">
-        <h3 className="text-lg font-semibold text-white mb-4">🚀 Platform Status</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-          <div className="text-center">
-            <div className="text-green-400 font-semibold">AI Service</div>
-            <div className="text-slate-300">Vertex AI + Google AI Studio</div>
-          </div>
-          <div className="text-center">
-            <div className="text-green-400 font-semibold">3D Dice</div>
-            <div className="text-slate-300">Physics-Based Rolling</div>
-          </div>
-          <div className="text-center">
-            <div className="text-green-400 font-semibold">Database</div>
-            <div className="text-slate-300">Firebase Connected</div>
-          </div>
-        </div>
-      </div>
-      
-      <div className="mt-8 text-center">
-        <button
-          onClick={() => auth.signOut()}
-          className="bg-red-600 hover:bg-red-700 text-white py-2 px-6 rounded-lg transition-colors"
-        >
-          Sign Out
-        </button>
-      </div>
-    </div>
-  </div>
-);
-
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      console.log('Auth state changed:', firebaseUser ? 'Signed in' : 'Signed out');
+      console.log('🎮 Auth state changed:', firebaseUser ? 'Signed in' : 'Signed out');
       setUser(firebaseUser);
       setAuthChecked(true);
     });
@@ -139,11 +75,55 @@ export default function App() {
 
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<Dashboard user={user} />} />
-        <Route path="/dashboard" element={<Dashboard user={user} />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+      {/* Skip to content link for accessibility */}
+      <a href="#main-content" className="sr-only focus:not-sr-only absolute top-2 left-2 bg-blue-700 text-white px-4 py-2 rounded z-50">
+        Skip to main content
+      </a>
+      
+      <ErrorBoundary>
+        <Suspense fallback={<LoadingSpinner />}>
+          <div id="main-content">
+            <Routes>
+              {/* Default route */}
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              
+              {/* Core application routes */}
+              <Route path="/dashboard" element={<DashboardWrapper user={user} />} />
+              <Route path="/play" element={<UnifiedGameExperience user={user} />} />
+              <Route path="/game/*" element={<GameWrapper user={user} />} />
+              
+              {/* Character management */}
+              <Route path="/characters" element={<CharacterWrapper user={user} />} />
+              <Route path="/characters/create" element={<CharacterCreationWrapper user={user} />} />
+              <Route path="/progression" element={<ProgressionWrapperComponent user={user} />} />
+              
+              {/* Campaign management */}
+              <Route path="/campaigns" element={<CampaignWrapper user={user} />} />
+              <Route path="/campaigns/:id" element={<CampaignGameWrapper user={user} />} />
+              <Route path="/campaigns/:id/waiting" element={<WaitingRoomWrapper user={user} />} />
+              
+              {/* Game modes */}
+              <Route path="/automated-games" element={<AutomatedGamesWrapper user={user} />} />
+              <Route path="/party" element={<PartyWrapper user={user} />} />
+              <Route path="/world" element={<WorldWrapper user={user} />} />
+              <Route path="/combat" element={<CombatWrapper user={user} />} />
+              <Route path="/magic" element={<MagicWrapper user={user} />} />
+              
+              {/* DM and admin */}
+              <Route path="/dm-center" element={<DMCenterWrapper user={user} />} />
+              
+              {/* User management */}
+              <Route path="/profile" element={<ProfileWrapper user={user} />} />
+              <Route path="/achievements" element={<AchievementsWrapper user={user} />} />
+              <Route path="/settings" element={<SettingsWrapper user={user} />} />
+              <Route path="/help" element={<HelpWrapper user={user} />} />
+              
+              {/* Fallback */}
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </div>
+        </Suspense>
+      </ErrorBoundary>
     </Router>
   );
 } 
