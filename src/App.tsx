@@ -4779,7 +4779,14 @@ export default function AppWrapper() {
           <Route path="/campaigns" element={<CampaignWrapper user={user} />} />
           <Route path="/campaigns/:id" element={<CampaignGameWrapper user={user} />} />
           <Route path="/campaigns/:id/waiting" element={<WaitingRoomWrapper user={user} />} />
-          <Route path="/automated-games" element={<AutomatedGameWrapper user={user} />} />
+          <Route path="/automated-games" element={
+            <div style={{padding: '20px', color: 'white', backgroundColor: 'black'}}>
+              <h1>🎮 AUTOMATED GAMES DEBUG TEST</h1>
+              <p>User: {user?.uid || 'Not logged in'}</p>
+              <p>Route working! Now testing AutomatedGameWrapper...</p>
+              <AutomatedGameWrapper user={user} />
+            </div>
+          } />
           <Route path="/party" element={<PartyWrapper user={user} />} />
           <Route path="/world" element={<WorldWrapper user={user} />} />
           <Route path="/combat" element={<CombatWrapper user={user} />} />
