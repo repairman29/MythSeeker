@@ -89,7 +89,7 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
             maxPlayers: 1,
             sessionDuration: 30,
             autoStart: true,
-            dmStyle: 'supportive' as const,
+            dmStyle: 'balanced' as const,
             rating: 'PG' as const,
             customPrompt: initialCampaign.customPrompt
           };
@@ -190,6 +190,15 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
 
   // Show automated game manager for automated games (but not for training sessions with initial campaigns)
   if (actualGameType === 'automated' && showManager && !currentSession && !initialCampaign) {
+    console.log('🎮 Showing AutomatedGameManager because:', {
+      actualGameType,
+      showManager,
+      hasCurrentSession: !!currentSession,
+      hasInitialCampaign: !!initialCampaign,
+      isTraining: initialCampaign?.isTraining,
+      isCombat: initialCampaign?.isCombat
+    });
+    
     return (
       <div className="h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
         <AutomatedGameManager 
@@ -200,6 +209,24 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
         />
       </div>
     );
+  }
+
+  // Skip AutomatedGameManager for training sessions even if no current session yet
+  if (actualGameType === 'automated' && initialCampaign && (initialCampaign.isTraining || initialCampaign.isCombat)) {
+    console.log('🎯 Training/Combat session detected, skipping AutomatedGameManager:', {
+      isTraining: initialCampaign.isTraining,
+      isCombat: initialCampaign.isCombat,
+      hasCurrentSession: !!currentSession
+    });
+    
+    // Show loading while session is being created
+    if (!currentSession) {
+      return (
+        <div className="h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+          <div className="text-white text-xl">🎯 Preparing training session...</div>
+        </div>
+      );
+    }
   }
 
   // Show loading state
