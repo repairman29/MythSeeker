@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { BaseWrapper } from './BaseWrapper';
 import Dashboard from '../components/Dashboard';
 import { UniversalGameInterface } from '../components/UniversalGameInterface';
@@ -148,9 +148,26 @@ export const CampaignWrapper: React.FC<CampaignWrapperProps> = ({ user }) => {
 };
 
 // ===== CAMPAIGN GAME WRAPPER =====
-export const CampaignGameWrapper: React.FC<{ user: any }> = ({ user }) => (
-  <GameWrapper user={user} />
-);
+export const CampaignGameWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const { id: campaignId } = useParams();
+  const navigate = useNavigate();
+
+  const handleBackToLobby = () => {
+    navigate('/campaigns');
+  };
+
+  return (
+    <BaseWrapper user={user} showFloatingButton={false}>
+      <UniversalGameInterface
+        gameType="campaign"
+        gameId={campaignId || 'unknown-campaign'}
+        user={user}
+        onBackToLobby={handleBackToLobby}
+        showManager={false}
+      />
+    </BaseWrapper>
+  );
+};
 
 // ===== WAITING ROOM WRAPPER =====
 export const WaitingRoomWrapper: React.FC<{ user: any }> = ({ user }) => (
