@@ -80,6 +80,7 @@ export interface GameSession {
   lastActivity?: number; // Track last activity
   lastMonitoringCheck?: number; // Track last monitoring check
   isTraining?: boolean; // Flag for training sessions
+  worldState: any;
 }
 
 export interface GameMessage {
@@ -1155,7 +1156,9 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
     return conversations;
   }
 
-  // Enhanced DM response with universal context
+  /**
+   * Generate enhanced DM response with universal context
+   */
   private async generateEnhancedDMResponseWithUniversalContext(
     session: GameSession, 
     player: PlayerContext, 
@@ -1166,7 +1169,26 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
     try {
       console.log('🚀 Using Enhanced AI Framework with Universal Context for DM response...');
       
-      // Build advanced AI input with universal context
+      // Check if this is a training session for specialized handling
+      const isTraining = session.config.customPrompt?.includes('training') || 
+                        session.config.theme?.toLowerCase().includes('training');
+      
+      if (isTraining) {
+        const response = await this.generateProgressiveTrainingResponse(session, player, input);
+        
+        // Ensure response is from Training Instructor
+        const dmMessage: GameMessage = {
+          id: `msg_${Date.now()}`,
+          type: 'dm',
+          content: response,
+          sender: 'Training Instructor',
+          timestamp: Date.now()
+        };
+        
+        return response;
+      }
+      
+      // Rest of the existing method for non-training sessions...
       const advancedInput = {
         content: input,
         playerId: player.id || player.name,
@@ -1193,31 +1215,221 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
         }
       };
 
-      // Use enhanced AI service for context-aware response with universal profile
       const enhancedResult = await enhancedAIService.generateContextAwareResponse(advancedInput);
       
-      // Update session with AI insights including universal context insights
-      if (enhancedResult.proactiveInsights.length > 0) {
-        console.log('🧠 Enhanced AI insights with universal context:', enhancedResult.proactiveInsights);
-        
-        if (!session.aiInsights) session.aiInsights = [];
-        session.aiInsights.push(...enhancedResult.proactiveInsights);
-        session.aiInsights.push(...aiRecommendations.ai_insights);
-        session.aiInsights = session.aiInsights.slice(-15); // Keep last 15 insights
+      if (enhancedResult && enhancedResult.trim()) {
+        console.log('✅ Enhanced AI response generated successfully');
+        return enhancedResult;
+      } else {
+        console.warn('⚠️ Enhanced AI returned empty response, using fallback');
+        return this.generateSentientDMResponse(session, player, input);
       }
-
-      // Incorporate AI recommendations into response
-      let enhancedResponse = enhancedResult.response;
-      if (aiRecommendations.ai_insights.length > 0 && Math.random() < 0.3) {
-        const insight = aiRecommendations.ai_insights[0];
-        enhancedResponse += `\n\n*${insight}*`;
-      }
-
-      return enhancedResponse;
+      
     } catch (error) {
-      console.error('❌ Enhanced AI with Universal Context failed:', error);
+      console.error('❌ Enhanced DM response failed:', error);
       return this.generateSentientDMResponse(session, player, input);
     }
+  }
+
+  /**
+   * Progressive training response system with skill tracking
+   */
+  private generateProgressiveTrainingResponse(session: GameSession, player: PlayerContext, input: string): string {
+    // Initialize or get training progress
+    if (!session.worldState.trainingProgress) {
+      session.worldState.trainingProgress = {
+        playerProgress: {},
+        currentSkill: 'foundation',
+        completedSkills: [],
+        sessionNumber: 1
+      };
+    }
+
+    const progress = session.worldState.trainingProgress;
+    const playerName = player.name;
+    
+    // Initialize player progress if not exists
+    if (!progress.playerProgress[playerName]) {
+      progress.playerProgress[playerName] = {
+        skillLevel: 1,
+        completedExercises: [],
+        currentFocus: 'stance',
+        strengths: [],
+        weaknesses: [],
+        nextGoal: 'master basic stance'
+      };
+    }
+
+    const playerProgress = progress.playerProgress[playerName];
+    
+    // Extract training type from session config
+    const trainingType = this.extractTrainingType(session.config);
+    
+    // Generate contextual response based on input and progress
+    return this.generateContextualTrainingFeedback(trainingType, input, playerProgress, session);
+  }
+
+  /**
+   * Extract training type from session configuration
+   */
+  private extractTrainingType(config: AutomatedGameConfig): string {
+    const prompt = config.customPrompt || '';
+    const theme = config.theme || '';
+    
+    if (prompt.includes('Melee Combat') || theme.includes('Melee')) return 'melee';
+    if (prompt.includes('Archery') || theme.includes('Archery')) return 'archery';
+    if (prompt.includes('Evocation') || theme.includes('Evocation')) return 'magic';
+    if (prompt.includes('Speed') || theme.includes('Speed')) return 'speed';
+    if (prompt.includes('Accuracy') || theme.includes('Accuracy')) return 'accuracy';
+    if (prompt.includes('Endurance') || theme.includes('Endurance')) return 'endurance';
+    
+    return 'general';
+  }
+
+  /**
+   * Generate contextual training feedback based on action and progress
+   */
+  private generateContextualTrainingFeedback(trainingType: string, input: string, playerProgress: any, session: GameSession): string {
+    const inputLower = input.toLowerCase();
+    const playerName = session.players[0]?.name || 'Student';
+    
+    // Melee combat training responses
+    if (trainingType === 'melee') {
+      if (inputLower.includes('stance') || inputLower.includes('assume')) {
+        if (playerProgress.completedExercises.includes('basic_stance')) {
+          return `**TRAINING INSTRUCTOR:** Excellent, ${playerName}! Your stance is getting more natural. I can see you're automatically adjusting your foot placement and balance.
+
+**PROGRESSION UPDATE:** ✅ Basic Stance → Moving to Intermediate
+- **What I observed:** Solid foundation, good weight distribution
+- **Improvement:** Your guard position is 20% more stable than last session
+
+**NEXT SKILL:** Let's work on **grip technique**. Try: *"practice sword grip variations"* to learn proper weapon handling, or *"work on footwork"* to add movement to your stance.
+
+**INSTRUCTOR INSIGHT:** You're ready for more dynamic exercises. Your fundamentals are solid enough to build upon.`;
+        } else {
+          playerProgress.completedExercises.push('basic_stance');
+          playerProgress.currentFocus = 'grip';
+          return `**TRAINING INSTRUCTOR:** Perfect! *${playerName}, you settle into a textbook combat stance.*
+
+**TECHNIQUE ANALYSIS:**
+✅ **Feet:** Shoulder-width apart - Excellent balance foundation
+✅ **Knees:** Slightly bent - Good for mobility and power
+✅ **Guard:** Weapon ready position - Solid defensive posture
+⚠️ **Improvement:** Try shifting your weight 10% more to your front foot
+
+**SKILL UNLOCKED:** 🎯 Basic Combat Stance (Level 1)
+**NEXT PROGRESSION:** Master your grip! Try: *"practice different sword grips"* or *"work on weapon control"*
+
+**ENCOURAGEMENT:** That's textbook form! You're building the foundation that will serve you in real combat.`;
+        }
+      }
+      
+      if (inputLower.includes('grip') || inputLower.includes('sword')) {
+        if (!playerProgress.completedExercises.includes('basic_stance')) {
+          return `**TRAINING INSTRUCTOR:** Hold on, ${playerName}! Before we work on grip, let's nail your stance first. 
+
+**FOUNDATION FIRST:** A great sword grip means nothing without solid footing. Try: *"assume combat stance"* to establish your base.
+
+**TEACHING MOMENT:** Think of it like building a house - the foundation (stance) comes before the walls (grip technique).`;
+        }
+        
+        playerProgress.completedExercises.push('grip_basics');
+        playerProgress.currentFocus = 'striking';
+        return `**TRAINING INSTRUCTOR:** Outstanding grip work, ${playerName}! *You adjust your hands on the weapon handle.*
+
+**GRIP ANALYSIS:**
+✅ **Dominant Hand:** Firm but not death-grip - Perfect control balance  
+✅ **Support Hand:** Proper placement for power and guidance
+✅ **Finger Position:** Natural curve, good for extended use
+⭐ **BONUS:** Your grip automatically adjusted when I moved your target!
+
+**SKILL PROGRESSION:** 🎯 Basic Stance → ⚔️ Weapon Grip Mastery
+**READY FOR:** Striking techniques! Try: *"practice basic strikes"* or *"work on attack combinations"*
+
+**PRO TIP:** Your grip is now muscle memory. In real combat, you won't have to think about it!`;
+      }
+      
+      if (inputLower.includes('strike') || inputLower.includes('attack') || inputLower.includes('swing')) {
+        if (!playerProgress.completedExercises.includes('grip_basics')) {
+          return `**TRAINING INSTRUCTOR:** Eager to attack, I like that spirit! But let's master your grip first, ${playerName}.
+
+**SKILL SEQUENCE:** Stance → Grip → Striking
+**CURRENT NEED:** Try: *"practice sword grip"* to get proper weapon control before we move to attacks.
+
+**SAFETY NOTE:** Proper grip prevents injuries and increases strike effectiveness by 40%.`;
+        }
+        
+        playerProgress.completedExercises.push('basic_strikes');
+        playerProgress.currentFocus = 'combinations';
+        playerProgress.skillLevel = 2;
+        return `**TRAINING INSTRUCTOR:** EXCELLENT strike, ${playerName}! *Your blade cuts through the air with precision.*
+
+**STRIKE ANALYSIS:**
+⚔️ **Power:** 85% - Great force generation from your stance
+⚔️ **Accuracy:** 90% - Hit exactly where you aimed  
+⚔️ **Form:** 95% - Textbook execution of the technique
+⚔️ **Recovery:** 80% - Quick return to guard position
+
+**LEVEL UP!** 🎉 You've reached **Apprentice Warrior (Level 2)**
+**MASTERED SKILLS:** Stance, Grip, Basic Strikes
+**UNLOCKED:** Combination attacks! Try: *"practice 3-hit combo"* or *"work on defense and counter"*
+
+**INSTRUCTOR PRIDE:** That strike would genuinely threaten a real opponent. You're not just practicing anymore - you're becoming dangerous!`;
+      }
+    }
+    
+    // Archery training responses
+    if (trainingType === 'archery') {
+      if (inputLower.includes('bow') || inputLower.includes('select') || inputLower.includes('examine')) {
+        playerProgress.completedExercises.push('bow_selection');
+        return `**ARCHERY INSTRUCTOR:** Wise choice, ${playerName}! *You select a recurve bow perfectly suited to your draw strength.*
+
+**BOW ANALYSIS:**
+🏹 **Draw Weight:** 35 lbs - Perfect for learning proper form
+🏹 **Length:** 68" - Matches your arm span and height
+🏹 **String Condition:** Fresh and properly tensioned
+
+**TECHNIQUE CHECKPOINT:** Notice how the grip feels in your hand. The bow should feel like an extension of your arm.
+
+**NEXT STEP:** Master your stance! Try: *"take proper shooting stance"* or *"nock an arrow and prepare to shoot"*
+
+**INSTRUCTOR NOTE:** This bow will grow with you - once you master the fundamentals, we can increase draw weight for more power.`;
+      }
+    }
+    
+    // Magic training responses
+    if (trainingType === 'magic') {
+      if (inputLower.includes('center') || inputLower.includes('focus') || inputLower.includes('magical')) {
+        playerProgress.completedExercises.push('magical_centering');
+        return `**MASTER INSTRUCTOR:** Excellent focus, ${playerName}! *Arcane energy begins to swirl around you as you center your magical essence.*
+
+**MAGICAL ASSESSMENT:**
+🔮 **Arcane Sensitivity:** High - You're naturally attuned to magical forces
+🔮 **Energy Control:** 70% - Good initial control, room for refinement  
+🔮 **Spell Readiness:** Ready for basic evocation
+⚡ **Power Level:** Sufficient for training-grade spells
+
+**VISUAL FEEDBACK:** I can see faint blue sparks dancing around your fingertips - a sign of proper magical alignment.
+
+**PROGRESSION:** Try: *"cast magic missile at target"* or *"practice mage hand cantrip"* to begin practical spellcasting.
+
+**SAFETY REMINDER:** Always maintain control. If you feel the magic slipping, immediately ground yourself by touching the stone floor.`;
+      }
+    }
+    
+    // Generic encouraging response for unrecognized actions
+    return `**TRAINING INSTRUCTOR:** I see you're trying something creative, ${playerName}! "${input}"
+
+**CURRENT FOCUS:** We're working on **${playerProgress.currentFocus}** right now.
+**SUGGESTION:** Try a more specific action related to ${trainingType} training.
+
+**HELPFUL COMMANDS:**
+- *"assume combat stance"* - for melee foundation
+- *"select my bow"* - for archery preparation  
+- *"center my magical energy"* - for magic training
+- *"ask for guidance"* - if you're unsure what to practice
+
+**INSTRUCTOR SUPPORT:** No wrong answers here - just different paths to mastery! What specific skill would you like to develop?`;
   }
 
   // Helper methods for universal context integration
