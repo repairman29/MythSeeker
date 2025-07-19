@@ -69,14 +69,17 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
   const [campaignError, setCampaignError] = useState<string | null>(null);
 
   // Unified loading and error states
-  const isLoading = actualGameType === 'automated' ? automatedLoading : campaignLoading;
-  const error = actualGameType === 'automated' ? automatedError : campaignError;
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Auto-create training session if we have initialCampaign with training data
   useEffect(() => {
     const autoCreateTrainingSession = async () => {
       if (actualGameType === 'automated' && initialCampaign && !currentSession && (initialCampaign.isTraining || initialCampaign.isCombat)) {
         console.log('🎯 Auto-creating training session for:', initialCampaign);
+        
+        // Set loading state to prevent showing AutomatedGameManager
+        setIsLoading(true);
         
         try {
           // Create training session configuration
@@ -98,9 +101,13 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
             console.log('✅ Training session created:', sessionId);
             // Auto-join the created session
             await joinSession(sessionId);
+            console.log('✅ Training session joined successfully');
           }
         } catch (error) {
           console.error('❌ Failed to create training session:', error);
+          setError('Failed to create training session');
+        } finally {
+          setIsLoading(false);
         }
       }
     };

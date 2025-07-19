@@ -517,42 +517,53 @@ class AutomatedGameService {
     return sessionId;
   }
 
-  // Add player to automated session
-  async addPlayerToSession(sessionId: string, player: PlayerContext): Promise<boolean> {
+  // Add player to session
+  async addPlayerToSession(sessionId: string, playerContext: PlayerContext): Promise<void> {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
       throw new Error('Session not found');
     }
 
     // Check if player is already in session
-    const existingPlayerIndex = session.players.findIndex(p => p.id === player.id);
-    if (existingPlayerIndex >= 0) {
-      // Update existing player data instead of adding duplicate
-      session.players[existingPlayerIndex] = { ...session.players[existingPlayerIndex], ...player, joinTime: Date.now() };
-      return true;
+    const existingPlayer = session.players.find(p => p.id === playerContext.id);
+    if (existingPlayer) {
+      console.log('Player already in session, updating context');
+      existingPlayer.name = playerContext.name;
+      existingPlayer.experience = playerContext.experience;
+      existingPlayer.preferences = playerContext.preferences;
+      return;
     }
 
-    if (session.players.length >= session.config.maxPlayers) {
-      throw new Error('Session is full');
+    // Add player to session
+    session.players.push(playerContext);
+    session.currentPhase = 'active';
+
+    console.log(`Player ${playerContext.name} added to session ${sessionId}`);
+
+    // Auto-start training sessions with introduction message
+    if (session.isTraining && session.messages.length === 0) {
+      console.log('🎯 Starting training session with introduction message');
+      
+      // Generate training introduction based on config
+      const trainingIntro = this.generateTrainingIntroduction(session);
+      
+      const introMessage: GameMessage = {
+        id: `msg_${Date.now()}`,
+        type: 'dm',
+        content: trainingIntro,
+        sender: 'Training Instructor',
+        timestamp: Date.now()
+      };
+      
+      session.messages.push(introMessage);
+      console.log('✅ Training introduction message added');
     }
 
-    session.players.push(player);
-    
-    // Add welcome message
-    const welcomeMessage: GameMessage = {
-      id: `msg_${Date.now()}`,
-      type: 'system',
-      content: `${player.name} has joined the adventure!`,
-      timestamp: Date.now()
-    };
-    session.messages.push(welcomeMessage);
-
-    // Check if we should start the session
-    if (session.config.autoStart && session.players.length >= 2) {
-      await this.startSession(sessionId);
-    }
-
-    return true;
+    // Save to localStorage and Firebase
+    this.saveToLocalStorage();
+    this.saveToFirebase(session).catch(error => 
+      console.warn('Background Firebase save failed:', error)
+    );
   }
 
   // Remove player from automated session
@@ -1509,6 +1520,76 @@ Response:`;
    */
   getSession(sessionId: string): GameSession | null {
     return this.activeSessions.get(sessionId) || null;
+  }
+
+  /**
+   * Generate training introduction message based on session config
+   */
+  private generateTrainingIntroduction(session: GameSession): string {
+    const config = session.config;
+    const isTraining = config.customPrompt?.includes('training') || 
+                     config.theme?.toLowerCase().includes('training');
+    
+    if (isTraining && config.customPrompt) {
+      // Extract training type and objectives from custom prompt
+      const prompt = config.customPrompt;
+      
+      if (prompt.includes('Melee Combat')) {
+        return `🗡️ **Welcome to Melee Combat Training!**
+
+You've entered the training grounds where seasoned warriors hone their sword, axe, and spear techniques. Training dummies and practice targets await your blade.
+
+**Today's Training Objectives:**
+• Land 5 successful melee attacks
+• Practice different weapon techniques
+• Master your combat stance and timing
+
+*Instructor:* "Remember, good form is more important than raw power. Focus on precision and technique. When you're ready, choose your weapon and approach the training dummies. Type your actions and I'll guide you through proper combat form."
+
+What weapon would you like to start with? ⚔️`;
+      }
+      
+      if (prompt.includes('Archery Range')) {
+        return `🏹 **Welcome to Archery Range Training!**
+
+You've arrived at the archery range where expert marksmen perfect their aim. Moving targets and bullseye challenges test your precision.
+
+**Today's Training Objectives:**
+• Hit 8 out of 10 shots
+• Score 3 critical hits
+• Master different shooting stances
+
+*Instructor:* "Steady breathing and consistent form are key to accurate shooting. The targets will start slow and gradually increase in difficulty. Select your bow and take your position at the firing line."
+
+Ready to begin your marksmanship training? 🎯`;
+      }
+      
+      if (prompt.includes('Evocation Magic')) {
+        return `✨ **Welcome to Evocation Spell Practice!**
+
+You've entered the magical training chamber where spellcasters master the destructive arts. Enchanted targets await your magical arsenal.
+
+**Today's Training Objectives:**
+• Cast 5 offensive spells successfully
+• Achieve maximum spell damage potential
+• Learn proper magical focus techniques
+
+*Instructor:* "Magic requires both knowledge and instinct. Feel the arcane energy flowing through you. The targets before you are warded against real harm, so unleash your full power. Focus your mind and begin when ready."
+
+Which evocation spell would you like to practice first? 🔥⚡❄️`;
+      }
+    }
+    
+    // Generic training introduction
+    return `🎯 **Welcome to Training Session!**
+
+You've entered a specialized training environment designed to help you improve your skills and techniques.
+
+**Training Focus:** ${config.theme || 'General Skills Development'}
+
+*Instructor:* "This is a safe environment to practice and learn. I'm here to guide you through exercises, provide feedback, and help you develop your abilities. Take your time, ask questions, and focus on improvement over perfection."
+
+What would you like to work on first? Type your actions and I'll provide guidance and feedback throughout your training session.`;
   }
 }
 
