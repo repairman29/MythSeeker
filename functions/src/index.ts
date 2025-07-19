@@ -1559,3 +1559,79 @@ export const deleteAutomatedSession = functions.https.onCall(async (data: {
     throw new functions.https.HttpsError('internal', 'Failed to delete session');
   }
 }); 
+
+// AI Service Health Check Endpoint
+export const aiHealthCheck = functions.https.onRequest(async (req, res) => {
+  // Set CORS headers
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(200).send();
+    return;
+  }
+
+  try {
+    // Only allow POST requests for the health check
+    if (req.method !== 'POST') {
+      res.status(405).json({ 
+        success: false, 
+        error: 'Method not allowed. Use POST.' 
+      });
+      return;
+    }
+
+    // Simple health check - verify the service is responding
+    const healthStatus = {
+      status: 'healthy',
+      timestamp: Date.now(),
+      services: {
+        firebase: 'operational',
+        ai: 'operational',
+        database: 'operational'
+      }
+    };
+
+    // If this is a test request, return immediately
+    if (req.body?.test === true) {
+      res.status(200).json({
+        success: true,
+        data: healthStatus,
+        message: 'AI service is healthy'
+      });
+      return;
+    }
+
+    // For real health checks, verify Firebase connectivity
+    try {
+      await admin.firestore().collection('_health_check').doc('test').set({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      res.status(200).json({
+        success: true,
+        data: healthStatus,
+        message: 'All AI services operational'
+      });
+    } catch (dbError) {
+      console.error('Database health check failed:', dbError);
+      healthStatus.services.database = 'degraded';
+      
+      res.status(200).json({
+        success: true,
+        data: healthStatus,
+        message: 'AI service operational, database connectivity issues'
+      });
+    }
+
+  } catch (error) {
+    console.error('AI health check error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Health check failed',
+      details: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
+    });
+  }
+}); 

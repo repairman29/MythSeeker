@@ -100,17 +100,9 @@ export const GameInterface: React.FC<GameInterfaceProps> = ({
     // Add to local dice roll messages
     setDiceRollMessages(prev => [...prev, diceMessage]);
     
-    // Also send as a regular message for context
-    const contextMessage = rollData.context 
-      ? `I rolled ${rollData.diceType} for ${rollData.context} and got ${rollData.total}!`
-      : `I rolled ${rollData.diceType} and got ${rollData.total}!`;
-    
-    setInputMessage(contextMessage);
-    // Trigger send after setting the message
-    setTimeout(() => sendMessage(), 50);
-    
-    // Close the dice roller
-    setShowDiceRoller(false);
+    // DON'T automatically add to chat input - dice results show automatically in chat
+    // The visual dice roll message is sufficient for player context
+    console.log('🎲 Dice roll added to chat display automatically');
   };
 
   // Enhanced message rendering to include dice rolls

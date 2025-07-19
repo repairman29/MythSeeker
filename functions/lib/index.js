@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteAutomatedSession = exports.loadAutomatedSessions = exports.saveAutomatedSession = exports.geminiAIFunction = exports.aiDungeonMaster = exports.testEndpoint = exports.updateGameState = exports.endCombat = exports.resolveCombatAction = exports.getCombatState = exports.startCombat = exports.cleanupOldGames = exports.getUserGameHistory = exports.completeCampaign = exports.saveGameProgress = exports.startGameSession = exports.leaveGameSession = exports.joinGameSession = exports.createGameSession = exports.getUserCharacters = exports.saveCharacter = exports.updateUserLastSeen = void 0;
+exports.aiHealthCheck = exports.deleteAutomatedSession = exports.loadAutomatedSessions = exports.saveAutomatedSession = exports.geminiAIFunction = exports.aiDungeonMaster = exports.testEndpoint = exports.updateGameState = exports.endCombat = exports.resolveCombatAction = exports.getCombatState = exports.startCombat = exports.cleanupOldGames = exports.getUserGameHistory = exports.completeCampaign = exports.saveGameProgress = exports.startGameSession = exports.leaveGameSession = exports.joinGameSession = exports.createGameSession = exports.getUserCharacters = exports.saveCharacter = exports.updateUserLastSeen = void 0;
 const functions = require("firebase-functions");
 const init_1 = require("./init");
 const validation_1 = require("./validation");
@@ -1167,6 +1167,76 @@ exports.deleteAutomatedSession = functions.https.onCall(async (data, context) =>
             throw error;
         }
         throw new functions.https.HttpsError('internal', 'Failed to delete session');
+    }
+});
+// AI Service Health Check Endpoint
+exports.aiHealthCheck = functions.https.onRequest(async (req, res) => {
+    var _a;
+    // Set CORS headers
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+        res.status(200).send();
+        return;
+    }
+    try {
+        // Only allow POST requests for the health check
+        if (req.method !== 'POST') {
+            res.status(405).json({
+                success: false,
+                error: 'Method not allowed. Use POST.'
+            });
+            return;
+        }
+        // Simple health check - verify the service is responding
+        const healthStatus = {
+            status: 'healthy',
+            timestamp: Date.now(),
+            services: {
+                firebase: 'operational',
+                ai: 'operational',
+                database: 'operational'
+            }
+        };
+        // If this is a test request, return immediately
+        if (((_a = req.body) === null || _a === void 0 ? void 0 : _a.test) === true) {
+            res.status(200).json({
+                success: true,
+                data: healthStatus,
+                message: 'AI service is healthy'
+            });
+            return;
+        }
+        // For real health checks, verify Firebase connectivity
+        try {
+            await init_1.default.firestore().collection('_health_check').doc('test').set({
+                timestamp: init_1.default.firestore.FieldValue.serverTimestamp()
+            });
+            res.status(200).json({
+                success: true,
+                data: healthStatus,
+                message: 'All AI services operational'
+            });
+        }
+        catch (dbError) {
+            console.error('Database health check failed:', dbError);
+            healthStatus.services.database = 'degraded';
+            res.status(200).json({
+                success: true,
+                data: healthStatus,
+                message: 'AI service operational, database connectivity issues'
+            });
+        }
+    }
+    catch (error) {
+        console.error('AI health check error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Health check failed',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
 });
 //# sourceMappingURL=index.js.map

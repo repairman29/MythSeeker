@@ -194,5 +194,16 @@ service cloud.firestore {
     match /rateLimits/{userId} {
       allow read, write: if isAuthenticated() && isOwner(userId);
     }
+
+    // Player profiles for AI context - users can only access their own profiles
+    match /playerProfiles/{playerId} {
+      allow read, write: if isAuthenticated() && isOwner(playerId);
+      allow create: if isAuthenticated() && isOwner(playerId);
+    }
+
+    // Health check collection (for AI service monitoring)
+    match /_health_check/{document} {
+      allow read, write: if true; // Allow health checks from functions
+    }
   }
 }

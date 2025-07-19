@@ -1289,6 +1289,130 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
   }
 
   /**
+   * Update AI party member relationships based on player actions
+   */
+  private updateAIRelationships(session: GameSession, playerId: string, playerInput: string): void {
+    try {
+      if (!session.aiPartyMembers || session.aiPartyMembers.length === 0) {
+        console.log('📝 No AI party members to update relationships for');
+        return;
+      }
+
+      console.log('💖 Updating AI relationships based on player input:', playerInput);
+
+      // Analyze player input for relationship-affecting actions
+      const input = playerInput.toLowerCase();
+      const relationshipChanges: { [key: string]: number } = {};
+
+      // Positive relationship actions
+      if (input.includes('help') || input.includes('assist') || input.includes('support')) {
+        relationshipChanges.helpful = 2;
+      }
+      if (input.includes('thank') || input.includes('appreciate') || input.includes('grateful')) {
+        relationshipChanges.grateful = 3;
+      }
+      if (input.includes('protect') || input.includes('defend') || input.includes('save')) {
+        relationshipChanges.protective = 2;
+      }
+      if (input.includes('share') || input.includes('give') || input.includes('offer')) {
+        relationshipChanges.generous = 1;
+      }
+      if (input.includes('joke') || input.includes('laugh') || input.includes('funny')) {
+        relationshipChanges.humorous = 1;
+      }
+
+      // Negative relationship actions
+      if (input.includes('attack') && (input.includes('party') || input.includes('ally') || input.includes('friend'))) {
+        relationshipChanges.hostile = -5;
+      }
+      if (input.includes('ignore') || input.includes('dismiss') || input.includes('don\'t care')) {
+        relationshipChanges.dismissive = -1;
+      }
+      if (input.includes('insult') || input.includes('stupid') || input.includes('worthless')) {
+        relationshipChanges.insulting = -3;
+      }
+      if (input.includes('steal') || input.includes('take') && input.includes('without asking')) {
+        relationshipChanges.dishonest = -2;
+      }
+
+      // Apply relationship changes to all AI party members
+      session.aiPartyMembers.forEach(member => {
+        if (member.id.startsWith('ai_')) { // Assuming AI members have an 'ai_' prefix
+          // Initialize relationships if they don't exist
+          if (!member.relationships) {
+            member.relationships = new Map<string, number>();
+          }
+          if (!member.relationships.has(playerId)) {
+            member.relationships.set(playerId, {
+              trust: 50,
+              friendship: 50,
+              respect: 50,
+              loyalty: 50,
+              interactions: 0
+            });
+          }
+
+          const relationship = member.relationships.get(playerId);
+          if (relationship) {
+            relationship.interactions += 1;
+
+            // Apply relationship changes
+            Object.entries(relationshipChanges).forEach(([trait, change]) => {
+              switch (trait) {
+                case 'helpful':
+                case 'grateful':
+                case 'protective':
+                  relationship.trust = Math.min(100, relationship.trust + change);
+                  relationship.friendship = Math.min(100, relationship.friendship + change);
+                  break;
+                case 'generous':
+                  relationship.trust = Math.min(100, relationship.trust + change);
+                  relationship.respect = Math.min(100, relationship.respect + change);
+                  break;
+                case 'humorous':
+                  relationship.friendship = Math.min(100, relationship.friendship + change);
+                  break;
+                case 'hostile':
+                case 'insulting':
+                  relationship.trust = Math.max(0, relationship.trust + change);
+                  relationship.friendship = Math.max(0, relationship.friendship + change);
+                  relationship.loyalty = Math.max(0, relationship.loyalty + change);
+                  break;
+                case 'dismissive':
+                  relationship.respect = Math.max(0, relationship.respect + change);
+                  break;
+                case 'dishonest':
+                  relationship.trust = Math.max(0, relationship.trust + change);
+                  break;
+              }
+            });
+
+            // Ensure relationships stay within bounds
+            relationship.trust = Math.max(0, Math.min(100, relationship.trust));
+            relationship.friendship = Math.max(0, Math.min(100, relationship.friendship));
+            relationship.respect = Math.max(0, Math.min(100, relationship.respect));
+            relationship.loyalty = Math.max(0, Math.min(100, relationship.loyalty));
+
+            console.log(`💝 Updated relationship with ${member.name}:`, {
+              trust: relationship.trust,
+              friendship: relationship.friendship,
+              respect: relationship.respect,
+              loyalty: relationship.loyalty,
+              interactions: relationship.interactions
+            });
+          }
+        }
+      });
+
+      // Save the updated session
+      this.saveToLocalStorage();
+
+    } catch (error) {
+      console.error('❌ Error updating AI relationships:', error);
+    }
+  }
+
+  /**
    * Get all active sessions
    */
   getAllSessions(): GameSession[] {

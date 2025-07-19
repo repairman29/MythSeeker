@@ -8,6 +8,21 @@ import { AutomatedGameWrapper as AutomatedGameComponent } from '../components/Au
 import ProgressionWrapper from '../components/ProgressionWrapper';
 import { firebaseService } from '../firebaseService';
 
+// Import the new page components
+import WorldPage from '../components/WorldPage';
+import CombatPage from '../components/CombatPage';
+import MagicPage from '../components/MagicPage';
+import DMCenterPage from '../components/DMCenterPage';
+import SettingsPage from '../components/SettingsPage';
+
+// Import the missing page components at the top
+import ProfilePage from '../components/ProfilePage';
+import HelpPage from '../components/HelpPage';
+import AchievementsPage from '../components/AchievementsPage';
+import PartyPage from '../components/PartyPage';
+import CharactersPage from '../components/CharactersPage';
+import CampaignsPage from '../components/CampaignsPage';
+
 // ===== DASHBOARD WRAPPER =====
 interface DashboardWrapperProps {
   user: any;
@@ -97,14 +112,17 @@ const PlaceholderPage: React.FC<{ title: string; description: string }> = ({ tit
 );
 
 // ===== CHARACTER WRAPPER =====
-export const CharacterWrapper: React.FC<{ user: any }> = ({ user }) => (
-  <BaseWrapper user={user}>
-    <PlaceholderPage 
-      title="Character Management" 
-      description="Create, edit, and manage your D&D characters with full stat tracking and progression."
-    />
-  </BaseWrapper>
-);
+interface CharacterWrapperProps {
+  user: any;
+}
+
+export const CharacterWrapper: React.FC<CharacterWrapperProps> = ({ user }) => {
+  return (
+    <BaseWrapper user={user}>
+      <CharactersPage user={user} />
+    </BaseWrapper>
+  );
+};
 
 // ===== CHARACTER CREATION WRAPPER =====
 export const CharacterCreationWrapper: React.FC<{ user: any }> = ({ user }) => (
@@ -117,14 +135,17 @@ export const CharacterCreationWrapper: React.FC<{ user: any }> = ({ user }) => (
 );
 
 // ===== CAMPAIGN WRAPPER =====
-export const CampaignWrapper: React.FC<{ user: any }> = ({ user }) => (
-  <BaseWrapper user={user}>
-    <PlaceholderPage 
-      title="Campaign Browser" 
-      description="Browse, join, and create multiplayer D&D campaigns with other players."
-    />
-  </BaseWrapper>
-);
+interface CampaignWrapperProps {
+  user: any;
+}
+
+export const CampaignWrapper: React.FC<CampaignWrapperProps> = ({ user }) => {
+  return (
+    <BaseWrapper user={user}>
+      <CampaignsPage user={user} />
+    </BaseWrapper>
+  );
+};
 
 // ===== CAMPAIGN GAME WRAPPER =====
 export const CampaignGameWrapper: React.FC<{ user: any }> = ({ user }) => (
@@ -155,94 +176,121 @@ export const AutomatedGamesWrapper: React.FC<{ user: any }> = ({ user }) => {
 };
 
 // ===== PARTY WRAPPER =====
-export const PartyWrapper: React.FC<{ user: any }> = ({ user }) => (
-  <BaseWrapper user={user}>
-    <PlaceholderPage 
-      title="Party Management" 
-      description="Manage your adventuring party, track relationships, and coordinate strategies."
-    />
-  </BaseWrapper>
-);
+interface PartyWrapperProps {
+  user: any;
+}
+
+export const PartyWrapper: React.FC<PartyWrapperProps> = ({ user }) => {
+  return (
+    <BaseWrapper user={user}>
+      <PartyPage user={user} />
+    </BaseWrapper>
+  );
+};
 
 // ===== WORLD WRAPPER =====
-export const WorldWrapper: React.FC<{ user: any }> = ({ user }) => (
-  <BaseWrapper user={user}>
-    <PlaceholderPage 
-      title="World Map" 
-      description="Explore the interactive world map with locations, quests, and lore."
-    />
-  </BaseWrapper>
-);
+interface WorldWrapperProps {
+  user: any;
+}
+
+export const WorldWrapper: React.FC<WorldWrapperProps> = ({ user }) => {
+  return (
+    <BaseWrapper user={user}>
+      <WorldPage user={user} />
+    </BaseWrapper>
+  );
+};
 
 // ===== COMBAT WRAPPER =====
-export const CombatWrapper: React.FC<{ user: any }> = ({ user }) => (
-  <BaseWrapper user={user}>
-    <PlaceholderPage 
-      title="Combat System" 
-      description="Enhanced combat with tactical grids, spell effects, and 3D visualizations."
-    />
-  </BaseWrapper>
-);
+interface CombatWrapperProps {
+  user: any;
+}
+
+export const CombatWrapper: React.FC<CombatWrapperProps> = ({ user }) => {
+  return (
+    <BaseWrapper user={user}>
+      <CombatPage user={user} />
+    </BaseWrapper>
+  );
+};
 
 // ===== MAGIC WRAPPER =====
-export const MagicWrapper: React.FC<{ user: any }> = ({ user }) => (
-  <BaseWrapper user={user}>
-    <PlaceholderPage 
-      title="Magic System" 
-      description="Spell management, preparation, and casting with visual effects."
-    />
-  </BaseWrapper>
-);
+interface MagicWrapperProps {
+  user: any;
+}
+
+export const MagicWrapper: React.FC<MagicWrapperProps> = ({ user }) => {
+  return (
+    <BaseWrapper user={user}>
+      <MagicPage user={user} />
+    </BaseWrapper>
+  );
+};
 
 // ===== DM CENTER WRAPPER =====
-export const DMCenterWrapper: React.FC<{ user: any }> = ({ user }) => (
-  <BaseWrapper user={user}>
-    <PlaceholderPage 
-      title="Dungeon Master Center" 
-      description="Advanced DM tools for campaign management, NPC control, and world building."
-    />
-  </BaseWrapper>
-);
+interface DMCenterWrapperProps {
+  user: any;
+}
 
-// ===== PROFILE WRAPPER =====
-export const ProfileWrapper: React.FC<{ user: any }> = ({ user }) => (
-  <BaseWrapper user={user}>
-    <PlaceholderPage 
-      title="User Profile" 
-      description="Manage your account settings, achievements, and gaming preferences."
-    />
-  </BaseWrapper>
-);
-
-// ===== ACHIEVEMENTS WRAPPER =====
-export const AchievementsWrapper: React.FC<{ user: any }> = ({ user }) => (
-  <BaseWrapper user={user}>
-    <PlaceholderPage 
-      title="Achievements" 
-      description="Track your progress with badges, milestones, and gaming achievements."
-    />
-  </BaseWrapper>
-);
+export const DMCenterWrapper: React.FC<DMCenterWrapperProps> = ({ user }) => {
+  return (
+    <BaseWrapper user={user}>
+      <DMCenterPage user={user} />
+    </BaseWrapper>
+  );
+};
 
 // ===== SETTINGS WRAPPER =====
-export const SettingsWrapper: React.FC<{ user: any }> = ({ user }) => (
-  <BaseWrapper user={user}>
-    <PlaceholderPage 
-      title="Settings" 
-      description="Configure audio, video, accessibility, and gameplay preferences."
-    />
-  </BaseWrapper>
-);
+interface SettingsWrapperProps {
+  user: any;
+}
+
+export const SettingsWrapper: React.FC<SettingsWrapperProps> = ({ user }) => {
+  return (
+    <BaseWrapper user={user}>
+      <SettingsPage user={user} />
+    </BaseWrapper>
+  );
+};
+
+// ===== PROFILE WRAPPER =====
+interface ProfileWrapperProps {
+  user: any;
+}
+
+export const ProfileWrapper: React.FC<ProfileWrapperProps> = ({ user }) => {
+  return (
+    <BaseWrapper user={user}>
+      <ProfilePage user={user} />
+    </BaseWrapper>
+  );
+};
 
 // ===== HELP WRAPPER =====
-export const HelpWrapper: React.FC<{ user: any }> = ({ user }) => (
-  <BaseWrapper user={user}>
-    <PlaceholderPage 
-      title="Help & Documentation" 
-      description="Learn how to use MythSeeker with tutorials, guides, and FAQs."
-    />
-  </BaseWrapper>
-);
+interface HelpWrapperProps {
+  user: any;
+}
+
+export const HelpWrapper: React.FC<HelpWrapperProps> = ({ user }) => {
+  return (
+    <BaseWrapper user={user}>
+      <HelpPage user={user} />
+    </BaseWrapper>
+  );
+};
+
+// ===== ACHIEVEMENTS WRAPPER =====
+interface AchievementsWrapperProps {
+  user: any;
+}
+
+export const AchievementsWrapper: React.FC<AchievementsWrapperProps> = ({ user }) => {
+  return (
+    <BaseWrapper user={user}>
+      <AchievementsPage user={user} />
+    </BaseWrapper>
+  );
+};
 
 // ===== PROGRESSION WRAPPER =====  
 export const ProgressionWrapperComponent: React.FC<{ user: any }> = ({ user }) => (
