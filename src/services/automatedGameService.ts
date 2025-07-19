@@ -536,27 +536,27 @@ class AutomatedGameService {
 
     // Add player to session
     session.players.push(playerContext);
-    session.currentPhase = 'active';
+    session.currentPhase = 'introduction';
 
     console.log(`Player ${playerContext.name} added to session ${sessionId}`);
 
-    // Auto-start training sessions with introduction message
-    if (session.isTraining && session.messages.length === 0) {
-      console.log('🎯 Starting training session with introduction message');
+    // Auto-start ALL sessions with context-appropriate introduction message
+    if (session.messages.length === 0) {
+      console.log('🎯 Starting session with introduction message');
       
-      // Generate training introduction based on config
-      const trainingIntro = this.generateTrainingIntroduction(session);
+      // Generate appropriate introduction based on session type
+      const introMessage = this.generateContextualIntroduction(session);
       
-      const introMessage: GameMessage = {
+      const dmMessage: GameMessage = {
         id: `msg_${Date.now()}`,
         type: 'dm',
-        content: trainingIntro,
-        sender: 'Training Instructor',
+        content: introMessage,
+        sender: this.getDMName(session),
         timestamp: Date.now()
       };
       
-      session.messages.push(introMessage);
-      console.log('✅ Training introduction message added');
+      session.messages.push(dmMessage);
+      console.log('✅ Contextual introduction message added');
     }
 
     // Save to localStorage and Firebase
@@ -1674,6 +1674,203 @@ Welcome to your personalized training environment! You've entered a specialized 
 🔰 **GET STARTED:** Describe what skills you'd like to work on, or type "begin general assessment" to let me evaluate your current abilities and design a custom training program!
 
 *Remember: In training, every mistake teaches us something valuable. Focus on learning, not perfection!*`;
+  }
+
+  /**
+   * Generate contextual introduction based on session type
+   */
+  private generateContextualIntroduction(session: GameSession): string {
+    const config = session.config;
+    const isTraining = config.customPrompt?.includes('training') || 
+                     config.theme?.toLowerCase().includes('training');
+    const isCombat = config.customPrompt?.includes('combat encounter') || 
+                    config.theme?.toLowerCase().includes('ambush') ||
+                    config.theme?.toLowerCase().includes('encounter');
+    
+    if (isTraining) {
+      return this.generateTrainingIntroduction(session);
+    }
+    
+    if (isCombat) {
+      return this.generateCombatIntroduction(session);
+    }
+    
+    // Regular adventure introduction
+    return this.generateAdventureIntroduction(session);
+  }
+
+  /**
+   * Generate combat scenario introduction
+   */
+  private generateCombatIntroduction(session: GameSession): string {
+    const config = session.config;
+    const theme = config.theme || 'Combat Encounter';
+    const prompt = config.customPrompt || '';
+    
+    // Extract difficulty and enemy info from custom prompt
+    let difficulty = 'Medium';
+    let enemies: string[] = [];
+    let experience = '100';
+    
+    if (prompt.includes('Difficulty: Easy')) difficulty = 'Easy';
+    if (prompt.includes('Difficulty: Hard')) difficulty = 'Hard';
+    if (prompt.includes('Experience Reward:')) {
+      const expMatch = prompt.match(/Experience Reward: (\d+)/);
+      if (expMatch) experience = expMatch[1];
+    }
+    if (prompt.includes('Enemies:')) {
+      const enemyMatch = prompt.match(/Enemies: ([^-\n]+)/);
+      if (enemyMatch) {
+        enemies = enemyMatch[1].split(',').map(e => e.trim());
+      }
+    }
+
+    if (theme.includes('Forest Ambush') || theme.includes('Goblin')) {
+      return `⚔️ **COMBAT ENCOUNTER: ${theme}**
+
+The forest path ahead narrows as ancient trees close in around you. Suddenly, the rustle of leaves stops—an unnatural silence that makes your skin crawl. Your adventurer's instincts scream danger.
+
+**💀 THREAT ASSESSMENT:**
+- **Encounter Type:** Ambush scenario
+- **Difficulty:** ${difficulty}
+- **Expected Opposition:** ${enemies.length > 0 ? enemies.join(', ') : 'Multiple hostiles'}
+- **Experience Reward:** ${experience} XP
+
+**🌲 TACTICAL SITUATION:**
+*You're walking along a forest trail when goblin voices echo from the underbrush. Shadows dart between trees, and you catch glimpses of crude weapons and yellow eyes. The goblins have chosen their ambush spot well—thick trees limit your movement, but also provide cover.*
+
+**⚔️ COMBAT BRIEFING:**
+*As your Battle Master, I'll guide you through this encounter step-by-step. I'll describe enemy positions, terrain advantages, and the consequences of your tactical decisions. Every action matters in combat—positioning, timing, and smart use of your abilities can mean the difference between victory and defeat.*
+
+**🎯 TACTICAL OPTIONS:**
+• **Aggressive Assault** - Charge forward to prevent them from surrounding you
+• **Defensive Position** - Find cover and force them to come to you  
+• **Stealth Approach** - Try to spot and eliminate scouts before the main fight
+• **Diplomatic Attempt** - Call out and try to negotiate (risky but possible)
+
+**⚡ INITIATIVE READY:** Roll for initiative when you choose your approach! The goblins are preparing to strike...
+
+🔰 **ENTER COMBAT:** Choose your opening move and I'll set the battlefield!`;
+    }
+
+    if (theme.includes('Mountain Pass') || theme.includes('Orc')) {
+      return `⚔️ **COMBAT ENCOUNTER: ${theme}**
+
+The mountain pass grows narrow and treacherous. Loose stones scatter beneath your feet as you navigate between towering cliff faces. The air grows thick with tension—and the unmistakable musk of orc warriors.
+
+**💀 THREAT ASSESSMENT:**
+- **Encounter Type:** Elite patrol encounter  
+- **Difficulty:** ${difficulty}
+- **Expected Opposition:** ${enemies.length > 0 ? enemies.join(', ') : 'Veteran warriors'}
+- **Experience Reward:** ${experience} XP
+
+**🏔️ TACTICAL SITUATION:**  
+*Heavy footsteps echo off the canyon walls as armored orcs emerge from concealed positions. These aren't mere raiders—they're disciplined warriors with battle-tested equipment and coordinated tactics. The narrow pass limits your options but also funnels their approach.*
+
+**⚔️ COMBAT BRIEFING:**
+*This will test your tactical prowess against experienced opponents. I'll provide detailed analysis of their formations, weapon reach, and battle strategies. Pay attention to terrain advantages and watch for their coordinated attacks.*
+
+**🎯 TACTICAL OPTIONS:**
+• **High Ground Advantage** - Climb the rocky slopes for elevation bonus
+• **Chokepoint Defense** - Use the narrow pass to fight them one at a time
+• **Aggressive Rush** - Close distance before they can coordinate  
+• **Ranged Harassment** - Use the distance to whittle them down
+
+**⚡ INITIATIVE READY:** These orcs won't hesitate—combat begins NOW!
+
+🔰 **ENTER COMBAT:** Declare your battle strategy and roll initiative!`;
+    }
+
+    // Generic combat introduction
+    return `⚔️ **COMBAT ENCOUNTER: ${theme}**
+
+The moment every adventurer both dreads and craves has arrived—combat! Your weapons feel reassuring in your hands as you face the challenge ahead.
+
+**💀 THREAT ASSESSMENT:**
+- **Encounter Type:** ${theme}
+- **Difficulty:** ${difficulty} 
+- **Expected Opposition:** ${enemies.length > 0 ? enemies.join(', ') : 'Hostile forces'}
+- **Experience Reward:** ${experience} XP
+
+**⚔️ BATTLE MASTER GUIDANCE:**
+*As your Battle Master, I'll provide tactical analysis throughout this encounter. I'll describe enemy capabilities, terrain effects, and help you understand the consequences of different combat choices. Remember: smart tactics often matter more than raw strength.*
+
+**🎯 ENGAGEMENT RULES:**
+- Initiative determines action order
+- Position and terrain affect your options  
+- Resource management is key to victory
+- Every decision has tactical implications
+
+**⚡ COMBAT BEGINS:** The enemy forces are ready—what's your opening strategy?
+
+🔰 **READY FOR BATTLE:** Describe your preparation and battle plan!`;
+  }
+
+  /**
+   * Generate adventure introduction for non-training, non-combat sessions
+   */
+  private generateAdventureIntroduction(session: GameSession): string {
+    const config = session.config;
+    const realm = config.realm || 'Fantasy Realm';
+    const theme = config.theme || 'Epic Adventure';
+    
+    return `🌟 **ADVENTURE BEGINS: ${theme}**
+
+Welcome to the mystical realm of ${realm}! The air shimmers with possibility as your epic journey begins. Ancient magic flows through this land, and countless stories wait to be written by brave adventurers like yourself.
+
+**🗺️ ADVENTURE BRIEFING:**
+- **Setting:** ${realm}
+- **Theme:** ${theme}
+- **Style:** ${config.dmStyle || 'Balanced'} gameplay focus
+- **Session Type:** Open-world adventure
+
+**🎭 YOUR DUNGEON MASTER:**
+*I'm here to bring this world to life and respond to your choices. Whether you prefer exploration, social interaction, puzzle-solving, or combat, I'll adapt the story to your preferred play style. The world will react to your decisions—every choice matters and shapes the narrative.*
+
+**✨ ADVENTURE FEATURES:**
+- **Dynamic Storytelling** - The world responds to your actions
+- **Multiple Paths** - Many ways to achieve your goals
+- **Character Development** - Your choices shape who you become
+- **Rich Interactions** - NPCs with their own motivations and goals
+
+**🌍 THE WORLD AWAITS:**
+*You find yourself at the beginning of what could become a legendary tale. The path ahead is unwritten, shaped by your courage, wisdom, and choices. What kind of hero will you become?*
+
+**🎯 ADVENTURE OPTIONS:**
+• **Explore the Area** - Discover local landmarks and hidden secrets
+• **Seek Information** - Talk to locals and gather useful knowledge  
+• **Find Quests** - Look for people who need help or challenges to overcome
+• **Character Development** - Focus on personal growth and relationships
+
+🔰 **BEGIN YOUR LEGEND:** What does your character do first in this new realm?
+
+*Remember: This is YOUR story—I'm here to help you tell it!*`;
+  }
+
+  /**
+   * Helper to get DM name based on session type
+   */
+  private getDMName(session: GameSession): string {
+    const config = session.config;
+    const isTraining = config.customPrompt?.includes('training') || 
+                     config.theme?.toLowerCase().includes('training');
+    const isCombat = config.customPrompt?.includes('combat encounter') || 
+                    config.theme?.toLowerCase().includes('ambush') ||
+                    config.theme?.toLowerCase().includes('encounter');
+    
+    if (isTraining) {
+      return 'Training Instructor';
+    }
+    if (isCombat) {
+      return 'Battle Master';
+    }
+    if (config.dmStyle === 'puzzle-heavy') {
+      return 'Puzzle Master';
+    }
+    if (config.dmStyle === 'narrative') {
+      return 'Story Weaver';
+    }
+    return 'Dungeon Master';
   }
 }
 
