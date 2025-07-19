@@ -157,6 +157,7 @@ const CombatPage: React.FC<CombatPageProps> = ({ user }) => {
   };
 
   const handleStartTrainingSession = (trainingType: string) => {
+    // CACHE BUST v2.0 - Force production deployment
     console.log('🎯 CombatPage: Starting training session for:', trainingType);
     
     // Create a training session configuration

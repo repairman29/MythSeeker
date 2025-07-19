@@ -33,23 +33,26 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
   // Check for training/combat scenarios from routing state
   useEffect(() => {
     const routingState = location.state;
-    console.log('🔍 UnifiedGameExperience: Checking routing state:', routingState);
-    console.log('🔍 Current gameMode:', gameMode);
+    
+    // Force console log that can't be optimized away
+    window.console.log('🔍 UnifiedGameExperience: PRODUCTION CHECK - Routing state:', routingState);
+    window.console.log('🔍 PRODUCTION CHECK - Current gameMode:', gameMode);
+    window.console.log('🔍 PRODUCTION CHECK - Location pathname:', location.pathname);
     
     if (routingState) {
       if (routingState.gameType === 'training') {
-        console.log('🎯 Training session detected:', routingState);
+        window.console.log('🎯 PRODUCTION - Training session detected:', routingState);
         setGameMode('training');
       } else if (routingState.gameType === 'combat') {
-        console.log('⚔️ Combat scenario detected:', routingState);
+        window.console.log('⚔️ PRODUCTION - Combat scenario detected:', routingState);
         setGameMode('combat-scenario');
       } else {
-        console.log('⚠️ Unknown routing state:', routingState);
+        window.console.log('⚠️ PRODUCTION - Unknown routing state:', routingState);
       }
     } else {
-      console.log('❌ No routing state found - defaulting to selection');
+      window.console.log('❌ PRODUCTION - No routing state found - defaulting to selection');
     }
-  }, [location.state]);
+  }, [location.state, gameMode]);
 
   // Handle dice roll completion
   const handleDiceRollComplete = (roll: DiceRoll) => {
