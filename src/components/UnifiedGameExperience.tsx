@@ -52,7 +52,17 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
         setGameMode('training');
       } else if ((routingState?.gameType === 'combat') || (gameTypeFromUrl === 'combat')) {
         window.console.log('⚔️ PRODUCTION - Combat scenario detected:', { routingState, urlParams: urlParams.toString() });
-        setGameMode('combat-scenario');
+        // Check if this is actually a training session within combat
+        const isTrainingCombat = routingState?.sessionConfig?.isTraining || 
+                                routingState?.sessionConfig?.customPrompt?.includes('training') ||
+                                routingState?.isTraining;
+        
+        if (isTrainingCombat) {
+          window.console.log('🎯 PRODUCTION - Combat training session detected, switching to training mode');
+          setGameMode('training');
+        } else {
+          setGameMode('combat-scenario');
+        }
       } else {
         window.console.log('⚠️ PRODUCTION - Unknown routing state or params:', { routingState, urlParams: urlParams.toString() });
       }
@@ -281,6 +291,7 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
 
   const renderGameMode = () => {
     const routingState = location.state;
+    const urlParams = new URLSearchParams(location.search);
     
     switch (gameMode) {
       case 'solo-ai':
@@ -306,24 +317,47 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
         );
 
       case 'training':
+        // Build training session config from routing state or URL params
+        const trainingConfig = routingState?.sessionConfig || {
+          theme: urlParams.get('theme') || 'Training Session',
+          description: 'Combat training session', 
+          isTraining: true,
+          trainingType: routingState?.trainingType || urlParams.get('trainingType') || 'general',
+          objectives: [],
+          experienceType: 'training',
+          customPrompt: routingState?.sessionConfig?.customPrompt || `You are running a training session for ${urlParams.get('theme') || 'Combat Training'}. 
+
+This is a safe training environment focused on skill development and learning. Provide detailed instructional feedback, technique analysis, and step-by-step guidance to help the player improve their abilities.
+
+TRAINING OBJECTIVES:
+- Master fundamental techniques
+- Receive constructive feedback
+- Practice with purpose
+- Build confidence through repetition
+
+Be supportive but challenging. Focus on teaching proper form and technique.`
+        };
+
+        window.console.log('🎯 PRODUCTION - Training config being passed:', trainingConfig);
+
         return (
           <UniversalGameInterface
             user={user}
             mode="automated"
-            gameId={`training_${routingState?.trainingType || 'general'}`}
+            gameId={`training_${trainingConfig.trainingType || 'general'}`}
             onBackToSelection={() => navigate('/combat')}
             enableDiceIntegration={true}
             onDiceRoll={handleDiceRollComplete}
             showManager={false}
             initialCampaign={{
-              name: routingState?.sessionConfig?.theme || 'Training Session',
-              theme: routingState?.sessionConfig?.theme || 'Training',
-              description: routingState?.sessionConfig?.description || 'Combat training session',
-              customPrompt: routingState?.sessionConfig?.customPrompt,
+              name: trainingConfig.theme || 'Training Session',
+              theme: trainingConfig.theme || 'Training',
+              description: trainingConfig.description || 'Combat training session',
+              customPrompt: trainingConfig.customPrompt,
               isTraining: true,
-              trainingType: routingState?.trainingType,
-              objectives: routingState?.sessionConfig?.objectives || [],
-              experienceType: routingState?.sessionConfig?.experienceType
+              trainingType: trainingConfig.trainingType,
+              objectives: trainingConfig.objectives || [],
+              experienceType: trainingConfig.experienceType || 'training'
             }}
           />
         );
