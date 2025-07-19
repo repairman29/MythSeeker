@@ -37,6 +37,7 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
     
     // Force console log that can't be optimized away
     window.console.log('🔍 UnifiedGameExperience: PRODUCTION CHECK - Routing state:', routingState);
+    window.console.log('🔍 UnifiedGameExperience: PRODUCTION CHECK - Routing state details:', JSON.stringify(routingState, null, 2));
     window.console.log('🔍 UnifiedGameExperience: PRODUCTION CHECK - URL params:', urlParams.toString());
     window.console.log('🔍 PRODUCTION CHECK - Current gameMode:', gameMode);
     window.console.log('🔍 PRODUCTION CHECK - Location pathname:', location.pathname);
@@ -46,12 +47,23 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
     const trainingTypeFromUrl = urlParams.get('trainingType');
     const isTrainingFromUrl = urlParams.get('isTraining') === 'true';
     
+    window.console.log('🔍 PRODUCTION CHECK - gameType from state:', routingState?.gameType);
+    window.console.log('🔍 PRODUCTION CHECK - gameType from URL:', gameTypeFromUrl);
+    window.console.log('🔍 PRODUCTION CHECK - isTraining from URL:', isTrainingFromUrl);
+
     if (routingState || gameTypeFromUrl) {
-      if ((routingState?.gameType === 'training') || (gameTypeFromUrl === 'training') || isTrainingFromUrl) {
-        window.console.log('🎯 PRODUCTION - Training session detected:', { routingState, urlParams: urlParams.toString() });
+      const actualGameType = routingState?.gameType || gameTypeFromUrl;
+      
+      if (actualGameType === 'training' || isTrainingFromUrl) {
+        window.console.log('🎯 PRODUCTION - Training session detected via gameType:', { 
+          actualGameType, 
+          routingState: routingState?.gameType, 
+          urlGameType: gameTypeFromUrl,
+          isTrainingFromUrl 
+        });
         setGameMode('training');
-      } else if ((routingState?.gameType === 'combat') || (gameTypeFromUrl === 'combat')) {
-        window.console.log('⚔️ PRODUCTION - Combat scenario detected:', { routingState, urlParams: urlParams.toString() });
+      } else if (actualGameType === 'combat') {
+        window.console.log('⚔️ PRODUCTION - Combat scenario detected:', { actualGameType, routingState, urlParams: urlParams.toString() });
         // Check if this is actually a training session within combat
         const isTrainingCombat = routingState?.sessionConfig?.isTraining || 
                                 routingState?.sessionConfig?.customPrompt?.includes('training') ||
@@ -64,7 +76,7 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
           setGameMode('combat-scenario');
         }
       } else {
-        window.console.log('⚠️ PRODUCTION - Unknown routing state or params:', { routingState, urlParams: urlParams.toString() });
+        window.console.log('⚠️ PRODUCTION - Unknown routing state or params:', { actualGameType, routingState, urlParams: urlParams.toString() });
       }
     } else {
       window.console.log('❌ PRODUCTION - No routing state or URL params found - defaulting to selection');
