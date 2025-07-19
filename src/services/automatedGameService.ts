@@ -1484,17 +1484,53 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
     try {
       console.log('🤖 Using fallback Sentient DM response for:', input);
       
+      // Check if this is a training session
+      const isTraining = session.config.customPrompt?.includes('training') || 
+                        session.config.theme?.toLowerCase().includes('training');
+      
       // Build basic context for fallback AI
       const context = {
         sessionId: session.id,
         realm: session.config.realm || 'Fantasy Realm',
         playerName: player.name,
         recentMessages: session.messages.slice(-5).map(m => m.content).join(' '),
-        worldState: session.worldState || {}
+        worldState: session.worldState || {},
+        isTraining
       };
 
-      // Use basic AI service for fallback response
-      const fallbackPrompt = `You are a supportive D&D Dungeon Master in ${context.realm}. 
+      let fallbackPrompt: string;
+
+      if (isTraining) {
+        // Enhanced instructional prompt for training sessions
+        fallbackPrompt = `You are an expert training instructor and D&D Dungeon Master conducting a skill development session. 
+        
+**Training Environment:** ${session.config.theme || 'Skill Development Academy'}
+**Student:** ${context.playerName}
+**Current Action:** "${input}"
+**Recent Progress:** ${context.recentMessages}
+
+As an INSTRUCTIONAL DM, your response should:
+
+🎯 **INSTRUCTIONAL FOCUS:**
+- Provide detailed feedback on the player's technique and form
+- Explain WHY certain approaches work better than others  
+- Offer specific tips for improvement
+- Give encouraging but constructive guidance
+- Break down complex skills into manageable steps
+
+📋 **TRAINING RESPONSE FORMAT:**
+1. **Action Acknowledgment** - Describe what the player did
+2. **Technical Feedback** - Analyze their technique (form, timing, positioning)
+3. **Instructional Guidance** - Explain what to improve and HOW
+4. **Next Step** - Suggest specific practice or next exercise
+5. **Encouragement** - Positive reinforcement for effort and progress
+
+Remember: You're a TEACHER first, storyteller second. Focus on skill development, proper technique, and educational value. Be encouraging but honest about areas needing improvement.
+
+**Response:**`;
+      } else {
+        // Standard adventure prompt for regular sessions
+        fallbackPrompt = `You are a supportive D&D Dungeon Master in ${context.realm}. 
 Player ${context.playerName} says: "${input}"
 Recent context: ${context.recentMessages}
 
@@ -1505,13 +1541,19 @@ Respond with an engaging narrative that:
 - Maintains an encouraging tone
 
 Response:`;
+      }
 
       const response = await aiService.generateResponse(fallbackPrompt);
-      return response || "The world responds to your actions. What would you like to do next?";
+      return response || (isTraining ? 
+        "Excellent effort! Let's focus on refining your technique. What would you like to practice next?" :
+        "The world responds to your actions. What would you like to do next?");
       
     } catch (error) {
       console.error('❌ Fallback DM response failed:', error);
-      return `${player.name}, your action resonates through the realm. The adventure continues - what will you do next?`;
+      const isTraining = session.config.customPrompt?.includes('training');
+      return isTraining ? 
+        `Great work, ${player.name}! Your form is improving. Let's continue with the next exercise - what would you like to practice?` :
+        `${player.name}, your action resonates through the realm. The adventure continues - what will you do next?`;
     }
   }
 
@@ -1535,61 +1577,103 @@ Response:`;
       const prompt = config.customPrompt;
       
       if (prompt.includes('Melee Combat')) {
-        return `🗡️ **Welcome to Melee Combat Training!**
+        return `⚔️ **TRAINING SESSION: Melee Combat Mastery**
 
-You've entered the training grounds where seasoned warriors hone their sword, axe, and spear techniques. Training dummies and practice targets await your blade.
+Welcome, warrior! You've entered the Hall of Blades, where legends are forged through steel and determination. The morning sun gleams off polished training weapons as your personal combat instructor prepares for your session.
 
-**Today's Training Objectives:**
-• Land 5 successful melee attacks
-• Practice different weapon techniques
-• Master your combat stance and timing
+**📋 Today's Training Protocol:**
+• **Warm-up Drills** - Basic stance and grip training (5 minutes)
+• **Combo Practice** - Learn 3-hit combinations with detailed feedback
+• **Power Strikes** - Build strength and accuracy on training dummies
+• **Defense Training** - Block and parry techniques
+• **Final Assessment** - Demonstrate learned techniques under observation
 
-*Instructor:* "Remember, good form is more important than raw power. Focus on precision and technique. When you're ready, choose your weapon and approach the training dummies. Type your actions and I'll guide you through proper combat form."
+**🎯 Success Metrics:**
+- Land 8/10 successful strikes with proper form
+- Execute 3 different combat combinations
+- Score at least 2 critical hits
+- Complete defensive sequences without taking damage
 
-What weapon would you like to start with? ⚔️`;
+**👨‍🏫 Your Combat Instructor Says:**
+*"Every master was once a beginner. Today we focus on FUNDAMENTALS over flashy moves. I'll call out your form, timing, and technique after each action. Remember: precision beats power, technique beats strength. I'll teach you WHY each movement matters, not just HOW to do it."*
+
+🔰 **GET STARTED:** Type "assume combat stance" to begin your training session!`;
       }
       
       if (prompt.includes('Archery Range')) {
-        return `🏹 **Welcome to Archery Range Training!**
+        return `🏹 **TRAINING SESSION: Precision Archery Academy**
 
-You've arrived at the archery range where expert marksmen perfect their aim. Moving targets and bullseye challenges test your precision.
+Welcome to the Royal Archery Grounds! The sound of arrows hitting targets echoes across the range as expert marksmen perfect their craft. Your personal instructor awaits with a selection of fine bows.
 
-**Today's Training Objectives:**
-• Hit 8 out of 10 shots
-• Score 3 critical hits
-• Master different shooting stances
+**📋 Today's Training Protocol:**
+• **Stance & Grip** - Perfect your shooting foundation (10 minutes)
+• **Breathing Techniques** - Learn marksman breathing patterns
+• **Static Targets** - Build accuracy on stationary bullseyes
+• **Moving Targets** - Challenge your tracking skills
+• **Long-Distance Shots** - Test your maximum effective range
 
-*Instructor:* "Steady breathing and consistent form are key to accurate shooting. The targets will start slow and gradually increase in difficulty. Select your bow and take your position at the firing line."
+**🎯 Success Metrics:**
+- Achieve 8/10 accuracy on static targets
+- Hit 5/8 moving targets successfully
+- Score 3 bullseyes (center target hits)
+- Demonstrate proper form throughout session
 
-Ready to begin your marksmanship training? 🎯`;
+**👨‍🏫 Your Archery Instructor Says:**
+*"Archery is 60% mental, 30% technique, and 10% strength. Today I'll guide you through the archer's breathing, teach you to 'feel' the bow's rhythm, and help you find your natural aim point. Every shot will get detailed feedback on your form, breathing, and release."*
+
+🔰 **GET STARTED:** Type "select my bow and examine the range" to begin!`;
       }
       
       if (prompt.includes('Evocation Magic')) {
-        return `✨ **Welcome to Evocation Spell Practice!**
+        return `🔮 **TRAINING SESSION: Academy of Destructive Arts**
 
-You've entered the magical training chamber where spellcasters master the destructive arts. Enchanted targets await your magical arsenal.
+Welcome to the Evocation Training Sanctum! Magical energy crackles in the air as arcane circles glow beneath your feet. Your master wizard instructor prepares enchanted targets designed to withstand magical bombardment.
 
-**Today's Training Objectives:**
-• Cast 5 offensive spells successfully
-• Achieve maximum spell damage potential
-• Learn proper magical focus techniques
+**📋 Today's Training Protocol:**
+• **Magical Focus** - Center your arcane energy and establish connection
+• **Spell Fundamentals** - Perfect your somatic and verbal components
+• **Elemental Mastery** - Practice Fire, Ice, and Lightning evocations
+• **Power Control** - Learn to modulate spell intensity
+• **Combat Casting** - Maintain spells under pressure
 
-*Instructor:* "Magic requires both knowledge and instinct. Feel the arcane energy flowing through you. The targets before you are warded against real harm, so unleash your full power. Focus your mind and begin when ready."
+**🎯 Success Metrics:**
+- Successfully cast 6 different evocation spells
+- Achieve maximum damage on 3 spell attempts
+- Demonstrate precise spell control (no wild magic)
+- Complete advanced spell combinations
 
-Which evocation spell would you like to practice first? 🔥⚡❄️`;
+**👨‍🏫 Your Master Instructor Says:**
+*"Magic is not about raw power—it's about perfect control channeled through unwavering will. Today I'll teach you to FEEL the weave of magic, guide you through proper spell preparation, and help you understand WHY each gesture and word matters. Every spell you cast will receive detailed analysis of your magical technique."*
+
+🔰 **GET STARTED:** Type "center myself and examine the magical training targets" to begin!`;
       }
     }
     
-    // Generic training introduction
-    return `🎯 **Welcome to Training Session!**
+    // Enhanced generic training introduction
+    return `🎯 **TRAINING SESSION: Skill Development Academy**
 
-You've entered a specialized training environment designed to help you improve your skills and techniques.
+Welcome to your personalized training environment! You've entered a specialized facility where heroes hone their abilities under expert guidance. Your dedicated instructor has prepared a comprehensive program tailored to your development needs.
 
-**Training Focus:** ${config.theme || 'General Skills Development'}
+**📋 Today's Training Focus:** ${config.theme || 'Multi-Skill Development'}
 
-*Instructor:* "This is a safe environment to practice and learn. I'm here to guide you through exercises, provide feedback, and help you develop your abilities. Take your time, ask questions, and focus on improvement over perfection."
+**🎓 Training Philosophy:**
+- **Practice with Purpose** - Every action builds toward mastery
+- **Learn Through Feedback** - Detailed analysis after each attempt
+- **Progress Over Perfection** - Growth mindset encouraged
+- **Safe Environment** - Mistakes are learning opportunities
 
-What would you like to work on first? Type your actions and I'll provide guidance and feedback throughout your training session.`;
+**👨‍🏫 Your Instructor Says:**
+*"Welcome! I'm here to provide step-by-step guidance, detailed feedback on your techniques, and help you understand the 'why' behind every skill. This is YOUR training session—ask questions, request specific drills, and tell me what you want to improve."*
+
+**🎮 Training Features:**
+- **Real-time Feedback** - I'll analyze your form and technique
+- **Progressive Difficulty** - Start easy, build to advanced challenges  
+- **Personalized Tips** - Advice tailored to your specific needs
+- **Skill Breakdown** - Complex abilities broken into simple steps
+
+🔰 **GET STARTED:** Describe what skills you'd like to work on, or type "begin general assessment" to let me evaluate your current abilities and design a custom training program!
+
+*Remember: In training, every mistake teaches us something valuable. Focus on learning, not perfection!*`;
   }
 }
 
