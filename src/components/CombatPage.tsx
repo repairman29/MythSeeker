@@ -156,6 +156,183 @@ const CombatPage: React.FC<CombatPageProps> = ({ user }) => {
     return { victories, totalCombats, winRate, avgDuration };
   };
 
+  const handleStartTrainingSession = (trainingType: string) => {
+    // Create a training session configuration
+    const trainingConfigs = {
+      'melee-combat': {
+        theme: 'Training Grounds - Melee Combat',
+        description: 'Practice sword, axe, and spear techniques against training dummies',
+        enemies: [
+          { name: 'Training Dummy', health: 20, armorClass: 12, type: 'training' },
+          { name: 'Practice Target', health: 15, armorClass: 10, type: 'training' }
+        ],
+        objectives: ['Land 5 successful melee attacks', 'Practice different weapon techniques'],
+        experienceType: 'melee_training'
+      },
+      'ranged-combat': {
+        theme: 'Archery Range - Ranged Training',
+        description: 'Improve bow and crossbow accuracy with moving targets',
+        enemies: [
+          { name: 'Moving Target', health: 10, armorClass: 16, type: 'training' },
+          { name: 'Bullseye Target', health: 5, armorClass: 18, type: 'training' }
+        ],
+        objectives: ['Hit 8 out of 10 shots', 'Score 3 critical hits'],
+        experienceType: 'ranged_training'
+      },
+      'evocation-practice': {
+        theme: 'Spell Practice - Evocation Magic',
+        description: 'Master offensive spell casting with magical targets',
+        enemies: [
+          { name: 'Spell Target', health: 25, armorClass: 13, type: 'training' },
+          { name: 'Magical Construct', health: 30, armorClass: 14, type: 'training' }
+        ],
+        objectives: ['Cast 5 offensive spells', 'Achieve maximum spell damage'],
+        experienceType: 'evocation_training'
+      },
+      'abjuration-practice': {
+        theme: 'Defensive Magic Training',
+        description: 'Practice protective spells and defensive techniques',
+        enemies: [
+          { name: 'Spell Projector', health: 20, armorClass: 12, type: 'training' }
+        ],
+        objectives: ['Block 5 incoming attacks', 'Maintain shield spell for 3 rounds'],
+        experienceType: 'abjuration_training'
+      },
+      'speed-challenge': {
+        theme: 'Speed Challenge - Combat Reflexes',
+        description: 'Complete combat sequences as fast as possible',
+        enemies: [
+          { name: 'Quick Dummy', health: 10, armorClass: 14, type: 'training' },
+          { name: 'Fast Target', health: 8, armorClass: 15, type: 'training' },
+          { name: 'Rapid Construct', health: 12, armorClass: 13, type: 'training' }
+        ],
+        objectives: ['Defeat all enemies in under 5 rounds', 'No missed attacks allowed'],
+        experienceType: 'speed_training'
+      },
+      'accuracy-challenge': {
+        theme: 'Accuracy Trial - Precision Training',
+        description: 'Hit precise targets with ranged attacks',
+        enemies: [
+          { name: 'Precision Target', health: 5, armorClass: 20, type: 'training' },
+          { name: 'Moving Bullseye', health: 3, armorClass: 22, type: 'training' }
+        ],
+        objectives: ['Hit every shot', 'Score 5 critical hits'],
+        experienceType: 'accuracy_training'
+      },
+      'endurance-challenge': {
+        theme: 'Endurance Test - Wave Survival',
+        description: 'Survive waves of training enemies',
+        enemies: [
+          { name: 'Training Wave 1', health: 15, armorClass: 12, type: 'training' },
+          { name: 'Training Wave 2', health: 20, armorClass: 13, type: 'training' },
+          { name: 'Training Wave 3', health: 25, armorClass: 14, type: 'training' }
+        ],
+        objectives: ['Survive all 3 waves', 'Maintain above 50% health'],
+        experienceType: 'endurance_training'
+      }
+    };
+
+    const config = trainingConfigs[trainingType];
+    if (!config) return;
+
+    // Navigate to /play with training session parameters
+    navigate('/play', {
+      state: {
+        gameType: 'training',
+        trainingType: trainingType,
+        sessionConfig: {
+          theme: config.theme,
+          description: config.description,
+          isTraining: true,
+          enemies: config.enemies,
+          objectives: config.objectives,
+          experienceType: config.experienceType,
+          customPrompt: `You are running a training session for ${config.theme}. ${config.description}
+
+TRAINING OBJECTIVES:
+${config.objectives.map(obj => `- ${obj}`).join('\n')}
+
+This is a safe training environment. Focus on:
+1. Teaching proper techniques
+2. Providing constructive feedback
+3. Tracking progress and improvement
+4. Encouraging skill development
+
+Be supportive but challenging. Award experience points for completed objectives.`
+        }
+      }
+    });
+  };
+
+  const handleQuickCombatScenario = (scenarioType: string) => {
+    const scenarios = {
+      'goblin-ambush': {
+        theme: 'Forest Ambush',
+        description: 'Face off against 2-3 goblins in a forest clearing',
+        enemies: [
+          { name: 'Goblin Scout', health: 12, armorClass: 13, type: 'enemy' },
+          { name: 'Goblin Warrior', health: 15, armorClass: 14, type: 'enemy' },
+          { name: 'Goblin Archer', health: 10, armorClass: 12, type: 'enemy' }
+        ],
+        difficulty: 'Easy',
+        experienceReward: 75
+      },
+      'orc-patrol': {
+        theme: 'Mountain Pass Encounter',
+        description: 'Battle experienced orc warriors on a mountain pass',
+        enemies: [
+          { name: 'Orc Warrior', health: 25, armorClass: 15, type: 'enemy' },
+          { name: 'Orc Berserker', health: 30, armorClass: 13, type: 'enemy' }
+        ],
+        difficulty: 'Medium',
+        experienceReward: 150
+      },
+      'dragon-wyrmling': {
+        theme: 'Dragon\'s Lair',
+        description: 'Challenge a young dragon in its lair',
+        enemies: [
+          { name: 'Red Dragon Wyrmling', health: 75, armorClass: 17, type: 'enemy' }
+        ],
+        difficulty: 'Hard',
+        experienceReward: 300
+      }
+    };
+
+    const scenario = scenarios[scenarioType];
+    if (!scenario) return;
+
+    // Navigate to /play with combat scenario parameters
+    navigate('/play', {
+      state: {
+        gameType: 'combat',
+        scenarioType: scenarioType,
+        sessionConfig: {
+          theme: scenario.theme,
+          description: scenario.description,
+          isCombat: true,
+          enemies: scenario.enemies,
+          difficulty: scenario.difficulty,
+          experienceReward: scenario.experienceReward,
+          customPrompt: `You are running a combat encounter: ${scenario.theme}. ${scenario.description}
+
+COMBAT SCENARIO:
+- Difficulty: ${scenario.difficulty}
+- Enemies: ${scenario.enemies.map(e => e.name).join(', ')}
+- Experience Reward: ${scenario.experienceReward} XP
+
+Create an engaging combat experience with:
+1. Tactical positioning and terrain
+2. Dynamic enemy behavior
+3. Clear action descriptions
+4. Exciting combat narrative
+5. Fair but challenging encounters
+
+Make the combat feel epic and rewarding!`
+        }
+      }
+    });
+  };
+
   const renderCombatSimulator = () => (
     <div className="space-y-6">
       {/* Character Selection */}
@@ -231,7 +408,8 @@ const CombatPage: React.FC<CombatPageProps> = ({ user }) => {
           Quick Combat Scenarios
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="bg-slate-700/50 rounded-lg p-4 border border-slate-600/50">
+          <div className="bg-slate-700/50 rounded-lg p-4 border border-slate-600/50 hover:bg-slate-700/70 transition-colors cursor-pointer"
+               onClick={() => handleQuickCombatScenario('goblin-ambush')}>
             <h4 className="text-white font-semibold mb-2">Goblin Ambush</h4>
             <p className="text-slate-400 text-sm mb-3">Face off against 2-3 goblins in a forest clearing</p>
             <div className="flex justify-between items-center">
@@ -241,7 +419,8 @@ const CombatPage: React.FC<CombatPageProps> = ({ user }) => {
               </button>
             </div>
           </div>
-          <div className="bg-slate-700/50 rounded-lg p-4 border border-slate-600/50">
+          <div className="bg-slate-700/50 rounded-lg p-4 border border-slate-600/50 hover:bg-slate-700/70 transition-colors cursor-pointer"
+               onClick={() => handleQuickCombatScenario('orc-patrol')}>
             <h4 className="text-white font-semibold mb-2">Orc Patrol</h4>
             <p className="text-slate-400 text-sm mb-3">Battle experienced orc warriors on a mountain pass</p>
             <div className="flex justify-between items-center">
@@ -251,7 +430,8 @@ const CombatPage: React.FC<CombatPageProps> = ({ user }) => {
               </button>
             </div>
           </div>
-          <div className="bg-slate-700/50 rounded-lg p-4 border border-slate-600/50">
+          <div className="bg-slate-700/50 rounded-lg p-4 border border-slate-600/50 hover:bg-slate-700/70 transition-colors cursor-pointer"
+               onClick={() => handleQuickCombatScenario('dragon-wyrmling')}>
             <h4 className="text-white font-semibold mb-2">Dragon Wyrmling</h4>
             <p className="text-slate-400 text-sm mb-3">Challenge a young dragon in its lair</p>
             <div className="flex justify-between items-center">
@@ -277,7 +457,8 @@ const CombatPage: React.FC<CombatPageProps> = ({ user }) => {
           <div className="space-y-4">
             <h4 className="text-lg font-semibold text-white">Training Dummies</h4>
             <div className="space-y-3">
-              <div className="bg-slate-700/50 rounded-lg p-4">
+              <div className="bg-slate-700/50 rounded-lg p-4 hover:bg-slate-700/70 transition-colors cursor-pointer"
+                   onClick={() => handleStartTrainingSession('melee-combat')}>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-white">Melee Combat</span>
                   <span className="text-green-400">Level 3</span>
@@ -286,8 +467,12 @@ const CombatPage: React.FC<CombatPageProps> = ({ user }) => {
                   <div className="bg-green-600 h-2 rounded-full" style={{ width: '75%' }}></div>
                 </div>
                 <p className="text-slate-400 text-sm mt-2">Practice sword, axe, and spear techniques</p>
+                <button className="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors">
+                  Start Training Session
+                </button>
               </div>
-              <div className="bg-slate-700/50 rounded-lg p-4">
+              <div className="bg-slate-700/50 rounded-lg p-4 hover:bg-slate-700/70 transition-colors cursor-pointer"
+                   onClick={() => handleStartTrainingSession('ranged-combat')}>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-white">Ranged Combat</span>
                   <span className="text-blue-400">Level 2</span>
@@ -296,13 +481,17 @@ const CombatPage: React.FC<CombatPageProps> = ({ user }) => {
                   <div className="bg-blue-600 h-2 rounded-full" style={{ width: '45%' }}></div>
                 </div>
                 <p className="text-slate-400 text-sm mt-2">Improve bow and crossbow accuracy</p>
+                <button className="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors">
+                  Start Training Session
+                </button>
               </div>
             </div>
           </div>
           <div className="space-y-4">
             <h4 className="text-lg font-semibold text-white">Spell Practice</h4>
             <div className="space-y-3">
-              <div className="bg-slate-700/50 rounded-lg p-4">
+              <div className="bg-slate-700/50 rounded-lg p-4 hover:bg-slate-700/70 transition-colors cursor-pointer"
+                   onClick={() => handleStartTrainingSession('evocation-practice')}>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-white">Evocation</span>
                   <span className="text-purple-400">Level 4</span>
@@ -311,8 +500,12 @@ const CombatPage: React.FC<CombatPageProps> = ({ user }) => {
                   <div className="bg-purple-600 h-2 rounded-full" style={{ width: '90%' }}></div>
                 </div>
                 <p className="text-slate-400 text-sm mt-2">Master offensive spell casting</p>
+                <button className="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors">
+                  Start Training Session
+                </button>
               </div>
-              <div className="bg-slate-700/50 rounded-lg p-4">
+              <div className="bg-slate-700/50 rounded-lg p-4 hover:bg-slate-700/70 transition-colors cursor-pointer"
+                   onClick={() => handleStartTrainingSession('abjuration-practice')}>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-white">Abjuration</span>
                   <span className="text-cyan-400">Level 2</span>
@@ -321,7 +514,56 @@ const CombatPage: React.FC<CombatPageProps> = ({ user }) => {
                   <div className="bg-cyan-600 h-2 rounded-full" style={{ width: '35%' }}></div>
                 </div>
                 <p className="text-slate-400 text-sm mt-2">Practice defensive magic</p>
+                <button className="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors">
+                  Start Training Session
+                </button>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Advanced Training Challenges */}
+      <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+        <h3 className="text-xl font-semibold text-white mb-4 flex items-center">
+          <Trophy className="w-5 h-5 mr-2" />
+          Advanced Training Challenges
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-slate-700/50 rounded-lg p-4 hover:bg-slate-700/70 transition-colors cursor-pointer"
+               onClick={() => handleStartTrainingSession('speed-challenge')}>
+            <div className="text-center">
+              <Clock className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
+              <h4 className="text-white font-semibold mb-2">Speed Challenge</h4>
+              <p className="text-slate-400 text-sm mb-3">Complete combat sequences as fast as possible</p>
+              <span className="text-yellow-400 text-sm">Difficulty: Medium</span>
+              <button className="mt-3 w-full bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded text-sm transition-colors">
+                Start Challenge
+              </button>
+            </div>
+          </div>
+          <div className="bg-slate-700/50 rounded-lg p-4 hover:bg-slate-700/70 transition-colors cursor-pointer"
+               onClick={() => handleStartTrainingSession('accuracy-challenge')}>
+            <div className="text-center">
+              <Target className="w-8 h-8 text-green-400 mx-auto mb-2" />
+              <h4 className="text-white font-semibold mb-2">Accuracy Trial</h4>
+              <p className="text-slate-400 text-sm mb-3">Hit precise targets with ranged attacks</p>
+              <span className="text-green-400 text-sm">Difficulty: Hard</span>
+              <button className="mt-3 w-full bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm transition-colors">
+                Start Challenge
+              </button>
+            </div>
+          </div>
+          <div className="bg-slate-700/50 rounded-lg p-4 hover:bg-slate-700/70 transition-colors cursor-pointer"
+               onClick={() => handleStartTrainingSession('endurance-challenge')}>
+            <div className="text-center">
+              <Heart className="w-8 h-8 text-red-400 mx-auto mb-2" />
+              <h4 className="text-white font-semibold mb-2">Endurance Test</h4>
+              <p className="text-slate-400 text-sm mb-3">Survive waves of training enemies</p>
+              <span className="text-red-400 text-sm">Difficulty: Expert</span>
+              <button className="mt-3 w-full bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm transition-colors">
+                Start Challenge
+              </button>
             </div>
           </div>
         </div>

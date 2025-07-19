@@ -9,7 +9,7 @@ interface UnifiedGameExperienceProps {
   user: any;
 }
 
-type GameMode = 'selection' | 'solo-ai' | 'multiplayer' | 'resume' | 'quick-combat' | 'dice-only';
+type GameMode = 'selection' | 'solo-ai' | 'quick-combat' | 'multiplayer' | 'resume' | 'training' | 'combat-scenario';
 
 interface GameOption {
   id: string;
@@ -29,6 +29,20 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
   const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
   const [showDiceRoller, setShowDiceRoller] = useState(false);
   const [diceHistory, setDiceHistory] = useState<DiceRoll[]>([]);
+
+  // Check for training/combat scenarios from routing state
+  useEffect(() => {
+    const routingState = location.state;
+    if (routingState) {
+      if (routingState.gameType === 'training') {
+        console.log('🎯 Training session detected:', routingState);
+        setGameMode('training');
+      } else if (routingState.gameType === 'combat') {
+        console.log('⚔️ Combat scenario detected:', routingState);
+        setGameMode('combat-scenario');
+      }
+    }
+  }, [location.state]);
 
   // Handle dice roll completion
   const handleDiceRollComplete = (roll: DiceRoll) => {
@@ -249,6 +263,8 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
   );
 
   const renderGameMode = () => {
+    const routingState = location.state;
+    
     switch (gameMode) {
       case 'solo-ai':
         return (
@@ -269,6 +285,51 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
             onBackToSelection={() => setGameMode('selection')}
             enableDiceIntegration={true}
             onDiceRoll={handleDiceRollComplete}
+          />
+        );
+
+      case 'training':
+        return (
+          <UniversalGameInterface
+            user={user}
+            mode="automated"
+            gameId={`training_${routingState?.trainingType || 'general'}`}
+            onBackToSelection={() => navigate('/combat')}
+            enableDiceIntegration={true}
+            onDiceRoll={handleDiceRollComplete}
+            initialCampaign={{
+              name: routingState?.sessionConfig?.theme || 'Training Session',
+              theme: routingState?.sessionConfig?.theme || 'Training',
+              description: routingState?.sessionConfig?.description || 'Combat training session',
+              customPrompt: routingState?.sessionConfig?.customPrompt,
+              isTraining: true,
+              trainingType: routingState?.trainingType,
+              objectives: routingState?.sessionConfig?.objectives || [],
+              experienceType: routingState?.sessionConfig?.experienceType
+            }}
+          />
+        );
+
+      case 'combat-scenario':
+        return (
+          <UniversalGameInterface
+            user={user}
+            mode="automated"
+            gameId={`combat_${routingState?.scenarioType || 'general'}`}
+            onBackToSelection={() => navigate('/combat')}
+            enableDiceIntegration={true}
+            onDiceRoll={handleDiceRollComplete}
+            initialCampaign={{
+              name: routingState?.sessionConfig?.theme || 'Combat Scenario',
+              theme: routingState?.sessionConfig?.theme || 'Combat',
+              description: routingState?.sessionConfig?.description || 'Combat encounter',
+              customPrompt: routingState?.sessionConfig?.customPrompt,
+              isCombat: true,
+              scenarioType: routingState?.scenarioType,
+              difficulty: routingState?.sessionConfig?.difficulty,
+              experienceReward: routingState?.sessionConfig?.experienceReward,
+              enemies: routingState?.sessionConfig?.enemies || []
+            }}
           />
         );
 
