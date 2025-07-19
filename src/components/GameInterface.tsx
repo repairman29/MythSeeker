@@ -16,7 +16,7 @@ import {
   Dice1
 } from 'lucide-react';
 import Tooltip from './Tooltip';
-import EnhancedDiceSystem from './EnhancedDiceSystem';
+import { EnhancedDiceSystem } from './EnhancedDiceSystem';
 import DiceRollMessage from './DiceRollMessage';
 import AIServiceStatus from './AIServiceStatus';
 import { gameStateService } from '../services/gameStateService';
@@ -389,7 +389,111 @@ export const GameInterface: React.FC<GameInterfaceProps> = ({
     setInputMessage(e.target.value);
   }, [setInputMessage]);
 
+  // Simple dice roller modal as fallback
+  const renderSimpleDiceRoller = () => {
+    const [selectedDice, setSelectedDice] = useState('d20');
+    const [modifier, setModifier] = useState(0);
+    const [lastRoll, setLastRoll] = useState<any>(null);
+    const [isRolling, setIsRolling] = useState(false);
 
+    const rollDice = () => {
+      setIsRolling(true);
+      const sides = parseInt(selectedDice.replace('d', ''));
+      
+      setTimeout(() => {
+        const result = Math.floor(Math.random() * sides) + 1;
+        const total = result + modifier;
+        
+        const rollData = {
+          id: `roll_${Date.now()}`,
+          diceType: `${selectedDice}${modifier !== 0 ? (modifier > 0 ? `+${modifier}` : `${modifier}`) : ''}`,
+          results: [result],
+          total,
+          timestamp: Date.now(),
+          context: `${character?.name || 'Player'} manual roll`,
+          player: character?.name || 'Player'
+        };
+        
+        setLastRoll(rollData);
+        setIsRolling(false);
+        handleDiceRollComplete(rollData);
+      }, 500);
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-slate-800/95 backdrop-blur-lg rounded-2xl p-6 border border-slate-700 max-w-md w-full">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-bold text-white">🎲 Dice Roller</h3>
+            <button
+              onClick={() => setShowDiceRoller(false)}
+              className="text-gray-300 hover:text-white text-2xl font-bold"
+            >
+              ×
+            </button>
+          </div>
+          
+          {/* Dice Selection */}
+          <div className="mb-4">
+            <label className="block text-white text-sm font-medium mb-2">Dice Type</label>
+            <div className="grid grid-cols-4 gap-2">
+              {['d4', 'd6', 'd8', 'd10', 'd12', 'd20'].map(dice => (
+                <button
+                  key={dice}
+                  onClick={() => setSelectedDice(dice)}
+                  className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                    selectedDice === dice 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  {dice}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Modifier */}
+          <div className="mb-6">
+            <label className="block text-white text-sm font-medium mb-2">Modifier</label>
+            <input
+              type="number"
+              value={modifier}
+              onChange={(e) => setModifier(parseInt(e.target.value) || 0)}
+              className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="0"
+            />
+          </div>
+
+          {/* Roll Button */}
+          <button
+            onClick={rollDice}
+            disabled={isRolling}
+            className="w-full py-3 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-700 text-white rounded-lg font-bold text-lg transition-all transform hover:scale-105 disabled:transform-none disabled:cursor-not-allowed"
+          >
+            {isRolling ? '🎲 Rolling...' : `🎲 Roll ${selectedDice}${modifier !== 0 ? (modifier > 0 ? `+${modifier}` : `${modifier}`) : ''}`}
+          </button>
+
+          {/* Last Roll Result */}
+          {lastRoll && (
+            <div className="mt-4 p-4 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 rounded-lg border border-yellow-400/30">
+              <div className="text-center">
+                <div className="text-3xl font-bold text-yellow-400 mb-2">
+                  {lastRoll.total}
+                </div>
+                <div className="text-yellow-200 text-lg">
+                  {lastRoll.diceType}
+                </div>
+                <div className="text-yellow-300 text-sm mt-1">
+                  Rolled {lastRoll.results[0]}{modifier !== 0 ? ` ${modifier > 0 ? '+' : ''}${modifier}` : ''}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   // Memoized tab rendering
   const renderedTabs = useMemo(() => {
@@ -646,20 +750,11 @@ export const GameInterface: React.FC<GameInterfaceProps> = ({
         </div>
       </div>
 
-      {/* Enhanced Dice Roller Modal */}
-      {showDiceRoller && (
-        <EnhancedDiceSystem
-          isOpen={showDiceRoller}
-          onClose={() => setShowDiceRoller(false)}
-          onRollComplete={handleDiceRollComplete}
-          context={`${character?.name || 'Player'} in ${campaign?.theme || 'adventure'}`}
-          suggestedRolls={getContextualDiceRolls()}
-          playerName={character?.name || 'Player'}
-        />
-              )}
-      </div>
-    );
-  };
+      {/* Simple Dice Roller Modal */}
+      {showDiceRoller && renderSimpleDiceRoller()}
+    </div>
+  );
+};
 
 GameInterface.displayName = 'GameInterface';
 
