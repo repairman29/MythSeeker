@@ -145,8 +145,8 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
 
   const { session, messages: currentMessages, campaign: currentCampaign } = getCurrentGameData();
 
-  // Show automated game manager for automated games
-  if (actualGameType === 'automated' && showManager && !currentSession) {
+  // Show automated game manager for automated games (but not for training sessions with initial campaigns)
+  if (actualGameType === 'automated' && showManager && !currentSession && !initialCampaign) {
     return (
       <div className="h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
         <AutomatedGameManager 

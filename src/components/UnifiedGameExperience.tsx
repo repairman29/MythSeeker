@@ -297,6 +297,7 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
             onBackToSelection={() => navigate('/combat')}
             enableDiceIntegration={true}
             onDiceRoll={handleDiceRollComplete}
+            showManager={false}
             initialCampaign={{
               name: routingState?.sessionConfig?.theme || 'Training Session',
               theme: routingState?.sessionConfig?.theme || 'Training',
@@ -319,6 +320,7 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
             onBackToSelection={() => navigate('/combat')}
             enableDiceIntegration={true}
             onDiceRoll={handleDiceRollComplete}
+            showManager={false}
             initialCampaign={{
               name: routingState?.sessionConfig?.theme || 'Combat Scenario',
               theme: routingState?.sessionConfig?.theme || 'Combat',
