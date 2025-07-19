@@ -72,6 +72,42 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
   const isLoading = actualGameType === 'automated' ? automatedLoading : campaignLoading;
   const error = actualGameType === 'automated' ? automatedError : campaignError;
 
+  // Auto-create training session if we have initialCampaign with training data
+  useEffect(() => {
+    const autoCreateTrainingSession = async () => {
+      if (actualGameType === 'automated' && initialCampaign && !currentSession && (initialCampaign.isTraining || initialCampaign.isCombat)) {
+        console.log('🎯 Auto-creating training session for:', initialCampaign);
+        
+        try {
+          // Create training session configuration
+          const trainingConfig = {
+            realm: initialCampaign.trainingType ? 'Training Grounds' : 'Combat Arena',
+            theme: initialCampaign.theme || 'Training Session',
+            maxPlayers: 1,
+            sessionDuration: 30,
+            autoStart: true,
+            dmStyle: 'supportive' as const,
+            rating: 'PG' as const,
+            customPrompt: initialCampaign.customPrompt
+          };
+          
+          console.log('🚀 Creating automated session with config:', trainingConfig);
+          const sessionId = await createSession(trainingConfig);
+          
+          if (sessionId) {
+            console.log('✅ Training session created:', sessionId);
+            // Auto-join the created session
+            await joinSession(sessionId);
+          }
+        } catch (error) {
+          console.error('❌ Failed to create training session:', error);
+        }
+      }
+    };
+
+    autoCreateTrainingSession();
+  }, [actualGameType, initialCampaign, currentSession, createSession, joinSession]);
+
   // Load campaign data if needed
   useEffect(() => {
     if (actualGameType === 'campaign' && gameId && !campaign) {
