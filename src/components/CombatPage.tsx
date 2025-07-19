@@ -157,6 +157,8 @@ const CombatPage: React.FC<CombatPageProps> = ({ user }) => {
   };
 
   const handleStartTrainingSession = (trainingType: string) => {
+    console.log('🎯 CombatPage: Starting training session for:', trainingType);
+    
     // Create a training session configuration
     const trainingConfigs = {
       'melee-combat': {
@@ -233,21 +235,24 @@ const CombatPage: React.FC<CombatPageProps> = ({ user }) => {
     };
 
     const config = trainingConfigs[trainingType];
-    if (!config) return;
+    if (!config) {
+      console.error('❌ CombatPage: No config found for training type:', trainingType);
+      return;
+    }
 
-    // Navigate to /play with training session parameters
-    navigate('/play', {
-      state: {
-        gameType: 'training',
-        trainingType: trainingType,
-        sessionConfig: {
-          theme: config.theme,
-          description: config.description,
-          isTraining: true,
-          enemies: config.enemies,
-          objectives: config.objectives,
-          experienceType: config.experienceType,
-          customPrompt: `You are running a training session for ${config.theme}. ${config.description}
+    console.log('✅ CombatPage: Found config for training:', config);
+
+    const navigationState = {
+      gameType: 'training',
+      trainingType: trainingType,
+      sessionConfig: {
+        theme: config.theme,
+        description: config.description,
+        isTraining: true,
+        enemies: config.enemies,
+        objectives: config.objectives,
+        experienceType: config.experienceType,
+        customPrompt: `You are running a training session for ${config.theme}. ${config.description}
 
 TRAINING OBJECTIVES:
 ${config.objectives.map(obj => `- ${obj}`).join('\n')}
@@ -259,9 +264,17 @@ This is a safe training environment. Focus on:
 4. Encouraging skill development
 
 Be supportive but challenging. Award experience points for completed objectives.`
-        }
       }
+    };
+
+    console.log('🚀 CombatPage: Navigating to /play with state:', navigationState);
+
+    // Navigate to /play with training session parameters
+    navigate('/play', {
+      state: navigationState
     });
+    
+    console.log('✅ CombatPage: Navigation call completed');
   };
 
   const handleQuickCombatScenario = (scenarioType: string) => {
