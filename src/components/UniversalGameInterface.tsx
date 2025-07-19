@@ -188,6 +188,17 @@ export const UniversalGameInterface: React.FC<UniversalGameInterfaceProps> = ({
 
   const { session, messages: currentMessages, campaign: currentCampaign } = getCurrentGameData();
 
+  // Debug training session messages
+  if (session?.isTraining && currentMessages.length > 0) {
+    console.log('🎯 UniversalGameInterface: Training session with messages:', currentMessages.length);
+    const trainingIntro = currentMessages.find(m => m.sender === 'Training Instructor');
+    if (trainingIntro) {
+      console.log('✅ Training introduction found:', trainingIntro.content.substring(0, 100) + '...');
+    } else {
+      console.log('❌ No training introduction found in messages');
+    }
+  }
+
   // Show automated game manager for automated games (but not for training sessions with initial campaigns)
   if (actualGameType === 'automated' && showManager && !currentSession && !initialCampaign) {
     console.log('🎮 Showing AutomatedGameManager because:', {

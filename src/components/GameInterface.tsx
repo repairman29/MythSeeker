@@ -107,6 +107,11 @@ export const GameInterface: React.FC<GameInterfaceProps> = ({
 
   // Enhanced message rendering to include dice rolls
   const renderMessage = (message: any, index: number) => {
+    // Debug training messages
+    if (message.sender === 'Training Instructor') {
+      console.log('🎯 GameInterface: Rendering Training Instructor message:', message.content.substring(0, 100) + '...');
+    }
+    
     // Handle dice roll messages
     if (message.type === 'dice_roll' && message.rollData) {
       return (
