@@ -15,6 +15,7 @@ export interface AutomatedGameConfig {
   autoStart: boolean;
   dmStyle: 'narrative' | 'combat-focused' | 'puzzle-heavy' | 'balanced';
   rating?: 'G' | 'PG' | 'PG-13' | 'R' | 'NC-17'; // Add rating for mature/creative content
+  customPrompt?: string; // For training sessions
 }
 
 export interface PlayerContext {
@@ -78,6 +79,7 @@ export interface GameSession {
   aiInsights?: string[]; // Add AI insights for Enhanced AI
   lastActivity?: number; // Track last activity
   lastMonitoringCheck?: number; // Track last monitoring check
+  isTraining?: boolean; // Flag for training sessions
 }
 
 export interface GameMessage {
@@ -221,10 +223,20 @@ class AutomatedGameService {
   }
 
     /**
-   * Save session to Firebase
+   * Save session to Firebase with rate limiting protection
    */
   private async saveToFirebase(session: GameSession): Promise<void> {
     try {
+      // Rate limiting protection: only save to Firebase once per minute per session
+      const lastSaveKey = `lastFirebaseSave_${session.id}`;
+      const lastSave = localStorage.getItem(lastSaveKey);
+      const now = Date.now();
+      
+      if (lastSave && (now - parseInt(lastSave)) < 60000) { // 1 minute cooldown
+        console.log(`🚫 Rate limit: Skipping Firebase save for session ${session.id} (last save was ${Math.round((now - parseInt(lastSave)) / 1000)}s ago)`);
+        return;
+      }
+
       const user = await this.getCurrentUser();
       if (!user) return;
 
@@ -238,9 +250,16 @@ class AutomatedGameService {
         userId: user.uid
       });
       
+      // Update last save timestamp
+      localStorage.setItem(lastSaveKey, now.toString());
+      
       console.log(`☁️ Automated session ${session.id} saved to Firebase`);
     } catch (error) {
-      console.warn('Failed to save automated session to Firebase:', error);
+      if (error instanceof Error && error.message.includes('429')) {
+        console.warn(`⚠️ Rate limited - will retry Firebase save for session ${session.id} later`);
+      } else {
+        console.warn('Failed to save automated session to Firebase:', error);
+      }
     }
   }
 
@@ -443,6 +462,11 @@ class AutomatedGameService {
     const sessionId = `auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     console.log('🆔 Generated session ID:', sessionId);
     
+    // Check if this is a training session (should be local-only)
+    const isTrainingSession = config.customPrompt?.includes('training') || 
+                             config.theme?.toLowerCase().includes('training') ||
+                             config.realm?.toLowerCase().includes('training');
+    
     console.log('🤖 Generating AI party members...');
     const aiPartyMembers = this.generateAIPartyMembers(config);
     console.log('🤖 Generated AI party members:', aiPartyMembers.map(m => `${m.name} (${m.characterClass})`));
@@ -459,7 +483,8 @@ class AutomatedGameService {
       activeQuests: [],
       npcs: this.generateNPCs(config),
       playerMemory: [], // Initialize empty player memory
-      npcMemory: [] // Initialize empty NPC memory
+      npcMemory: [], // Initialize empty NPC memory
+      isTraining: isTrainingSession // Mark training sessions
     };
 
     this.activeSessions.set(sessionId, session);
@@ -467,18 +492,28 @@ class AutomatedGameService {
     
     // Start session monitoring and auto-save
     this.startSessionMonitoring(sessionId);
-    this.startAutoSave(sessionId);
-    console.log('⏰ Session monitoring and auto-save started');
+    
+    // Only start Firebase auto-save for non-training sessions
+    if (!isTrainingSession) {
+      this.startAutoSave(sessionId);
+      console.log('⏰ Session monitoring and Firebase auto-save started');
+    } else {
+      console.log('⏰ Session monitoring started (training session - local only)');
+    }
     
     // Immediately save to localStorage
     this.saveToLocalStorage();
     
-    // Save to Firebase in background (non-blocking)
-    this.saveToFirebase(session).catch(error => 
-      console.warn('Background Firebase save failed:', error)
-    );
+    // Save to Firebase in background (non-blocking) - but skip for training sessions
+    if (!isTrainingSession) {
+      this.saveToFirebase(session).catch(error => 
+        console.warn('Background Firebase save failed:', error)
+      );
+    } else {
+      console.log('🎯 Training session - skipping Firebase save to avoid rate limits');
+    }
     
-    console.log(`✅ Automated session created: ${sessionId} with ${aiPartyMembers.length} AI members`);
+    console.log(`✅ Automated session created: ${sessionId} with ${aiPartyMembers.length} AI members${isTrainingSession ? ' (training/local-only)' : ''}`);
     return sessionId;
   }
 
