@@ -1432,13 +1432,49 @@ The choice is yours, adventurers. The fate of this realm may very well rest in y
   }
 
   /**
+   * Fallback DM response using basic AI
+   */
+  private async generateSentientDMResponse(session: GameSession, player: PlayerContext, input: string): Promise<string> {
+    try {
+      console.log('🤖 Using fallback Sentient DM response for:', input);
+      
+      // Build basic context for fallback AI
+      const context = {
+        sessionId: session.id,
+        realm: session.config.realm || 'Fantasy Realm',
+        playerName: player.name,
+        recentMessages: session.messages.slice(-5).map(m => m.content).join(' '),
+        worldState: session.worldState || {}
+      };
+
+      // Use basic AI service for fallback response
+      const fallbackPrompt = `You are a supportive D&D Dungeon Master in ${context.realm}. 
+Player ${context.playerName} says: "${input}"
+Recent context: ${context.recentMessages}
+
+Respond with an engaging narrative that:
+- Acknowledges the player's action
+- Advances the story
+- Provides clear options for what to do next
+- Maintains an encouraging tone
+
+Response:`;
+
+      const response = await aiService.generateResponse(fallbackPrompt);
+      return response || "The world responds to your actions. What would you like to do next?";
+      
+    } catch (error) {
+      console.error('❌ Fallback DM response failed:', error);
+      return `${player.name}, your action resonates through the realm. The adventure continues - what will you do next?`;
+    }
+  }
+
+  /**
    * Get a specific session by ID
    */
   getSession(sessionId: string): GameSession | null {
     return this.activeSessions.get(sessionId) || null;
   }
-
-  // ... existing code ...
 }
 
 export const automatedGameService = new AutomatedGameService(); 
