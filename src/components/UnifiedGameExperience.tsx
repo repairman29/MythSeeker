@@ -33,6 +33,9 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
   // Check for training/combat scenarios from routing state
   useEffect(() => {
     const routingState = location.state;
+    console.log('🔍 UnifiedGameExperience: Checking routing state:', routingState);
+    console.log('🔍 Current gameMode:', gameMode);
+    
     if (routingState) {
       if (routingState.gameType === 'training') {
         console.log('🎯 Training session detected:', routingState);
@@ -40,7 +43,11 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
       } else if (routingState.gameType === 'combat') {
         console.log('⚔️ Combat scenario detected:', routingState);
         setGameMode('combat-scenario');
+      } else {
+        console.log('⚠️ Unknown routing state:', routingState);
       }
+    } else {
+      console.log('❌ No routing state found - defaulting to selection');
     }
   }, [location.state]);
 
