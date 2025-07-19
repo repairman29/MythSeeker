@@ -271,11 +271,19 @@ Be supportive but challenging. Award experience points for completed objectives.
     console.log('🚀 CombatPage: Navigating to /play with state:', navigationState);
 
     // Navigate to /play with training session parameters
-    navigate('/play', {
+    // Use both state and URL params to ensure data gets through
+    const params = new URLSearchParams({
+      gameType: 'training',
+      trainingType: trainingType,
+      theme: config.theme,
+      isTraining: 'true'
+    });
+
+    navigate(`/play?${params.toString()}`, {
       state: navigationState
     });
     
-    console.log('✅ CombatPage: Navigation call completed');
+    console.log('✅ CombatPage: Navigation call completed with URL params:', params.toString());
   };
 
   const handleQuickCombatScenario = (scenarioType: string) => {

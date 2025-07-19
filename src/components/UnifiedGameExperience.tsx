@@ -33,26 +33,33 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
   // Check for training/combat scenarios from routing state
   useEffect(() => {
     const routingState = location.state;
+    const urlParams = new URLSearchParams(location.search);
     
     // Force console log that can't be optimized away
     window.console.log('🔍 UnifiedGameExperience: PRODUCTION CHECK - Routing state:', routingState);
+    window.console.log('🔍 UnifiedGameExperience: PRODUCTION CHECK - URL params:', urlParams.toString());
     window.console.log('🔍 PRODUCTION CHECK - Current gameMode:', gameMode);
     window.console.log('🔍 PRODUCTION CHECK - Location pathname:', location.pathname);
     
-    if (routingState) {
-      if (routingState.gameType === 'training') {
-        window.console.log('🎯 PRODUCTION - Training session detected:', routingState);
+    // Check URL parameters as backup
+    const gameTypeFromUrl = urlParams.get('gameType');
+    const trainingTypeFromUrl = urlParams.get('trainingType');
+    const isTrainingFromUrl = urlParams.get('isTraining') === 'true';
+    
+    if (routingState || gameTypeFromUrl) {
+      if ((routingState?.gameType === 'training') || (gameTypeFromUrl === 'training') || isTrainingFromUrl) {
+        window.console.log('🎯 PRODUCTION - Training session detected:', { routingState, urlParams: urlParams.toString() });
         setGameMode('training');
-      } else if (routingState.gameType === 'combat') {
-        window.console.log('⚔️ PRODUCTION - Combat scenario detected:', routingState);
+      } else if ((routingState?.gameType === 'combat') || (gameTypeFromUrl === 'combat')) {
+        window.console.log('⚔️ PRODUCTION - Combat scenario detected:', { routingState, urlParams: urlParams.toString() });
         setGameMode('combat-scenario');
       } else {
-        window.console.log('⚠️ PRODUCTION - Unknown routing state:', routingState);
+        window.console.log('⚠️ PRODUCTION - Unknown routing state or params:', { routingState, urlParams: urlParams.toString() });
       }
     } else {
-      window.console.log('❌ PRODUCTION - No routing state found - defaulting to selection');
+      window.console.log('❌ PRODUCTION - No routing state or URL params found - defaulting to selection');
     }
-  }, [location.state, gameMode]);
+  }, [location.state, location.search, gameMode]);
 
   // Handle dice roll completion
   const handleDiceRollComplete = (roll: DiceRoll) => {
