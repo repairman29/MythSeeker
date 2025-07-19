@@ -6,25 +6,34 @@ import ToastNotifications from '../components/ToastNotifications';
 import { stateManagerService } from '../services/stateManagerService';
 import { toastService, ToastMessage } from '../services/toastService';
 import { navigationService } from '../services/navigationService';
+import { BreadcrumbNavigation } from '../components/BreadcrumbNavigation';
+import { firebaseService } from '../firebaseService';
 
 interface BaseWrapperProps {
   user: any;
   children: ReactNode;
   showFloatingButton?: boolean;
   customActions?: Record<string, () => void>;
+  showNavigation?: boolean;
+  showFloatingActions?: boolean;
+  className?: string;
 }
 
 export const BaseWrapper: React.FC<BaseWrapperProps> = ({ 
   user, 
   children, 
   showFloatingButton = true, 
-  customActions = {} 
+  customActions = {}, 
+  showNavigation = true,
+  showFloatingActions = true,
+  className = ''
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [toastMessages, setToastMessages] = useState<ToastMessage[]>([]);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   // Initialize services
   useEffect(() => {
@@ -70,17 +79,18 @@ export const BaseWrapper: React.FC<BaseWrapperProps> = ({
     navigationService.navigate(location.pathname);
   }, [location.pathname]);
 
+  const handleNavigate = (path: string) => {
+    navigate(path);
+  };
+
   const handleSignOut = async () => {
+    setIsSigningOut(true);
     try {
-      // Clear all state before signing out
-      stateManagerService.resetState();
-      toastService.dismissAllToasts();
-      
-      // Firebase sign out will be handled by auth state change
-      console.log('Signing out...');
+      await firebaseService.signOut();
     } catch (error) {
-      console.error('Sign out error:', error);
-      toastService.error('Failed to sign out. Please try again.');
+      console.error('Error signing out:', error);
+    } finally {
+      setIsSigningOut(false);
     }
   };
 
@@ -132,22 +142,79 @@ export const BaseWrapper: React.FC<BaseWrapperProps> = ({
     toastService.dismissToast(id);
   };
 
+  const floatingActions = [
+    {
+      id: 'play',
+      label: 'Quick Play',
+      icon: '🎮',
+      onClick: () => navigationService.navigate('/play'),
+      primary: true
+    },
+    {
+      id: 'party',
+      label: 'Party',
+      icon: '👥',
+      onClick: () => navigationService.navigate('/party')
+    },
+    {
+      id: 'character',
+      label: 'My Characters',
+      icon: '🗡️',
+      onClick: () => navigationService.navigate('/characters')
+    },
+    {
+      id: 'create',
+      label: 'Create Character',
+      icon: '✨',
+      onClick: () => navigationService.navigate('/characters')
+    },
+    {
+      id: 'world',
+      label: 'Explore World',
+      icon: '🗺️',
+      onClick: () => navigationService.navigate('/world')
+    },
+    {
+      id: 'settings',
+      label: 'Settings',
+      icon: '⚙️',
+      onClick: () => navigationService.navigate('/settings')
+    },
+    {
+      id: 'achievements',
+      label: 'Achievements',
+      icon: '🏆',
+      onClick: () => navigationService.navigate('/achievements')
+    },
+    {
+      id: 'help',
+      label: 'Help',
+      icon: '❓',
+      onClick: () => navigationService.navigate('/help')
+    }
+  ];
+
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
-      {/* Navigation Sidebar */}
-      <Navigation 
-        user={user} 
-        onSignOut={handleSignOut}
-        currentPath={location.pathname}
-      />
+      {showNavigation && (
+        <Navigation 
+          user={user} 
+          onSignOut={handleSignOut}
+          currentPath={location.pathname}
+        />
+      )}
       
       {/* Main Content */}
       <div className="flex-1 overflow-auto" id="main-content">
+        {/* Breadcrumb Navigation */}
+        <div className="bg-black/20 border-b border-white/10 px-6 py-3">
+          <BreadcrumbNavigation className="text-sm" />
+        </div>
+        
         {children}
       </div>
       
-      {/* Floating Action Button */}
-      {showFloatingButton && (
+      {showFloatingActions && (
         <FloatingActionButton
           onToggleDrawer={handleToggleDrawer}
           isDrawerOpen={isDrawerOpen}
@@ -155,6 +222,8 @@ export const BaseWrapper: React.FC<BaseWrapperProps> = ({
           isMobile={isMobile}
           hasNotifications={toastMessages.length > 0}
           notificationCount={toastMessages.length}
+          actions={floatingActions}
+          disabled={isSigningOut}
         />
       )}
 
