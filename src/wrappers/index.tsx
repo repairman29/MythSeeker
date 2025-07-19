@@ -22,6 +22,7 @@ import AchievementsPage from '../components/AchievementsPage';
 import PartyPage from '../components/PartyPage';
 import CharactersPage from '../components/CharactersPage';
 import CampaignsPage from '../components/CampaignsPage';
+import CharacterCreation from '../components/CharacterCreation';
 
 // ===== DASHBOARD WRAPPER =====
 interface DashboardWrapperProps {
@@ -125,14 +126,36 @@ export const CharacterWrapper: React.FC<CharacterWrapperProps> = ({ user }) => {
 };
 
 // ===== CHARACTER CREATION WRAPPER =====
-export const CharacterCreationWrapper: React.FC<{ user: any }> = ({ user }) => (
-  <BaseWrapper user={user}>
-    <PlaceholderPage 
-      title="Character Creation" 
-      description="Step-by-step character creation with race, class, background, and stat generation."
-    />
-  </BaseWrapper>
-);
+export const CharacterCreationWrapper: React.FC<{ user: any }> = ({ user }) => {
+  const navigate = useNavigate();
+
+  const handleCreateCharacter = (characterData: any) => {
+    console.log('Character created:', characterData);
+    // TODO: Save character to Firebase
+    // TODO: Navigate to characters list or dashboard
+    navigate('/characters');
+  };
+
+  return (
+    <BaseWrapper user={user}>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 p-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold text-white mb-4">Create Your Character</h1>
+            <p className="text-blue-200 text-lg">
+              Design your hero and begin your adventure in the world of MythSeeker
+            </p>
+          </div>
+          
+          <CharacterCreation
+            playerName={user?.displayName || user?.email || 'Adventurer'}
+            onCreateCharacter={handleCreateCharacter}
+          />
+        </div>
+      </div>
+    </BaseWrapper>
+  );
+};
 
 // ===== CAMPAIGN WRAPPER =====
 interface CampaignWrapperProps {
