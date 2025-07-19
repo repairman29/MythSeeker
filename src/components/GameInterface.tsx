@@ -18,6 +18,7 @@ import {
 import Tooltip from './Tooltip';
 import { EnhancedDiceSystem } from './EnhancedDiceSystem';
 import DiceRollMessage from './DiceRollMessage';
+import StructuredMessage from './StructuredMessage';
 import AIServiceStatus from './AIServiceStatus';
 import { gameStateService } from '../services/gameStateService';
 import AIPartyManager from './AIPartyManager';
@@ -105,7 +106,7 @@ export const GameInterface: React.FC<GameInterfaceProps> = ({
     console.log('🎲 Dice roll added to chat display automatically');
   };
 
-  // Enhanced message rendering to include dice rolls
+  // Enhanced message rendering to include dice rolls and structured content
   const renderMessage = (message: any, index: number) => {
     // Debug training messages
     if (message.sender === 'Training Instructor') {
@@ -123,69 +124,20 @@ export const GameInterface: React.FC<GameInterfaceProps> = ({
       );
     }
 
-    // Regular message rendering (existing code)
-    const isPlayer = message.type === 'player';
-    const isDM = message.type === 'dm';
-    const isAI = message.metadata?.isAI;
-    
+    // Use structured message component for better formatting
     return (
-      <div
-        key={message.id}
-        className={`mb-4 ${isPlayer ? 'flex justify-end' : 'flex justify-start'}`}
-      >
-        <div
-          className={`max-w-3xl p-4 rounded-lg ${
-            isPlayer 
-              ? 'bg-blue-600/30 text-blue-100 border border-blue-400/30' 
-              : isDM 
-              ? 'bg-purple-600/30 text-purple-100 border border-purple-400/30'
-              : isAI
-              ? 'bg-green-600/30 text-green-100 border border-green-400/30'
-              : 'bg-gray-600/30 text-gray-100 border border-gray-400/30'
-          }`}
-        >
-          {/* Message Header */}
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center space-x-2">
-              <span className="font-bold">
-                {isAI && '🤖 '}
-                {message.sender || (isDM ? 'Dungeon Master' : 'System')}
-              </span>
-              {isAI && message.metadata?.characterClass && (
-                <span className="text-xs bg-gray-600/50 px-2 py-1 rounded">
-                  {message.metadata.characterClass}
-                </span>
-              )}
-            </div>
-            <span className="text-xs text-gray-300">
-              {new Date(message.timestamp).toLocaleTimeString()}
-            </span>
-          </div>
-          
-          {/* Message Content */}
-          <div className="text-white">
-            {message.content}
-          </div>
-          
-          {/* DM Message Choices */}
-          {isDM && message.choices && (
-            <div className="mt-3 space-y-2">
-              <div className="text-sm text-purple-200 font-medium">Suggested actions:</div>
-              <div className="grid grid-cols-1 gap-2">
-                {message.choices.map((choice: string, choiceIndex: number) => (
-                  <button
-                    key={choiceIndex}
-                    onClick={() => setInputMessage(choice)}
-                    className="text-left p-2 bg-purple-500/20 hover:bg-purple-500/40 rounded border border-purple-400/30 text-purple-100 transition-colors"
-                  >
-                    {choice}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      <StructuredMessage
+        key={message.id || index}
+        message={message}
+        character={character}
+        isPlayer={message.type === 'player'}
+        onChoiceSelect={(choice) => setInputMessage(choice)}
+        onInputSelect={(choice) => {
+          setInputMessage(choice);
+          // Auto-send if it's a suggested action
+          setTimeout(() => sendMessage(), 100);
+        }}
+      />
     );
   };
 
@@ -710,19 +662,28 @@ export const GameInterface: React.FC<GameInterfaceProps> = ({
           className="mx-4 mt-2"
         />
         
-        {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {allMessages.map(renderMessage)}
-          
-          {/* AI Thinking Indicator */}
-          {isAIThinking && (
-            <div className="flex items-center space-x-3 p-4 bg-purple-600/20 border border-purple-400/30 rounded-lg">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-400"></div>
-              <span className="text-purple-200">Dungeon Master is thinking...</span>
-            </div>
-          )}
-          
-          <div ref={messagesEndRef} />
+        {/* Messages Area - Enhanced with Structured Messages */}
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="max-w-4xl mx-auto space-y-2">
+            {allMessages.map(renderMessage)}
+            
+            {/* AI Thinking Indicator */}
+            {isAIThinking && (
+              <div className="flex items-center space-x-3 p-4 bg-purple-600/20 border border-purple-400/30 rounded-lg animate-pulse">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-400"></div>
+                <span className="text-purple-200 font-medium">
+                  Dungeon Master is crafting a response...
+                </span>
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                </div>
+              </div>
+            )}
+            
+            <div ref={messagesEndRef} />
+          </div>
         </div>
 
         {/* Enhanced Input Area */}
