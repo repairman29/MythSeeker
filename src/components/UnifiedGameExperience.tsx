@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UniversalGameInterface } from './UniversalGameInterface';
 // import { DiceSystem3D } from './DiceSystem3D'; // Temporarily disabled due to React version conflicts
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { Home, Zap, Users, Sparkles, ArrowLeft, Dice1, Bot, BookOpen, Sword } from 'lucide-react';
 import { DiceRoll } from '../types/dice';
 
@@ -24,13 +24,14 @@ interface GameOption {
 export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ user }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const params = useParams();
   const [gameMode, setGameMode] = useState<GameMode>('selection');
   const [selectedCharacter, setSelectedCharacter] = useState<any>(null);
   const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
   const [showDiceRoller, setShowDiceRoller] = useState(false);
   const [diceHistory, setDiceHistory] = useState<DiceRoll[]>([]);
 
-  // Check for training/combat scenarios from routing state
+  // Check for training/combat scenarios from routing state AND URL parameters
   useEffect(() => {
     const routingState = location.state;
     const urlParams = new URLSearchParams(location.search);
@@ -39,6 +40,7 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
     window.console.log('🔍 UnifiedGameExperience: PRODUCTION CHECK - Routing state:', routingState);
     window.console.log('🔍 UnifiedGameExperience: PRODUCTION CHECK - Routing state details:', JSON.stringify(routingState, null, 2));
     window.console.log('🔍 UnifiedGameExperience: PRODUCTION CHECK - URL params:', urlParams.toString());
+    window.console.log('🔍 UnifiedGameExperience: PRODUCTION CHECK - URL route params:', params);
     window.console.log('🔍 PRODUCTION CHECK - Current gameMode:', gameMode);
     window.console.log('🔍 PRODUCTION CHECK - Location pathname:', location.pathname);
     
@@ -47,15 +49,40 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
     const trainingTypeFromUrl = urlParams.get('trainingType');
     const isTrainingFromUrl = urlParams.get('isTraining') === 'true';
     
+    // Extract route parameters
+    const { sessionId, trainingType, scenarioType, campaignId } = params;
+    
     window.console.log('🔍 PRODUCTION CHECK - gameType from state:', routingState?.gameType);
     window.console.log('🔍 PRODUCTION CHECK - gameType from URL:', gameTypeFromUrl);
     window.console.log('🔍 PRODUCTION CHECK - isTraining from URL:', isTrainingFromUrl);
+    window.console.log('🔍 PRODUCTION CHECK - Route params:', { sessionId, trainingType, scenarioType, campaignId });
 
-    if (routingState || gameTypeFromUrl) {
+    // Determine game mode from URL route structure
+    if (trainingType) {
+      window.console.log('🎯 PRODUCTION - Training session detected via URL route:', trainingType);
+      setGameMode('training');
+    } else if (scenarioType) {
+      window.console.log('⚔️ PRODUCTION - Combat scenario detected via URL route:', scenarioType);
+      setGameMode('combat-scenario');
+    } else if (campaignId) {
+      window.console.log('📖 PRODUCTION - Campaign session detected via URL route:', campaignId);
+      setGameMode('multiplayer');
+    } else if (sessionId) {
+      window.console.log('🎮 PRODUCTION - Generic session detected via URL route:', sessionId);
+      // Determine session type from routing state or default to solo-ai
+      const actualGameType = routingState?.gameType || gameTypeFromUrl;
+      if (actualGameType === 'training' || isTrainingFromUrl) {
+        setGameMode('training');
+      } else if (actualGameType === 'combat') {
+        setGameMode('combat-scenario');
+      } else {
+        setGameMode('solo-ai');
+      }
+    } else if (routingState || gameTypeFromUrl) {
       const actualGameType = routingState?.gameType || gameTypeFromUrl;
       
       if (actualGameType === 'training' || isTrainingFromUrl) {
-        window.console.log('🎯 PRODUCTION - Training session detected via gameType:', { 
+        window.console.log('🎯 PRODUCTION - Training session detected via state/params:', { 
           actualGameType, 
           routingState: routingState?.gameType, 
           urlGameType: gameTypeFromUrl,
@@ -79,9 +106,9 @@ export const UnifiedGameExperience: React.FC<UnifiedGameExperienceProps> = ({ us
         window.console.log('⚠️ PRODUCTION - Unknown routing state or params:', { actualGameType, routingState, urlParams: urlParams.toString() });
       }
     } else {
-      window.console.log('❌ PRODUCTION - No routing state or URL params found - defaulting to selection');
+      window.console.log('❌ PRODUCTION - No routing state, URL params, or route params found - defaulting to selection');
     }
-  }, [location.state, location.search, gameMode]);
+  }, [location.state, location.search, gameMode, params]);
 
   // Handle dice roll completion
   const handleDiceRollComplete = (roll: DiceRoll) => {

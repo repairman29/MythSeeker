@@ -112,6 +112,10 @@ export default function App() {
               {/* Core routes */}
               <Route path="/dashboard" element={<DashboardWrapper user={user} />} />
               <Route path="/play" element={<UnifiedGameExperience user={user} />} />
+              <Route path="/play/:sessionId" element={<UnifiedGameExperience user={user} />} />
+              <Route path="/play/training/:trainingType" element={<UnifiedGameExperience user={user} />} />
+              <Route path="/play/combat/:scenarioType" element={<UnifiedGameExperience user={user} />} />
+              <Route path="/play/campaign/:campaignId" element={<UnifiedGameExperience user={user} />} />
               <Route path="/game/*" element={<GameWrapper user={user} />} />
               
               {/* Character management */}

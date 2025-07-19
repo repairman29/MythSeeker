@@ -112,7 +112,70 @@ export const BreadcrumbNavigation: React.FC<BreadcrumbNavigationProps> = ({
     const urlParams = new URLSearchParams(location.search);
     const routingState = location.state as any;
 
-    // Check for training session context
+    // Handle dynamic play routes
+    if (location.pathname.startsWith('/play/')) {
+      const pathParts = location.pathname.split('/');
+      
+      // /play/training/[trainingType]
+      if (pathParts[2] === 'training' && pathParts[3]) {
+        const trainingType = pathParts[3];
+        return [
+          { label: 'Dashboard', path: '/dashboard', icon: <Home size={16} /> },
+          { label: 'Combat', path: '/combat' },
+          { label: 'Training', path: '/combat' },
+          { 
+            label: `${trainingType.charAt(0).toUpperCase() + trainingType.slice(1).replace(/-/g, ' ')} Training`, 
+            path: location.pathname,
+            isActive: true 
+          }
+        ];
+      }
+      
+      // /play/combat/[scenarioType]  
+      if (pathParts[2] === 'combat' && pathParts[3]) {
+        const scenarioType = pathParts[3];
+        return [
+          { label: 'Dashboard', path: '/dashboard', icon: <Home size={16} /> },
+          { label: 'Combat', path: '/combat' },
+          { 
+            label: `${scenarioType.charAt(0).toUpperCase() + scenarioType.slice(1).replace(/-/g, ' ')} Scenario`, 
+            path: location.pathname,
+            isActive: true 
+          }
+        ];
+      }
+      
+      // /play/campaign/[campaignId]
+      if (pathParts[2] === 'campaign' && pathParts[3]) {
+        const campaignId = pathParts[3];
+        return [
+          { label: 'Dashboard', path: '/dashboard', icon: <Home size={16} /> },
+          { label: 'Campaigns', path: '/campaigns' },
+          { 
+            label: routingState?.campaignName || `Campaign ${campaignId.slice(0, 8)}`, 
+            path: location.pathname,
+            isActive: true 
+          }
+        ];
+      }
+      
+      // /play/[sessionId] - generic session
+      if (pathParts[2] && pathParts[2] !== 'training' && pathParts[2] !== 'combat' && pathParts[2] !== 'campaign') {
+        const sessionId = pathParts[2];
+        const gameType = routingState?.gameType || urlParams.get('gameType') || 'session';
+        return [
+          { label: 'Dashboard', path: '/dashboard', icon: <Home size={16} /> },
+          { label: 'Play', path: '/play' },
+          { 
+            label: `${gameType.charAt(0).toUpperCase() + gameType.slice(1)} Session`, 
+            path: location.pathname,
+            isActive: true 
+          }
+        ];
+      }
+    }
+
+    // Check for training session context (legacy URL structure)
     if (location.pathname === '/play') {
       const gameType = routingState?.gameType || urlParams.get('gameType');
       const trainingType = routingState?.trainingType || urlParams.get('trainingType');

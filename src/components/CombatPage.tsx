@@ -270,7 +270,7 @@ Be supportive but challenging. Award experience points for completed objectives.
 
     console.log('🚀 CombatPage: Navigating to /play with state:', navigationState);
 
-    // Navigate to /play with training session parameters
+    // Navigate to dynamic training route with parameters
     // Use both state and URL params to ensure data gets through
     const params = new URLSearchParams({
       gameType: 'training',
@@ -279,11 +279,12 @@ Be supportive but challenging. Award experience points for completed objectives.
       isTraining: 'true'
     });
 
-    navigate(`/play?${params.toString()}`, {
+    // Use dynamic route for better tracking: /play/training/[trainingType]
+    navigate(`/play/training/${trainingType}?${params.toString()}`, {
       state: navigationState
     });
     
-    console.log('✅ CombatPage: Navigation call completed with URL params:', params.toString());
+    console.log('✅ CombatPage: Navigation call completed to dynamic route with URL params:', params.toString());
   };
 
   const handleQuickCombatScenario = (scenarioType: string) => {
@@ -323,8 +324,8 @@ Be supportive but challenging. Award experience points for completed objectives.
     const scenario = scenarios[scenarioType];
     if (!scenario) return;
 
-    // Navigate to /play with combat scenario parameters
-    navigate('/play', {
+    // Navigate to dynamic combat route with scenario parameters
+    navigate(`/play/combat/${scenarioType}`, {
       state: {
         gameType: 'combat',
         scenarioType: scenarioType,
